@@ -1,99 +1,149 @@
 import fs from 'fs';
+import audioDecode from 'audio-decode';
+import { toCamelot } from './camelot';
 
-// Minimal AudioBuffer interface (matches Web Audio API, returned by audio-decode)
-interface AudioBuffer {
-  sampleRate: number;
+const { Essentia, EssentiaWASM } = require('essentia.js');
+const essentia = new Essentia(EssentiaWASM);
+
+interface LocalAnalysis {
+  bpm: number | null;
+  key: string | null;
+  camelot: string | null;
+  energy: number | null;
+}
+
+interface DecodedAudio {
   numberOfChannels: number;
+  sampleRate: number;
   length: number;
   getChannelData(channel: number): Float32Array;
 }
 
-export interface LocalAudioFeatures {
-  bpm: number;
-  pitchClass: number; // 0–11 (matches Spotify pitch class, compatible with camelot.ts)
-  mode: number;       // 1=major, 0=minor
-  energy: number;     // 0–1 normalized via dBFS
-}
-
-// Essentia's KeyExtractor returns key names using sharps/flats
-const KEY_TO_PITCH: Record<string, number> = {
-  C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3,
-  E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8,
-  Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
+const PITCH_BY_KEY: Record<string, number> = {
+  C: 0,
+  'C#': 1,
+  DB: 1,
+  D: 2,
+  'D#': 3,
+  EB: 3,
+  E: 4,
+  F: 5,
+  'F#': 6,
+  GB: 6,
+  G: 7,
+  'G#': 8,
+  AB: 8,
+  A: 9,
+  'A#': 10,
+  BB: 10,
+  B: 11,
 };
 
-// Lazy singleton — WASM init is heavy, reuse across tracks
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let essentiaInstance: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getEssentia(): any {
-  if (!essentiaInstance) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Essentia, EssentiaWASM } = require('essentia.js');
-    essentiaInstance = new Essentia(EssentiaWASM);
-  }
-  return essentiaInstance;
+function roundTo(value: number, decimals: number): number {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
 }
 
-/**
- * Linear interpolation resampler. RhythmExtractor2013 and KeyExtractor
- * both assume 44100 Hz input, so we must resample if the file differs.
- */
-function resample(audio: Float32Array, fromRate: number, toRate: number): Float32Array {
-  const ratio = fromRate / toRate;
-  const newLength = Math.floor(audio.length / ratio);
-  const result = new Float32Array(newLength);
-  for (let i = 0; i < newLength; i++) {
-    const pos = i * ratio;
-    const idx = Math.floor(pos);
-    const frac = pos - idx;
-    result[i] =
-      idx + 1 < audio.length
-        ? audio[idx] * (1 - frac) + audio[idx + 1] * frac
-        : audio[idx];
-  }
-  return result;
+function normalizeKey(rawKey: unknown): number | null {
+  if (typeof rawKey !== 'string') return null;
+  const normalized = rawKey.toUpperCase().replace('♯', '#').replace('♭', 'B');
+  return PITCH_BY_KEY[normalized] ?? null;
 }
 
-export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures | null> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const decodeAudio: (buf: Buffer) => Promise<AudioBuffer> = require('audio-decode').default;
+function normalizeMode(rawScale: unknown): number | null {
+  if (typeof rawScale !== 'string') return null;
+  const scale = rawScale.toLowerCase();
+  if (scale === 'major') return 1;
+  if (scale === 'minor') return 0;
+  return null;
+}
 
-    const fileBuffer = fs.readFileSync(filePath);
-    const audioBuffer = await decodeAudio(fileBuffer);
+function toArrayBuffer(buffer: Buffer): ArrayBuffer {
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+}
 
-    // Essentia algorithms require mono 44100 Hz PCM
-    let channelData = audioBuffer.getChannelData(0);
-    if (audioBuffer.sampleRate !== 44100) {
-      channelData = resample(channelData, audioBuffer.sampleRate, 44100);
+function toMono(audio: DecodedAudio): Float32Array {
+  if (audio.numberOfChannels <= 1) {
+    return audio.getChannelData(0);
+  }
+
+  const mono = new Float32Array(audio.length);
+  for (let c = 0; c < audio.numberOfChannels; c += 1) {
+    const channel = audio.getChannelData(c);
+    for (let i = 0; i < audio.length; i += 1) {
+      mono[i] += channel[i];
     }
-
-    const e = getEssentia();
-    const audioVector = e.arrayToVector(channelData);
-
-    // BPM — RhythmExtractor2013 is the most accurate algorithm in essentia.js
-    const rhythmResult = e.RhythmExtractor2013(audioVector, 208, 'multifeature', 40);
-    const bpm = Math.round(rhythmResult.bpm * 10) / 10;
-
-    // Key — returns { key: 'A', scale: 'major'|'minor', strength: 0–1 }
-    const keyResult = e.KeyExtractor(audioVector);
-    const pitchClass = KEY_TO_PITCH[keyResult.key] ?? -1;
-    const mode = keyResult.scale === 'major' ? 1 : 0;
-
-    // Energy — RMS normalized to 0–1 via a dBFS scale (-60 dBFS → 0, 0 dBFS → 1)
-    let sumSq = 0;
-    for (let i = 0; i < channelData.length; i++) sumSq += channelData[i] * channelData[i];
-    const rms = Math.sqrt(sumSq / channelData.length);
-    const rmsDb = 20 * Math.log10(Math.max(rms, 1e-9));
-    const energy = Math.round(Math.max(0, Math.min(1, 1 + rmsDb / 60)) * 1000) / 1000;
-
-    audioVector.delete();
-
-    return { bpm, pitchClass, mode, energy };
-  } catch (err: any) {
-    console.warn(`  (local analysis failed: ${err.message})`);
-    return null;
   }
+  for (let i = 0; i < audio.length; i += 1) {
+    mono[i] /= audio.numberOfChannels;
+  }
+  return mono;
+}
+
+function displayKey(pitchClass: number, mode: number): string {
+  const info = toCamelot(pitchClass, mode);
+  return info?.keyName ?? '';
+}
+
+export async function analyzeAudioFile(filePath: string): Promise<LocalAnalysis> {
+  const fileBuffer = fs.readFileSync(filePath);
+  const decoded = (await audioDecode(toArrayBuffer(fileBuffer))) as DecodedAudio;
+  const monoSignal = toMono(decoded);
+  const signalVector = essentia.arrayToVector(monoSignal);
+
+  let bpm: number | null = null;
+  let key: string | null = null;
+  let camelot: string | null = null;
+  let energy: number | null = null;
+
+  try {
+    const rhythm = essentia.RhythmExtractor(signalVector, 1024, 1024, 256, 0.1, 208, 40, 1024, decoded.sampleRate);
+    if (Number.isFinite(rhythm?.bpm)) {
+      bpm = roundTo(Number(rhythm.bpm), 1);
+    }
+  } catch {
+    // Keep bpm null if extraction fails on this file.
+  }
+
+  try {
+    let tonal = essentia.KeyExtractor(
+      signalVector,
+      true,
+      4096,
+      2048,
+      12,
+      3500,
+      60,
+      25,
+      0.2,
+      'bgate',
+      decoded.sampleRate,
+      0.0001,
+      440,
+      'cosine',
+      'hann',
+    );
+    if (!tonal?.key || !tonal?.scale) {
+      tonal = essentia.KeyExtractor(signalVector);
+    }
+    const pitchClass = normalizeKey(tonal?.key);
+    const mode = normalizeMode(tonal?.scale);
+    if (pitchClass !== null && mode !== null) {
+      key = displayKey(pitchClass, mode);
+      camelot = toCamelot(pitchClass, mode)?.camelot ?? null;
+    }
+  } catch {
+    // Keep key/camelot null if extraction fails on this file.
+  }
+
+  try {
+    const rms = essentia.RMS(signalVector);
+    if (Number.isFinite(rms?.rms)) {
+      energy = roundTo(Math.max(0, Math.min(1, Number(rms.rms))), 3);
+    }
+  } catch {
+    // Keep energy null if extraction fails on this file.
+  }
+
+  return { bpm, key, camelot, energy };
 }

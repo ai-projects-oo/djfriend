@@ -5,8 +5,8 @@ const CAMELOT_MAJOR = ['8B', '3B', '10B', '5B', '12B', '7B', '2B', '9B', '4B', '
 const CAMELOT_MINOR = ['5A', '12A', '7A', '2A', '9A', '4A', '11A', '6A', '1A', '8A', '3A', '10A'];
 
 /**
- * Convert Spotify's pitch class + mode to Camelot wheel notation and key name.
- * @param pitchClass 0–11 (Spotify `key` field; -1 means unknown)
+ * Convert pitch class + mode to Camelot wheel notation and key name.
+ * @param pitchClass 0–11 where -1 means unknown
  * @param mode 1 = major, 0 = minor
  */
 export function toCamelot(pitchClass: number, mode: number): { camelot: string; keyName: string } | null {

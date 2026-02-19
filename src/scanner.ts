@@ -27,11 +27,13 @@ export async function scanFolder(folderPath: string): Promise<ScannedTrack[]> {
     const filePath = path.join(folderPath, file);
     let artist: string | null = null;
     let title = '';
+    let genres: string[] = [];
 
     try {
       const meta = await mm.parseFile(filePath, { duration: false });
       artist = meta.common.artist ?? null;
       title = meta.common.title ?? '';
+      genres = meta.common.genre ?? [];
     } catch {
       // ignore metadata parse errors, fall through to filename parsing
     }
@@ -43,7 +45,7 @@ export async function scanFolder(folderPath: string): Promise<ScannedTrack[]> {
       title = parsed.title;
     }
 
-    tracks.push({ file, filePath, artist, title });
+    tracks.push({ file, filePath, artist, title, genres });
   }
 
   return tracks;

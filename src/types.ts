@@ -3,22 +3,13 @@ export interface ScannedTrack {
   filePath: string;
   artist: string | null;
   title: string;
-}
-
-export interface SpotifyMatch {
-  spotifyId: string;
-  artistId: string;
-  spotifyArtist: string;
-  spotifyTitle: string;
+  genres: string[];
 }
 
 export interface AnalyzedTrack {
   file: string;
   artist: string | null;
   title: string;
-  spotifyId: string | null;
-  spotifyArtist: string | null;
-  spotifyTitle: string | null;
   bpm: number | null;
   key: string | null;
   camelot: string | null;

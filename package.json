@@ -1,7 +1,7 @@
 {
   "name": "djfriend",
   "version": "1.0.0",
-  "description": "Analyze your music library via Spotify API — BPM, key, energy, genre",
+  "description": "Analyze your music library locally with Essentia.js — BPM, key, energy, genre",
   "main": "dist/index.js",
   "scripts": {
     "analyze": "ts-node src/index.ts",

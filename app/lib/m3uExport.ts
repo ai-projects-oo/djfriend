@@ -2,24 +2,33 @@ import type { SetTrack } from '../types';
 
 declare const __SONGS_FOLDER__: string;
 
+function isAbsolutePath(p: string): boolean {
+  return p.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(p);
+}
+
+function resolveTrackPath(track: SetTrack, songsFolder: string): string {
+  const sourcePath = (track.filePath ?? track.file).trim();
+  if (!sourcePath) return sourcePath;
+  if (isAbsolutePath(sourcePath)) return sourcePath;
+  if (songsFolder) return `${songsFolder.replace(/[\\/]$/, '')}/${sourcePath}`;
+  return sourcePath;
+}
+
 export function generateM3U(tracks: SetTrack[]): string {
   const lines: string[] = ['#EXTM3U'];
   const songsFolder = __SONGS_FOLDER__;
 
   for (const track of tracks) {
-    // -1 means unknown/streaming duration per M3U spec — Apple Music requires this, not 0
-    const duration = track.duration != null ? Math.round(track.duration) : -1;
+    const duration = track.duration != null ? Math.max(0, Math.round(track.duration)) : 0;
     const artist = track.spotifyArtist ?? track.artist;
     const title = track.spotifyTitle ?? track.title;
-    lines.push(`#EXTINF:${duration},${artist} - ${title}`);
+    lines.push(`#EXTINF:${duration},${title} - ${artist}`);
 
-    // Prepend SONGS_FOLDER to get an absolute path Apple Music can resolve
-    const filePath =
-      songsFolder ? `${songsFolder}/${track.file}` : track.file;
-    lines.push(filePath);
+    const resolvedPath = resolveTrackPath(track, songsFolder);
+    lines.push(resolvedPath.replace(/\\/g, '/'));
   }
 
-  return lines.join('\n');
+  return lines.join('\r\n');
 }
 
 export function downloadM3U(tracks: SetTrack[], filename = 'djfriend-set.m3u'): void {

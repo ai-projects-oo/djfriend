@@ -29,9 +29,27 @@ function isValidSong(obj: unknown): obj is Song {
 }
 
 function parseSongs(raw: unknown): Song[] | null {
-  if (!Array.isArray(raw)) return null;
-  const valid = raw.filter(isValidSong);
+  const source = Array.isArray(raw)
+    ? raw
+    : (typeof raw === 'object' && raw !== null ? Object.values(raw as Record<string, unknown>) : null);
+  if (!source) return null;
+  const valid = source.filter(isValidSong);
   return valid.length > 0 ? valid : null;
+}
+
+function downloadResultsJson(
+  libraryName: string,
+  resultsJson: Record<string, unknown>,
+): void {
+  const blob = new Blob([JSON.stringify(resultsJson, null, 2)], {
+    type: 'application/json;charset=utf-8',
+  });
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = `${libraryName}-results.json`;
+  a.click();
+  URL.revokeObjectURL(href);
 }
 
 export default function App() {
@@ -42,6 +60,11 @@ export default function App() {
   const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [autoRegen, setAutoRegen] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<{ completed: number; total: number }>({
+    completed: 0,
+    total: 0,
+  });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-load /public/result.json on mount
@@ -64,28 +87,76 @@ export default function App() {
       });
   }, []);
 
-  const handleFileLoad = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(ev.target?.result as string) as unknown;
-        const songs = parseSongs(parsed);
-        if (!songs) {
-          setError('Invalid JSON — expected an array of song objects.');
-          return;
-        }
-        setLibrary(songs);
-        setLibraryName(file.name);
-        setError(null);
-        setGeneratedSet([]);
-      } catch {
-        setError('Could not parse JSON file.');
+  const runAppleMusicAnalysis = useCallback(async () => {
+    setIsAnalyzing(true);
+    setAnalysisProgress({ completed: 0, total: 0 });
+    setError(null);
+    setGeneratedSet([]);
+
+    try {
+      const response = await fetch('/api/analyze-apple-music', {
+        method: 'POST',
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error('Could not start folder analysis.');
       }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as
+            | { type: 'start'; total: number }
+            | { type: 'progress'; completed: number; total: number }
+            | { type: 'folder_done'; folder: string }
+            | { type: 'done'; songs: unknown; libraryName: string; resultsJson: Record<string, unknown> }
+            | { type: 'error'; message: string };
+
+          if (event.type === 'start') {
+            setAnalysisProgress({ completed: 0, total: event.total });
+            continue;
+          }
+
+          if (event.type === 'progress') {
+            setAnalysisProgress({ completed: event.completed, total: event.total });
+            continue;
+          }
+
+          if (event.type === 'error') {
+            setError(event.message);
+            continue;
+          }
+
+          if (event.type === 'done') {
+            const songs = parseSongs(event.songs);
+            if (!songs) {
+              setError('Analysis completed but returned invalid song data.');
+              continue;
+            }
+            setLibrary(songs);
+            setLibraryName(`${event.libraryName} (analyzed)`);
+            setError(null);
+            // downloadResultsJson(event.libraryName, event.resultsJson);
+          }
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Folder analysis failed.';
+      setError(message);
+    } finally {
+      setIsAnalyzing(false);
+    }
   }, []);
 
   const runGenerate = useCallback(
@@ -114,7 +185,10 @@ export default function App() {
     [autoRegen, library, prefs, runGenerate],
   );
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const progressPercent =
+    analysisProgress.total > 0
+      ? Math.min(100, Math.round((analysisProgress.completed / analysisProgress.total) * 100))
+      : 0;
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
@@ -135,18 +209,25 @@ export default function App() {
             {error && (
               <span className="text-xs text-[#ef4444] hidden sm:inline">{error}</span>
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={handleFileLoad}
-            />
+            {isAnalyzing && (
+              <div className="hidden sm:flex items-center gap-2 min-w-[180px]">
+                <div className="w-28 h-1.5 rounded-full bg-[#1f2937] overflow-hidden">
+                  <div
+                    className="h-full bg-[#7c3aed] transition-all"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-[#94a3b8] tabular-nums">
+                  {analysisProgress.completed}/{analysisProgress.total}
+                </span>
+              </div>
+            )}
             <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+              onClick={runAppleMusicAnalysis}
+              disabled={isAnalyzing}
+              className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Load results.json
+              {isAnalyzing ? 'Analyzing…' : 'Analyze Apple Music'}
             </button>
           </div>
         </div>
@@ -163,14 +244,12 @@ export default function App() {
           <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4 text-sm text-[#94a3b8]">
             No library loaded. Click{' '}
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={runAppleMusicAnalysis}
               className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
             >
-              Load results.json
+              Analyze Apple Music
             </button>{' '}
-            to get started, or add a{' '}
-            <code className="text-[#e2e8f0]">results.json</code> to the{' '}
-            <code className="text-[#e2e8f0]">public/</code> folder for auto-load.
+            to analyze your local Apple Music file tracks and export <code className="text-[#e2e8f0]">results.json</code>.
           </div>
         </div>
       )}

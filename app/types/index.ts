@@ -1,5 +1,6 @@
 export interface Song {
   file: string;
+  filePath?: string;
   artist: string;
   title: string;
   spotifyId?: string;

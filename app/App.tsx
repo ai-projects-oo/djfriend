@@ -12,6 +12,7 @@ const DEFAULT_PREFS: DJPreferences = {
   audienceAgeRange: '25–35',
   audiencePurpose: 'Dancing',
   occasionType: 'Peak time',
+  genre: 'Any',
 };
 
 function isValidSong(obj: unknown): obj is Song {
@@ -42,6 +43,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function matchesGenrePref(song: Song, genre: string): boolean {
+  if (genre === 'Any') return true;
+  const needle = genre.toLowerCase();
+  return song.genres.some((g) => g.toLowerCase().includes(needle));
+}
+
 export default function App() {
   const [library, setLibrary] = useState<Song[]>([]);
   const [libraryName, setLibraryName] = useState<string>('');
@@ -56,7 +63,11 @@ export default function App() {
     total: 0,
   });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const swapHistoryRef = useRef<Map<number, Set<string>>>(new Map());
+  const [swapModal, setSwapModal] = useState<{
+    index: number;
+    suggestions: Array<{ song: Song; score: number }>;
+  } | null>(null);
+  const [swapVisibleCount, setSwapVisibleCount] = useState(5);
 
   // Auto-load /public/result.json on mount
   useEffect(() => {
@@ -154,7 +165,6 @@ export default function App() {
     (songs: Song[], p: DJPreferences, c: CurvePoint[]) => {
       if (songs.length === 0) return;
       const set = generateSet(songs, p, c);
-      swapHistoryRef.current = new Map();
       setGeneratedSet(set);
     },
     [],
@@ -177,91 +187,117 @@ export default function App() {
     [autoRegen, library, prefs, runGenerate],
   );
 
+  const buildSwapSuggestions = useCallback(
+    (index: number): Array<{ song: Song; score: number }> => {
+      if (index < 0 || index >= generatedSet.length) return [];
+      const currentSet = generatedSet;
+      const current = currentSet[index];
+      const usedFiles = new Set(currentSet.filter((_, i) => i !== index).map((track) => track.file));
+      const previousTrack = index > 0 ? currentSet[index - 1] : null;
+      const nextTrack = index < currentSet.length - 1 ? currentSet[index + 1] : null;
+
+      const candidates = library.filter(
+        (song) =>
+          !usedFiles.has(song.file) &&
+          song.file !== current.file &&
+          matchesGenrePref(song, prefs.genre),
+      );
+
+      const scored = candidates.map((candidate) => {
+        const energyDiff = Math.abs(candidate.energy - current.targetEnergy);
+        const fromPrevHarmony = previousTrack ? camelotHarmonyScore(previousTrack.camelot, candidate.camelot) : 1;
+        const toNextHarmony = nextTrack ? camelotHarmonyScore(candidate.camelot, nextTrack.camelot) : 1;
+        const fromPrevBpmDiff = previousTrack ? Math.abs(candidate.bpm - previousTrack.bpm) : 0;
+        const toNextBpmDiff = nextTrack ? Math.abs(candidate.bpm - nextTrack.bpm) : 0;
+        const fromPrevBpm = previousTrack ? 1 - clamp(fromPrevBpmDiff / 20, 0, 1) : 1;
+        const toNextBpm = nextTrack ? 1 - clamp(toNextBpmDiff / 20, 0, 1) : 1;
+        const energyScore = 1 - energyDiff;
+        const baseScore =
+          energyScore * 0.45 +
+          fromPrevHarmony * 0.2 +
+          toNextHarmony * 0.2 +
+          fromPrevBpm * 0.075 +
+          toNextBpm * 0.075;
+        const strictFit =
+          energyDiff <= 0.24 &&
+          fromPrevHarmony > 0 &&
+          toNextHarmony > 0 &&
+          fromPrevBpmDiff <= 12 &&
+          toNextBpmDiff <= 12;
+        const relaxedFit =
+          energyDiff <= 0.35 &&
+          fromPrevHarmony > 0 &&
+          toNextHarmony > 0 &&
+          fromPrevBpmDiff <= 20 &&
+          toNextBpmDiff <= 20;
+        return { candidate, strictFit, relaxedFit, score: baseScore + (strictFit ? 0.05 : 0) };
+      });
+
+      const strict = scored.filter((s) => s.strictFit);
+      const relaxed = scored.filter((s) => !s.strictFit && s.relaxedFit);
+      const ranked = [...strict, ...relaxed].sort((a, b) => b.score - a.score);
+      return ranked.map((r) => ({ song: r.candidate, score: r.score }));
+    },
+    [generatedSet, library, prefs.genre],
+  );
+
   const handleSwapTrack = useCallback(
     (index: number) => {
-      setGeneratedSet((prev) => {
-        if (index < 0 || index >= prev.length) return prev;
-        const current = prev[index];
-
-        const usedFiles = new Set(
-          prev.filter((_, i) => i !== index).map((track) => track.file),
-        );
-        const candidates = library.filter((song) => !usedFiles.has(song.file) && song.file !== current.file);
-        if (candidates.length === 0) return prev;
-
-        const previousTrack = index > 0 ? prev[index - 1] : null;
-        const nextTrack = index < prev.length - 1 ? prev[index + 1] : null;
-
-        const scored = candidates.map((candidate) => {
-          const energyScore = 1 - Math.abs(candidate.energy - current.targetEnergy);
-          const fromPrevHarmony = previousTrack
-            ? camelotHarmonyScore(previousTrack.camelot, candidate.camelot)
-            : 1;
-          const toNextHarmony = nextTrack
-            ? camelotHarmonyScore(candidate.camelot, nextTrack.camelot)
-            : 1;
-          const fromPrevBpm = previousTrack
-            ? 1 - clamp(Math.abs(candidate.bpm - previousTrack.bpm) / 20, 0, 1)
-            : 1;
-          const toNextBpm = nextTrack
-            ? 1 - clamp(Math.abs(candidate.bpm - nextTrack.bpm) / 20, 0, 1)
-            : 1;
-
-          const score =
-            energyScore * 0.45 +
-            fromPrevHarmony * 0.2 +
-            toNextHarmony * 0.2 +
-            fromPrevBpm * 0.075 +
-            toNextBpm * 0.075;
-
-          return { candidate, score };
-        });
-
-        scored.sort((a, b) => b.score - a.score);
-
-        let tried = swapHistoryRef.current.get(index);
-        if (!tried) {
-          tried = new Set<string>();
-          swapHistoryRef.current.set(index, tried);
-        }
-
-        let bestCandidate = scored.find(({ candidate }) => !tried.has(candidate.file))?.candidate ?? null;
-        if (!bestCandidate) {
-          tried.clear();
-          bestCandidate = scored[0]?.candidate ?? null;
-        }
-
-        if (!bestCandidate) return prev;
-        tried.add(bestCandidate.file);
-
-        const next = [...prev];
-        next[index] = {
-          ...bestCandidate,
-          slot: current.slot,
-          targetEnergy: current.targetEnergy,
-          harmonicWarning: previousTrack
-            ? isHarmonicWarning(previousTrack.camelot, bestCandidate.camelot)
-            : false,
-        };
-
-        if (index + 1 < next.length) {
-          const after = next[index + 1];
-          next[index + 1] = {
-            ...after,
-            harmonicWarning: isHarmonicWarning(next[index].camelot, after.camelot),
-          };
-        }
-
-        return next;
-      });
+      const suggestions = buildSwapSuggestions(index);
+      setSwapVisibleCount(5);
+      setSwapModal({ index, suggestions });
     },
-    [library],
+    [buildSwapSuggestions],
   );
+
+  const applySwapSuggestion = useCallback((song: Song) => {
+    setGeneratedSet((prev) => {
+      if (!swapModal) return prev;
+      const index = swapModal.index;
+      if (index < 0 || index >= prev.length) return prev;
+      const previousTrack = index > 0 ? prev[index - 1] : null;
+      const next = [...prev];
+      next[index] = {
+        ...song,
+        slot: prev[index].slot,
+        targetEnergy: prev[index].targetEnergy,
+        harmonicWarning: previousTrack
+          ? isHarmonicWarning(previousTrack.camelot, song.camelot)
+          : false,
+      };
+      if (index + 1 < next.length) {
+        const after = next[index + 1];
+        next[index + 1] = {
+          ...after,
+          harmonicWarning: isHarmonicWarning(next[index].camelot, after.camelot),
+        };
+      }
+      return next;
+    });
+    setSwapModal(null);
+    setSwapVisibleCount(5);
+  }, [swapModal]);
+
+  const handleRemoveTrack = useCallback((index: number) => {
+    setGeneratedSet((prev) => {
+      if (index < 0 || index >= prev.length) return prev;
+      const next = prev.filter((_, i) => i !== index);
+      const resequenced = next.map((track, i) => ({
+        ...track,
+        slot: i,
+        harmonicWarning: i > 0 ? isHarmonicWarning(next[i - 1].camelot, track.camelot) : false,
+      }));
+      return resequenced;
+    });
+  }, []);
 
   const progressPercent =
     analysisProgress.total > 0
       ? Math.min(100, Math.round((analysisProgress.completed / analysisProgress.total) * 100))
       : 0;
+  const availableGenres = Array.from(
+    new Set(library.flatMap((song) => song.genres).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
@@ -336,6 +372,7 @@ export default function App() {
             </h2>
             <PreferencesForm
               prefs={prefs}
+              availableGenres={availableGenres}
               onChange={setPrefs}
               onGenerate={handleGenerate}
               disabled={library.length === 0}
@@ -363,9 +400,80 @@ export default function App() {
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
             Generated Set
           </h2>
-          <SetTracklist tracks={generatedSet} prefs={prefs} onSwapTrack={handleSwapTrack} />
+          <SetTracklist
+            tracks={generatedSet}
+            prefs={prefs}
+            onSwapTrack={handleSwapTrack}
+            onRemoveTrack={handleRemoveTrack}
+          />
         </div>
       </main>
+
+      {swapModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => {
+            setSwapModal(null);
+            setSwapVisibleCount(5);
+          }}
+        >
+          <div
+            className="w-full max-w-2xl rounded-xl border border-[#2a2a3a] bg-[#12121a] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-[#e2e8f0]">Swap Suggestions</h3>
+              <button
+                className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
+                onClick={() => {
+                  setSwapModal(null);
+                  setSwapVisibleCount(5);
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            {swapModal.suggestions.length === 0 ? (
+              <div className="text-sm text-[#94a3b8] py-6">
+                No fitting suggestions found for this slot with current set constraints.
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2 max-h-[55vh] overflow-y-auto">
+                  {swapModal.suggestions
+                    .slice(0, swapVisibleCount)
+                    .map(({ song, score }) => (
+                      <button
+                        key={song.file}
+                        onClick={() => applySwapSuggestion(song)}
+                        className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2 hover:border-[#7c3aed] transition-colors cursor-pointer"
+                      >
+                        <div className="text-sm text-[#e2e8f0] truncate">
+                          {(song.spotifyTitle ?? song.title)} - {(song.spotifyArtist ?? song.artist)}
+                        </div>
+                        <div className="text-[11px] text-[#94a3b8] mt-1">
+                          {song.camelot} • {Math.round(song.bpm)} BPM • {Math.round(song.energy * 100)}% energy • relevance {Math.round(score * 100)}%
+                        </div>
+                      </button>
+                    ))}
+                </div>
+
+                {swapVisibleCount < swapModal.suggestions.length && (
+                  <div className="mt-3 flex justify-center">
+                    <button
+                      onClick={() => setSwapVisibleCount((count) => Math.min(count + 5, swapModal.suggestions.length))}
+                      className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    >
+                      More
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { DJPreferences, VenueType, AudienceAgeRange, AudiencePurpose, Occas
 
 interface Props {
   prefs: DJPreferences;
+  availableGenres: string[];
   onChange: (prefs: DJPreferences) => void;
   onGenerate: () => void;
   disabled: boolean;
@@ -18,7 +19,7 @@ const labelClass = 'block text-xs font-medium text-[#94a3b8] mb-1 uppercase trac
 const inputClass =
   'w-full bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-3 py-2 text-sm text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] transition-colors';
 
-export default function PreferencesForm({ prefs, onChange, onGenerate, disabled }: Props) {
+export default function PreferencesForm({ prefs, availableGenres, onChange, onGenerate, disabled }: Props) {
   function set<K extends keyof DJPreferences>(key: K, value: DJPreferences[K]) {
     onChange({ ...prefs, [key]: value });
   }
@@ -85,6 +86,20 @@ export default function PreferencesForm({ prefs, onChange, onGenerate, disabled 
         >
           {OCCASIONS.map((v) => (
             <option key={v} value={v}>{v}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className={labelClass}>Genre</label>
+        <select
+          value={prefs.genre}
+          onChange={(e) => set('genre', e.target.value)}
+          className={inputClass}
+        >
+          <option value="Any">Any</option>
+          {availableGenres.map((genre) => (
+            <option key={genre} value={genre}>{genre}</option>
           ))}
         </select>
       </div>

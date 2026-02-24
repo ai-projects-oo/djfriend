@@ -54,4 +54,5 @@ export interface DJPreferences {
   audienceAgeRange: AudienceAgeRange;
   audiencePurpose: AudiencePurpose;
   occasionType: OccasionType;
+  genre: string;
 }

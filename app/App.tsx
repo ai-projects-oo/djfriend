@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Song, SetTrack, DJPreferences, CurvePoint } from './types';
 import { generateSet } from './lib/setGenerator';
+import { camelotHarmonyScore, isHarmonicWarning } from './lib/camelot';
 import EnergyCurveEditor, { DEFAULT_CURVE } from './components/EnergyCurveEditor';
 import PreferencesForm from './components/PreferencesForm';
 import SetTracklist from './components/SetTracklist';
@@ -37,19 +38,8 @@ function parseSongs(raw: unknown): Song[] | null {
   return valid.length > 0 ? valid : null;
 }
 
-function downloadResultsJson(
-  libraryName: string,
-  resultsJson: Record<string, unknown>,
-): void {
-  const blob = new Blob([JSON.stringify(resultsJson, null, 2)], {
-    type: 'application/json;charset=utf-8',
-  });
-  const href = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = `${libraryName}-results.json`;
-  a.click();
-  URL.revokeObjectURL(href);
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 export default function App() {
@@ -66,6 +56,7 @@ export default function App() {
     total: 0,
   });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swapHistoryRef = useRef<Map<number, Set<string>>>(new Map());
 
   // Auto-load /public/result.json on mount
   useEffect(() => {
@@ -163,6 +154,7 @@ export default function App() {
     (songs: Song[], p: DJPreferences, c: CurvePoint[]) => {
       if (songs.length === 0) return;
       const set = generateSet(songs, p, c);
+      swapHistoryRef.current = new Map();
       setGeneratedSet(set);
     },
     [],
@@ -183,6 +175,87 @@ export default function App() {
       }, 150);
     },
     [autoRegen, library, prefs, runGenerate],
+  );
+
+  const handleSwapTrack = useCallback(
+    (index: number) => {
+      setGeneratedSet((prev) => {
+        if (index < 0 || index >= prev.length) return prev;
+        const current = prev[index];
+
+        const usedFiles = new Set(
+          prev.filter((_, i) => i !== index).map((track) => track.file),
+        );
+        const candidates = library.filter((song) => !usedFiles.has(song.file) && song.file !== current.file);
+        if (candidates.length === 0) return prev;
+
+        const previousTrack = index > 0 ? prev[index - 1] : null;
+        const nextTrack = index < prev.length - 1 ? prev[index + 1] : null;
+
+        const scored = candidates.map((candidate) => {
+          const energyScore = 1 - Math.abs(candidate.energy - current.targetEnergy);
+          const fromPrevHarmony = previousTrack
+            ? camelotHarmonyScore(previousTrack.camelot, candidate.camelot)
+            : 1;
+          const toNextHarmony = nextTrack
+            ? camelotHarmonyScore(candidate.camelot, nextTrack.camelot)
+            : 1;
+          const fromPrevBpm = previousTrack
+            ? 1 - clamp(Math.abs(candidate.bpm - previousTrack.bpm) / 20, 0, 1)
+            : 1;
+          const toNextBpm = nextTrack
+            ? 1 - clamp(Math.abs(candidate.bpm - nextTrack.bpm) / 20, 0, 1)
+            : 1;
+
+          const score =
+            energyScore * 0.45 +
+            fromPrevHarmony * 0.2 +
+            toNextHarmony * 0.2 +
+            fromPrevBpm * 0.075 +
+            toNextBpm * 0.075;
+
+          return { candidate, score };
+        });
+
+        scored.sort((a, b) => b.score - a.score);
+
+        let tried = swapHistoryRef.current.get(index);
+        if (!tried) {
+          tried = new Set<string>();
+          swapHistoryRef.current.set(index, tried);
+        }
+
+        let bestCandidate = scored.find(({ candidate }) => !tried.has(candidate.file))?.candidate ?? null;
+        if (!bestCandidate) {
+          tried.clear();
+          bestCandidate = scored[0]?.candidate ?? null;
+        }
+
+        if (!bestCandidate) return prev;
+        tried.add(bestCandidate.file);
+
+        const next = [...prev];
+        next[index] = {
+          ...bestCandidate,
+          slot: current.slot,
+          targetEnergy: current.targetEnergy,
+          harmonicWarning: previousTrack
+            ? isHarmonicWarning(previousTrack.camelot, bestCandidate.camelot)
+            : false,
+        };
+
+        if (index + 1 < next.length) {
+          const after = next[index + 1];
+          next[index + 1] = {
+            ...after,
+            harmonicWarning: isHarmonicWarning(next[index].camelot, after.camelot),
+          };
+        }
+
+        return next;
+      });
+    },
+    [library],
   );
 
   const progressPercent =
@@ -290,7 +363,7 @@ export default function App() {
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
             Generated Set
           </h2>
-          <SetTracklist tracks={generatedSet} prefs={prefs} />
+          <SetTracklist tracks={generatedSet} prefs={prefs} onSwapTrack={handleSwapTrack} />
         </div>
       </main>
     </div>

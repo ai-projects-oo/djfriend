@@ -5,6 +5,7 @@ import { downloadM3U } from '../lib/m3uExport';
 interface Props {
   tracks: SetTrack[];
   prefs: DJPreferences;
+  onSwapTrack: (index: number) => void;
 }
 
 function totalDurationMinutes(tracks: SetTrack[]): number {
@@ -12,7 +13,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
   return Math.round(totalSecs / 60);
 }
 
-export default function SetTracklist({ tracks, prefs }: Props) {
+export default function SetTracklist({ tracks, prefs, onSwapTrack }: Props) {
   if (tracks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
@@ -68,11 +69,12 @@ export default function SetTracklist({ tracks, prefs }: Props) {
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Key</th>
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider hidden lg:table-cell">Scale</th>
                 <th className="py-2 px-2 pr-4 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Energy</th>
+                <th className="py-2 pl-2 pr-4 text-right text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Swap</th>
               </tr>
             </thead>
             <tbody>
               {tracks.map((track, idx) => (
-                <TrackRow key={track.file} track={track} index={idx} />
+                <TrackRow key={track.file} track={track} index={idx} onSwap={() => onSwapTrack(idx)} />
               ))}
             </tbody>
           </table>

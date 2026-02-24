@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { RefreshCcw } from 'lucide-react';
 import type { SetTrack } from '../types';
 
 interface Props {
   track: SetTrack;
   index: number;
+  onSwap: () => void;
 }
 
 const CAMELOT_COLORS: Record<string, string> = {
@@ -28,7 +30,7 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function TrackRow({ track, index }: Props) {
+export default function TrackRow({ track, index, onSwap }: Props) {
   const [showTooltip, setShowTooltip] = useState(false);
   const artist = track.spotifyArtist ?? track.artist;
   const title = track.spotifyTitle ?? track.title;
@@ -109,6 +111,17 @@ export default function TrackRow({ track, index }: Props) {
             {(track.energy * 100).toFixed(0)}%
           </span>
         </div>
+      </td>
+
+      <td className="py-3 pl-2 pr-4 text-right">
+        <button
+          onClick={onSwap}
+          title="Swap track"
+          aria-label="Swap track"
+          className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+        >
+          <RefreshCcw size={14} />
+        </button>
       </td>
     </tr>
   );

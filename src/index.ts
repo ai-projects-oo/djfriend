@@ -5,7 +5,7 @@ import { scanFolder } from './scanner';
 import { authenticate, searchTrack, getArtistGenres } from './spotify';
 import { analyzeAudio } from './analyzer';
 import { toCamelot } from './camelot';
-import { AnalyzedTrack } from './types';
+import type { AnalyzedTrack } from './types';
 
 const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SONGS_FOLDER } = process.env;
 

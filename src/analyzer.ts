@@ -1,4 +1,7 @@
 import fs from 'fs';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 // Minimal AudioBuffer interface (matches Web Audio API, returned by audio-decode)
 interface AudioBuffer {

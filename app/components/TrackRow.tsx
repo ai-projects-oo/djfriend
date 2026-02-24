@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { RefreshCcw } from 'lucide-react';
+import { RefreshCcw, Trash2 } from 'lucide-react';
 import type { SetTrack } from '../types';
 
 interface Props {
   track: SetTrack;
   index: number;
   onSwap: () => void;
+  onRemove: () => void;
 }
 
 const CAMELOT_COLORS: Record<string, string> = {
@@ -30,8 +31,8 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function TrackRow({ track, index, onSwap }: Props) {
-  const [showTooltip, setShowTooltip] = useState(false);
+export default function TrackRow({ track, index, onSwap, onRemove }: Props) {
+  const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
   const artist = track.spotifyArtist ?? track.artist;
   const title = track.spotifyTitle ?? track.title;
   const barColor = energyBarColor(track.energy);
@@ -54,12 +55,12 @@ export default function TrackRow({ track, index, onSwap }: Props) {
             <div className="relative flex-shrink-0">
               <span
                 className="text-[#f59e0b] cursor-help text-base"
-                onMouseEnter={() => setShowTooltip(true)}
-                onMouseLeave={() => setShowTooltip(false)}
+                onMouseEnter={() => setShowHarmonicTooltip(true)}
+                onMouseLeave={() => setShowHarmonicTooltip(false)}
               >
                 ⚠
               </span>
-              {showTooltip && (
+              {showHarmonicTooltip && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-48 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none">
                   Harmonic clash — this transition may sound dissonant. Consider
                   pitch-shifting or adding an EQ breakdown.
@@ -114,14 +115,24 @@ export default function TrackRow({ track, index, onSwap }: Props) {
       </td>
 
       <td className="py-3 pl-2 pr-4 text-right">
-        <button
-          onClick={onSwap}
-          title="Swap track"
-          aria-label="Swap track"
-          className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-        >
-          <RefreshCcw size={14} />
-        </button>
+        <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={onSwap}
+            title="Swap track"
+            aria-label="Swap track"
+            className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+          >
+            <RefreshCcw size={14} />
+          </button>
+          <button
+            onClick={onRemove}
+            title="Remove track"
+            aria-label="Remove track"
+            className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors cursor-pointer"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </td>
     </tr>
   );

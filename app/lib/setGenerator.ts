@@ -48,6 +48,12 @@ function genreAffinityBonus(song: Song, affinityKey: AffinityKey | null): number
   return hasMatch ? 0.15 : 0;
 }
 
+function matchesGenre(song: Song, genre: string): boolean {
+  if (genre === 'Any') return true;
+  const needle = genre.toLowerCase();
+  return song.genres.some((g) => g.toLowerCase().includes(needle));
+}
+
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 
 function clamp(val: number, min: number, max: number): number {
@@ -87,15 +93,18 @@ export function generateSet(
 ): SetTrack[] {
   if (songs.length === 0) return [];
 
+  const genreFilteredSongs = songs.filter((song) => matchesGenre(song, prefs.genre));
+  const candidatePool = genreFilteredSongs.length > 0 ? genreFilteredSongs : songs;
+
   const setDurationSeconds = prefs.setDuration * 60;
 
   // 1. Calculate track count based on average song duration + gap
   const FALLBACK_DURATION = 210; // 3.5 min fallback when duration is absent
   const avgDuration =
-    songs.reduce((sum, s) => sum + (s.duration ?? FALLBACK_DURATION), 0) / songs.length;
+    candidatePool.reduce((sum, s) => sum + (s.duration ?? FALLBACK_DURATION), 0) / candidatePool.length;
   const trackSlotDuration = avgDuration + GAP_SECONDS;
   const trackCount = Math.max(1, Math.floor(setDurationSeconds / trackSlotDuration));
-  const actualCount = Math.min(trackCount, songs.length);
+  const actualCount = Math.min(trackCount, candidatePool.length);
 
   const affinityKey = getAffinityKey(
     prefs.venueType,
@@ -119,7 +128,7 @@ export function generateSet(
     let bestSong: Song | null = null;
     let bestScore = -Infinity;
 
-    for (const song of songs) {
+    for (const song of candidatePool) {
       if (used.has(song.file)) continue;
 
       const score = scoreTrack(song, targetEnergy, prevCamelot, prevBpm, affinityKey);

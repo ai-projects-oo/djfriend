@@ -78,22 +78,39 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
 
     // BPM — RhythmExtractor2013 is the most accurate algorithm in essentia.js
     const rhythmResult = e.RhythmExtractor2013(audioVector, 208, 'multifeature', 40);
-    const bpm = Math.round(rhythmResult.bpm * 10) / 10;
+    let bpm = Math.round(rhythmResult.bpm * 10) / 10;
 
     // Key — returns { key: 'A', scale: 'major'|'minor', strength: 0–1 }
     const keyResult = e.KeyExtractor(audioVector);
     const pitchClass = KEY_TO_PITCH[keyResult.key] ?? -1;
     const mode = keyResult.scale === 'major' ? 1 : 0;
 
-    // Energy — RMS normalized to 0–1 via a dBFS scale (-60 dBFS → 0, 0 dBFS → 1)
+    // RMS loudness — baseline component of energy
     let sumSq = 0;
     for (let i = 0; i < channelData.length; i++) sumSq += channelData[i] * channelData[i];
     const rms = Math.sqrt(sumSq / channelData.length);
     const rmsDb = 20 * Math.log10(Math.max(rms, 1e-9));
-    const energy = Math.round(Math.max(0, Math.min(1, 1 + rmsDb / 60)) * 1000) / 1000;
+    const rmsScore = Math.max(0, Math.min(1, 1 + rmsDb / 60));
+
+    // Energy — onset rate (musical events per second) is a much better perceptual
+    // proxy than RMS loudness alone. Modern mastering makes even ballads loud, so
+    // pure RMS fails to distinguish a quiet ballad from an energetic dance track.
+    // Onset rate: ballads ~2–4/sec, pop ~4–8/sec, dance/EDM ~8–15/sec.
+    let energy: number;
+    try {
+      const onsetResult = e.OnsetRate(audioVector);
+      const onsetRate: number = onsetResult.onsetRate ?? 0;
+      const onsetScore = Math.min(1, onsetRate / 8); // 8 onsets/sec ≈ peak energy
+      energy = Math.round((onsetScore * 0.7 + rmsScore * 0.3) * 1000) / 1000;
+    } catch {
+      // OnsetRate unavailable — fall back to RMS only
+      energy = Math.round(rmsScore * 1000) / 1000;
+    }
 
     audioVector.delete();
 
+    // Return raw BPM — callers apply genre-aware double-time correction once
+    // genre data is available (see normalizeBpm in vite.config.ts / index.ts).
     return { bpm, pitchClass, mode, energy };
   } catch (err: any) {
     console.warn(`  (local analysis failed: ${err.message})`);

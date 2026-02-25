@@ -7,6 +7,7 @@ interface Props {
   prefs: DJPreferences;
   onSwapTrack: (index: number) => void;
   onRemoveTrack: (index: number) => void;
+  onExport?: () => void;
 }
 
 function totalDurationMinutes(tracks: SetTrack[]): number {
@@ -14,7 +15,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
   return Math.round(totalSecs / 60);
 }
 
-export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack }: Props) {
+export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack, onExport }: Props) {
   if (tracks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
@@ -49,7 +50,7 @@ export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack
         </div>
 
         <button
-          onClick={() => downloadM3U(tracks)}
+          onClick={() => { downloadM3U(tracks); onExport?.(); }}
           className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-sm text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
         >
           <span>↓</span>

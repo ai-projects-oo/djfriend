@@ -20,9 +20,7 @@ export function generateM3U(tracks: SetTrack[]): string {
 
   for (const track of tracks) {
     const duration = track.duration != null ? Math.max(0, Math.round(track.duration)) : 0;
-    const artist = track.spotifyArtist ?? track.artist;
-    const title = track.spotifyTitle ?? track.title;
-    lines.push(`#EXTINF:${duration},${title} - ${artist}`);
+    lines.push(`#EXTINF:${duration},${track.title} - ${track.artist}`);
 
     const resolvedPath = resolveTrackPath(track, songsFolder);
     lines.push(resolvedPath.replace(/\\/g, '/'));

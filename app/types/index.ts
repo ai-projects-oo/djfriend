@@ -56,3 +56,11 @@ export interface DJPreferences {
   occasionType: OccasionType;
   genre: string;
 }
+
+export interface HistoryEntry {
+  id: string;
+  timestamp: number;
+  tracks: SetTrack[];
+  prefs: DJPreferences;
+  curve: CurvePoint[];
+}

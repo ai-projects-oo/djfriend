@@ -15,13 +15,17 @@ import { authenticate, getArtistGenres, searchTrack } from './src/spotify'
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
 const execFileAsync = promisify(execFile)
-const APPLE_RESULTS_PATH = path.join(os.homedir(), 'Music', 'djfriend-results.json')
+const APPLE_RESULTS_PATH = path.join(os.homedir(), 'Music', 'djfriend-results-v3.json')
 
 interface AppSong {
   filePath: string
   file: string
+  // Local file metadata (from ID3 tags / Apple Music database) — what actually plays
   artist: string
   title: string
+  // Spotify match metadata — may differ from the local file (different version, wrong match, etc.)
+  spotifyArtist?: string
+  spotifyTitle?: string
   bpm: number
   key: string
   camelot: string
@@ -93,6 +97,61 @@ function isAppSong(value: unknown): value is AppSong {
     typeof v.energy === 'number' &&
     Array.isArray(v.genres)
   )
+}
+
+/**
+ * Genre-aware BPM normalisation.
+ *
+ * Rhythm extractors often detect eighth-note or triplet subdivisions instead
+ * of the true beat, producing a BPM that is 2× or 3× too high.
+ * We use genre + energy to determine the plausible tempo range and divide
+ * down to the nearest sensible value.
+ *
+ * Fast-dance genres (house, techno, trance, D&B …) are never corrected
+ * because their real tempos genuinely sit above 120 BPM.
+ */
+function normalizeBpm(bpm: number, energy: number, genres: string[]): number {
+  const gl = genres.map((g) => g.toLowerCase())
+  const hasAny = (terms: string[]) => gl.some((g) => terms.some((t) => g.includes(t)))
+
+  // These genres live comfortably above 120 BPM — never divide them down.
+  const isFastGenre = hasAny([
+    'house', 'techno', 'trance', 'drum and bass', 'dnb', 'jungle',
+    'hardstyle', 'hardcore', 'gabber', 'neurofunk', 'speed garage',
+    'edm', 'electronic dance', 'eurodance',
+  ])
+  if (isFastGenre) return bpm
+
+  // Genres that are predominantly slow/mid-tempo (real pulse ≈ 50–100 BPM).
+  const isSlowGenre = hasAny([
+    'soul', 'r&b', 'rnb', 'neo soul', 'jazz', 'blues', 'gospel',
+    'ambient', 'downtempo', 'chill', 'lo-fi', 'lofi',
+    'classical', 'opera', 'orchestral',
+    'folk', 'acoustic', 'singer-songwriter',
+    'country', 'bluegrass',
+    'bossa nova', 'bolero', 'fado',
+    'adult contemporary', 'soft rock', 'easy listening',
+    'reggae', 'dub', 'ska',
+    // Seasonal / holiday — almost always ballads or slow carols
+    'christmas', 'holiday', 'seasonal', 'christian', 'hymn', 'carol',
+  ])
+
+  const shouldNormalize = isSlowGenre || energy < 0.50
+
+  if (!shouldNormalize || bpm <= 100) return bpm
+
+  // For BPM > 150 try ÷3 first (catches waltz/6-8 time songs like "O Holy Night"
+  // where the extractor locks onto the triplet subdivision).
+  if (bpm > 150) {
+    const third = Math.round((bpm / 3) * 10) / 10
+    if (third >= 50 && third <= 100) return third
+  }
+
+  // Standard double-time correction (÷2).
+  const half = Math.round((bpm / 2) * 10) / 10
+  if (half >= 45 && half <= 100) return half
+
+  return bpm
 }
 
 function readExistingResultsFile(filePath: string): Record<string, AppSong> {
@@ -291,9 +350,11 @@ async function analyzeLibrary(
         const song: AppSong = {
           filePath: relativeFilePath,
           file: relativeFilePath,
-          artist: match?.spotifyArtist ?? track.artist ?? 'Unknown artist',
-          title: match?.spotifyTitle ?? track.title,
-          bpm: features.bpm,
+          artist: track.artist ?? 'Unknown artist',
+          title: track.title,
+          spotifyArtist: match?.spotifyArtist,
+          spotifyTitle: match?.spotifyTitle,
+          bpm: normalizeBpm(features.bpm, features.energy, genres),
           key: keyInfo.keyName,
           camelot: keyInfo.camelot,
           energy: features.energy,
@@ -367,9 +428,11 @@ async function analyzeAppleMusicLibrary(
       const song: AppSong = {
         filePath: track.filePath,
         file: track.filePath,
-        artist: match?.spotifyArtist ?? track.artist ?? 'Unknown artist',
-        title: match?.spotifyTitle ?? track.title,
-        bpm: features.bpm,
+        artist: track.artist ?? 'Unknown artist',
+        title: track.title,
+        spotifyArtist: match?.spotifyArtist,
+        spotifyTitle: match?.spotifyTitle,
+        bpm: normalizeBpm(features.bpm, features.energy, genres),
         key: keyInfo.keyName,
         camelot: keyInfo.camelot,
         energy: features.energy,

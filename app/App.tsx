@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Song, SetTrack, DJPreferences, CurvePoint } from './types';
+import type { Song, SetTrack, DJPreferences, CurvePoint, HistoryEntry } from './types';
 import { generateSet } from './lib/setGenerator';
 import { camelotHarmonyScore, isHarmonicWarning } from './lib/camelot';
+import { buildSvgPath } from './lib/curveInterpolation';
 import EnergyCurveEditor, { DEFAULT_CURVE } from './components/EnergyCurveEditor';
 import PreferencesForm from './components/PreferencesForm';
 import SetTracklist from './components/SetTracklist';
@@ -50,6 +51,9 @@ function matchesGenrePref(song: Song, genre: string): boolean {
 }
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<'Generator' | 'History'>('Generator');
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [library, setLibrary] = useState<Song[]>([]);
   const [libraryName, setLibraryName] = useState<string>('');
   const [prefs, setPrefs] = useState<DJPreferences>(DEFAULT_PREFS);
@@ -278,6 +282,18 @@ export default function App() {
     setSwapVisibleCount(5);
   }, [swapModal]);
 
+  const handleExportM3U = useCallback(() => {
+    if (generatedSet.length === 0) return;
+    const entry: HistoryEntry = {
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      tracks: [...generatedSet],
+      prefs: { ...prefs },
+      curve: curve.map((p) => ({ ...p })),
+    };
+    setHistory((prev) => [entry, ...prev]);
+  }, [generatedSet, prefs, curve]);
+
   const handleRemoveTrack = useCallback((index: number) => {
     setGeneratedSet((prev) => {
       if (index < 0 || index >= prev.length) return prev;
@@ -340,6 +356,28 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* Tab nav */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1">
+          {(['Generator', 'History'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+                activeTab === tab
+                  ? 'border-[#7c3aed] text-[#e2e8f0]'
+                  : 'border-transparent text-[#475569] hover:text-[#94a3b8]'
+              }`}
+            >
+              {tab}
+              {tab === 'History' && history.length > 0 && (
+                <span className="ml-1.5 text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                  {history.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </header>
 
       {error && (
@@ -348,7 +386,7 @@ export default function App() {
         </div>
       )}
 
-      {library.length === 0 && (
+      {activeTab === 'Generator' && library.length === 0 && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
           <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4 text-sm text-[#94a3b8]">
             No library loaded. Click{' '}
@@ -363,51 +401,188 @@ export default function App() {
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
-          {/* Preferences panel */}
+      {activeTab === 'Generator' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
+            {/* Preferences panel */}
+            <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
+                DJ Preferences
+              </h2>
+              <PreferencesForm
+                prefs={prefs}
+                availableGenres={availableGenres}
+                onChange={setPrefs}
+                onGenerate={handleGenerate}
+                disabled={library.length === 0}
+              />
+            </div>
+
+            {/* Energy Curve panel */}
+            <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
+                  Energy Curve
+                </h2>
+                {autoRegen && (
+                  <span className="text-[10px] text-[#475569] bg-[#0d0d14] border border-[#1e1e2e] px-2 py-0.5 rounded">
+                    Live — drag to regenerate
+                  </span>
+                )}
+              </div>
+              <EnergyCurveEditor points={curve} onChange={handleCurveChange} />
+            </div>
+          </div>
+
+          {/* Generated Set panel */}
           <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
-              DJ Preferences
+              Generated Set
             </h2>
-            <PreferencesForm
+            <SetTracklist
+              tracks={generatedSet}
               prefs={prefs}
-              availableGenres={availableGenres}
-              onChange={setPrefs}
-              onGenerate={handleGenerate}
-              disabled={library.length === 0}
+              onSwapTrack={handleSwapTrack}
+              onRemoveTrack={handleRemoveTrack}
+              onExport={handleExportM3U}
             />
           </div>
+        </main>
+      )}
 
-          {/* Energy Curve panel */}
-          <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
-                Energy Curve
-              </h2>
-              {autoRegen && (
-                <span className="text-[10px] text-[#475569] bg-[#0d0d14] border border-[#1e1e2e] px-2 py-0.5 rounded">
-                  Live — drag to regenerate
-                </span>
-              )}
+      {activeTab === 'History' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+          {history.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-[#475569] gap-3">
+              <span className="text-4xl">📋</span>
+              <p className="text-sm">No playlists exported yet. Generate a set and click Export as M3U.</p>
             </div>
-            <EnergyCurveEditor points={curve} onChange={handleCurveChange} />
-          </div>
-        </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {history.map((entry) => {
+                const isExpanded = expandedHistoryId === entry.id;
+                const date = new Date(entry.timestamp);
+                const label = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                  + ' · ' + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
-        {/* Generated Set panel */}
-        <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
-            Generated Set
-          </h2>
-          <SetTracklist
-            tracks={generatedSet}
-            prefs={prefs}
-            onSwapTrack={handleSwapTrack}
-            onRemoveTrack={handleRemoveTrack}
-          />
-        </div>
-      </main>
+                // Mini curve: 300×56 viewBox, no padding
+                const miniW = 300;
+                const miniH = 56;
+                const miniPath = buildSvgPath(entry.curve, miniW, miniH, 120);
+                const miniFill = miniPath
+                  ? `${miniPath} L ${miniW} ${miniH} L 0 ${miniH} Z`
+                  : '';
+
+                const prefTags = [
+                  `${entry.prefs.setDuration} min`,
+                  entry.prefs.venueType,
+                  entry.prefs.audienceAgeRange,
+                  entry.prefs.audiencePurpose,
+                  entry.prefs.occasionType,
+                  ...(entry.prefs.genre !== 'Any' ? [entry.prefs.genre] : []),
+                ];
+
+                return (
+                  <div key={entry.id} className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
+                    {/* Tags + mini curve (always visible) */}
+                    <div className="px-5 pt-4 pb-3 flex items-start gap-4">
+                      <div className="flex flex-wrap gap-1.5 flex-1">
+                        {prefTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-[11px] px-2 py-0.5 rounded-full bg-[#1a1a2e] border border-[#2a2a3a] text-[#94a3b8]"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="w-44 shrink-0 rounded-md overflow-hidden border border-[#1e1e2e] bg-[#0d0d14]">
+                        <svg
+                          viewBox={`0 0 ${miniW} ${miniH}`}
+                          width="100%"
+                          height={miniH}
+                          preserveAspectRatio="none"
+                          style={{ display: 'block' }}
+                        >
+                          {miniFill && (
+                            <path d={miniFill} fill="#7c3aed" fillOpacity="0.15" />
+                          )}
+                          {miniPath && (
+                            <path
+                              d={miniPath}
+                              fill="none"
+                              stroke="#7c3aed"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          )}
+                          {entry.curve.map((pt, i) => (
+                            <circle
+                              key={i}
+                              cx={pt.x * miniW}
+                              cy={(1 - pt.y) * miniH}
+                              r="3"
+                              fill="#7c3aed"
+                            />
+                          ))}
+                        </svg>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setExpandedHistoryId(isExpanded ? null : entry.id)}
+                      className="w-full flex items-center justify-between px-5 py-3 text-left border-t border-[#1e1e2e] hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-[#7c3aed] text-sm font-medium">
+                          {entry.tracks.length} tracks
+                        </span>
+                        <span className="text-xs text-[#475569]">{label}</span>
+                      </div>
+                      <span className="text-[#475569] text-xs">{isExpanded ? '▲' : '▼'}</span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-[#1e1e2e]">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="bg-[#0d0d14]">
+                              <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">#</th>
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Track</th>
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">BPM</th>
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Key</th>
+                              <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Energy</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {entry.tracks.map((track, idx) => (
+                              <tr key={track.file} className="border-t border-[#1e1e2e] hover:bg-[#0d0d14]">
+                                <td className="py-2.5 pl-5 pr-2 text-xs text-[#475569] tabular-nums">{idx + 1}</td>
+                                <td className="py-2.5 px-2">
+                                  <div className="text-sm text-[#e2e8f0] truncate max-w-xs">
+                                    {track.title}
+                                  </div>
+                                  <div className="text-[11px] text-[#475569] truncate">
+                                    {track.artist}
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-2 text-sm text-[#94a3b8] tabular-nums">{Math.round(track.bpm)}</td>
+                                <td className="py-2.5 px-2 text-sm text-[#94a3b8]">{track.camelot}</td>
+                                <td className="py-2.5 px-2 pr-5 text-sm text-[#94a3b8] tabular-nums">{Math.round(track.energy * 100)}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      )}
 
       {swapModal && (
         <div
@@ -450,7 +625,7 @@ export default function App() {
                         className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2 hover:border-[#7c3aed] transition-colors cursor-pointer"
                       >
                         <div className="text-sm text-[#e2e8f0] truncate">
-                          {(song.spotifyTitle ?? song.title)} - {(song.spotifyArtist ?? song.artist)}
+                          {song.title} - {song.artist}
                         </div>
                         <div className="text-[11px] text-[#94a3b8] mt-1">
                           {song.camelot} • {Math.round(song.bpm)} BPM • {Math.round(song.energy * 100)}% energy • relevance {Math.round(score * 100)}%

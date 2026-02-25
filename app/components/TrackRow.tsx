@@ -33,8 +33,8 @@ function formatDuration(seconds: number): string {
 
 export default function TrackRow({ track, index, onSwap, onRemove }: Props) {
   const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
-  const artist = track.spotifyArtist ?? track.artist;
-  const title = track.spotifyTitle ?? track.title;
+  const artist = track.artist;
+  const title = track.title;
   const barColor = energyBarColor(track.energy);
 
   return (

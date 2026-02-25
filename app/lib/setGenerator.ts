@@ -54,34 +54,10 @@ function matchesGenre(song: Song, genre: string): boolean {
   return song.genres.some((g) => g.toLowerCase().includes(needle));
 }
 
-// ─── Scoring ──────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
-}
-
-function scoreTrack(
-  song: Song,
-  targetEnergy: number,
-  prevCamelot: string | null,
-  prevBpm: number | null,
-  affinityKey: AffinityKey | null,
-): number {
-  // Energy score (weight 0.5)
-  const energyScore = 1 - Math.abs(song.energy - targetEnergy);
-
-  // Harmonic score (weight 0.3)
-  const harmonicScore =
-    prevCamelot !== null ? camelotHarmonyScore(prevCamelot, song.camelot) : 1.0;
-
-  // BPM score (weight 0.2)
-  const bpmScore =
-    prevBpm !== null ? 1 - clamp(Math.abs(song.bpm - prevBpm) / 20, 0, 1) : 1.0;
-
-  const base = energyScore * 0.5 + harmonicScore * 0.3 + bpmScore * 0.2;
-  const bonus = genreAffinityBonus(song, affinityKey);
-
-  return clamp(base + bonus, 0, 1.15); // bonus can push slightly above 1
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
@@ -124,21 +100,37 @@ export function generateSet(
     const prevCamelot = prevTrack?.camelot ?? null;
     const prevBpm = prevTrack?.bpm ?? null;
 
-    // 3. Score all unused songs and pick the best
-    let bestSong: Song | null = null;
+    const available = candidatePool.filter((s) => !used.has(s.file));
+    if (available.length === 0) break;
+
+    // 3. Energy-first selection:
+    //    Sort all available songs by energy proximity, take the closest K as the
+    //    energy neighbourhood, then pick the best harmonic/BPM fit among them.
+    //    This makes energy the primary structural constraint rather than just
+    //    one term in a blended score.
+    available.sort(
+      (a, b) => Math.abs(a.energy - targetEnergy) - Math.abs(b.energy - targetEnergy),
+    );
+    const K = Math.max(5, Math.ceil(available.length * 0.15));
+    const energyNeighbours = available.slice(0, K);
+
+    // 4. Within the energy neighbourhood, score by harmonic + BPM + affinity
+    let bestSong = energyNeighbours[0];
     let bestScore = -Infinity;
 
-    for (const song of candidatePool) {
-      if (used.has(song.file)) continue;
+    for (const song of energyNeighbours) {
+      const harmonicScore =
+        prevCamelot !== null ? camelotHarmonyScore(prevCamelot, song.camelot) : 1.0;
+      const bpmScore =
+        prevBpm !== null ? 1 - clamp(Math.abs(song.bpm - prevBpm) / 20, 0, 1) : 1.0;
+      const affinityBonus = genreAffinityBonus(song, affinityKey);
 
-      const score = scoreTrack(song, targetEnergy, prevCamelot, prevBpm, affinityKey);
+      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;
       }
     }
-
-    if (!bestSong) break;
 
     used.add(bestSong.file);
     result.push({

@@ -31,6 +31,7 @@ export default function EnergyCurveEditor({ points, onChange }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgWidth, setSvgWidth] = useState(600);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [activePreset, setActivePreset] = useState<ArcPreset | null>(null);
 
   // Measure SVG width via ResizeObserver
   const measuredRef = useCallback((el: SVGSVGElement | null) => {
@@ -93,6 +94,7 @@ export default function EnergyCurveEditor({ points, onChange }: Props) {
       const svgY = e.clientY - rect.top;
       const newY = fromSvgY(svgY);
       const updated = points.map((p, i) => (i === draggingIdx ? { ...p, y: newY } : p));
+      setActivePreset(null);
       onChange(updated);
     },
     [draggingIdx, points, onChange, fromSvgY],
@@ -109,6 +111,7 @@ export default function EnergyCurveEditor({ points, onChange }: Props) {
         ...p,
         y: yValues[i] ?? p.y,
       }));
+      setActivePreset(preset);
       onChange(updated);
     },
     [points, onChange],
@@ -128,7 +131,11 @@ export default function EnergyCurveEditor({ points, onChange }: Props) {
           <button
             key={preset}
             onClick={() => applyPreset(preset)}
-            className="px-3 py-1 text-xs rounded border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+            className={`px-3 py-1 text-xs rounded border transition-colors cursor-pointer ${
+              activePreset === preset
+                ? 'border-[#7c3aed] bg-[#7c3aed]/10 text-[#e2e8f0]'
+                : 'border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0]'
+            }`}
           >
             {preset}
           </button>

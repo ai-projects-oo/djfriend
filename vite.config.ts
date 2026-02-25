@@ -181,13 +181,44 @@ interface AppleMusicTrack {
   duration: number | null
 }
 
-async function listAppleMusicTracks(): Promise<AppleMusicTrack[]> {
+async function listAppleMusicPlaylists(): Promise<Array<{ name: string; count: number }>> {
   const rs = String.fromCharCode(30)
   const us = String.fromCharCode(31)
   const script = `
 set outputLines to {}
 tell application "Music"
-	repeat with t in (every track of library playlist 1)
+  repeat with p in (every user playlist)
+    try
+      if class of p is not folder playlist then
+        set pName to (name of p) as text
+        set pCount to (count of tracks of p) as text
+        set end of outputLines to pName & "${us}" & pCount
+      end if
+    end try
+  end repeat
+end tell
+set AppleScript's text item delimiters to "${rs}"
+return outputLines as text
+`.trim()
+
+  const { stdout } = await execFileAsync('osascript', ['-e', script], { maxBuffer: 1 * 1024 * 1024 })
+  const rows = stdout.trim() ? stdout.trim().split(rs) : []
+  return rows
+    .map(row => {
+      const [name, countStr] = row.split(us)
+      return { name: (name ?? '').trim(), count: parseInt(countStr ?? '0', 10) || 0 }
+    })
+    .filter(p => p.name)
+}
+
+async function listAppleMusicTracks(playlistName: string): Promise<AppleMusicTrack[]> {
+  const rs = String.fromCharCode(30)
+  const us = String.fromCharCode(31)
+  const escapedName = playlistName.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const script = `
+set outputLines to {}
+tell application "Music"
+	repeat with t in (every track of user playlist "${escapedName}")
 		try
 			set trackLocation to location of t
 			if trackLocation is missing value then
@@ -381,6 +412,7 @@ async function analyzeLibrary(
 }
 
 async function analyzeAppleMusicLibrary(
+  playlistName: string,
   writeEvent: (event: Record<string, unknown>) => void,
 ): Promise<{ total: number; analyzed: number; songs: AppSong[]; resultsJson: Record<string, AppSong> }> {
   const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = process.env
@@ -388,7 +420,7 @@ async function analyzeAppleMusicLibrary(
     throw new Error('Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET in .env.')
   }
 
-  const tracks = await listAppleMusicTracks()
+  const tracks = await listAppleMusicTracks(playlistName)
   if (tracks.length === 0) throw new Error('No Apple Music local file tracks were found.')
 
   writeEvent({ type: 'start', total: tracks.length })
@@ -577,6 +609,19 @@ export default defineConfig({
           }
         })
 
+        server.middlewares.use('/api/apple-music-playlists', async (req, res, next) => {
+          if (req.method !== 'GET') { next(); return }
+          try {
+            const playlists = await listAppleMusicPlaylists()
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(playlists))
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to list playlists.'
+            res.statusCode = 500
+            res.end(JSON.stringify({ error: message }))
+          }
+        })
+
         server.middlewares.use('/api/analyze-apple-music', async (req, res, next) => {
           if (req.method !== 'POST') {
             next()
@@ -591,7 +636,16 @@ export default defineConfig({
           }
 
           try {
-            const analysis = await analyzeAppleMusicLibrary(writeEvent)
+            const body = await readJsonBody(req)
+            const playlistName = typeof (body as Record<string, unknown>)?.playlistName === 'string'
+              ? ((body as Record<string, unknown>).playlistName as string).trim()
+              : ''
+            if (!playlistName) {
+              writeEvent({ type: 'error', message: 'Missing playlistName.' })
+              res.end()
+              return
+            }
+            const analysis = await analyzeAppleMusicLibrary(playlistName, writeEvent)
             writeEvent({
               type: 'done',
               total: analysis.total,

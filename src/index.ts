@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
-import { scanFolder } from './scanner';
+import { getTracksFromPlaylist } from './apple-music';
 import { authenticate, searchTrack, getArtistGenres } from './spotify';
 import { analyzeAudio } from './analyzer';
 import { toCamelot } from './camelot';
@@ -9,8 +9,8 @@ import type { AnalyzedTrack } from './types';
 
 const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SONGS_FOLDER } = process.env;
 
-if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET || !SONGS_FOLDER) {
-  console.error('Missing required env vars: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SONGS_FOLDER');
+if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
+  console.error('Missing required env vars: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET');
   process.exit(1);
 }
 
@@ -22,9 +22,9 @@ async function main() {
   console.log('Authenticating with Spotify...');
   const token = await authenticate(SPOTIFY_CLIENT_ID!, SPOTIFY_CLIENT_SECRET!);
 
-  console.log(`Scanning folder: ${SONGS_FOLDER}\n`);
-  const tracks = await scanFolder(SONGS_FOLDER!);
-  console.log(`Found ${tracks.length} audio file(s)\n`);
+  const { tracks, playlistName } = await getTracksFromPlaylist();
+  console.log(`\nAnalyzing playlist: ${playlistName}`);
+  console.log(`Found ${tracks.length} track(s)\n`);
 
   const results: AnalyzedTrack[] = [];
 
@@ -84,7 +84,8 @@ async function main() {
     await delay(200);
   }
 
-  const outputPath = path.join(SONGS_FOLDER!, 'results.json');
+  const outputDir = SONGS_FOLDER ?? process.cwd();
+  const outputPath = path.join(outputDir, 'results.json');
   fs.writeFileSync(outputPath, JSON.stringify(results, null, 2));
   console.log(`\nResults saved to: ${outputPath}`);
 

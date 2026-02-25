@@ -6,6 +6,7 @@ import { buildSvgPath } from './lib/curveInterpolation';
 import EnergyCurveEditor, { DEFAULT_CURVE } from './components/EnergyCurveEditor';
 import PreferencesForm from './components/PreferencesForm';
 import SetTracklist from './components/SetTracklist';
+import { downloadM3U } from './lib/m3uExport';
 
 const DEFAULT_PREFS: DJPreferences = {
   setDuration: 60,
@@ -52,7 +53,14 @@ function matchesGenrePref(song: Song, genre: string): boolean {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'Generator' | 'History'>('Generator');
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem('djfriend-history');
+      return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [library, setLibrary] = useState<Song[]>([]);
   const [libraryName, setLibraryName] = useState<string>('');
@@ -72,6 +80,12 @@ export default function App() {
     suggestions: Array<{ song: Song; score: number }>;
   } | null>(null);
   const [swapVisibleCount, setSwapVisibleCount] = useState(5);
+  const [playlistPicker, setPlaylistPicker] = useState<Array<{ name: string; count: number }> | null>(null);
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('djfriend-history', JSON.stringify(history));
+  }, [history]);
 
   // Auto-load /public/result.json on mount
   useEffect(() => {
@@ -93,7 +107,23 @@ export default function App() {
       });
   }, []);
 
-  const runAppleMusicAnalysis = useCallback(async () => {
+  const openPlaylistPicker = useCallback(async () => {
+    setLoadingPlaylists(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/apple-music-playlists');
+      if (!res.ok) throw new Error('Could not load playlists.');
+      const data = await res.json() as Array<{ name: string; count: number }>;
+      setPlaylistPicker(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load playlists.');
+    } finally {
+      setLoadingPlaylists(false);
+    }
+  }, []);
+
+  const runAppleMusicAnalysis = useCallback(async (playlistName: string) => {
+    setPlaylistPicker(null);
     setIsAnalyzing(true);
     setAnalysisProgress({ completed: 0, total: 0 });
     setError(null);
@@ -102,6 +132,8 @@ export default function App() {
     try {
       const response = await fetch('/api/analyze-apple-music', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playlistName }),
       });
 
       if (!response.ok || !response.body) {
@@ -284,15 +316,24 @@ export default function App() {
 
   const handleExportM3U = useCallback(() => {
     if (generatedSet.length === 0) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const name = `djfriend-set-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
     const entry: HistoryEntry = {
       id: Date.now().toString(),
+      name,
       timestamp: Date.now(),
       tracks: [...generatedSet],
       prefs: { ...prefs },
       curve: curve.map((p) => ({ ...p })),
     };
     setHistory((prev) => [entry, ...prev]);
+    downloadM3U(generatedSet, `${name}.m3u`);
   }, [generatedSet, prefs, curve]);
+
+  const handleRenameEntry = useCallback((id: string, newName: string) => {
+    setHistory((prev) => prev.map((e) => e.id === id ? { ...e, name: newName } : e));
+  }, []);
 
   const handleRemoveTrack = useCallback((index: number) => {
     setGeneratedSet((prev) => {
@@ -348,11 +389,11 @@ export default function App() {
               </div>
             )}
             <button
-              onClick={runAppleMusicAnalysis}
-              disabled={isAnalyzing}
+              onClick={openPlaylistPicker}
+              disabled={isAnalyzing || loadingPlaylists}
               className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isAnalyzing ? 'Analyzing…' : 'Analyze Apple Music'}
+              {isAnalyzing ? 'Analyzing…' : loadingPlaylists ? 'Loading…' : 'Analyze Apple Music'}
             </button>
           </div>
         </div>
@@ -391,7 +432,7 @@ export default function App() {
           <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4 text-sm text-[#94a3b8]">
             No library loaded. Click{' '}
             <button
-              onClick={runAppleMusicAnalysis}
+              onClick={openPlaylistPicker}
               className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
             >
               Analyze Apple Music
@@ -484,8 +525,16 @@ export default function App() {
 
                 return (
                   <div key={entry.id} className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
+                    {/* Editable name */}
+                    <div className="px-5 pt-4 pb-2">
+                      <input
+                        value={entry.name}
+                        onChange={(e) => handleRenameEntry(entry.id, e.target.value)}
+                        className="w-full bg-transparent text-sm font-semibold text-[#e2e8f0] border-b border-transparent hover:border-[#2a2a3a] focus:border-[#7c3aed] focus:outline-none pb-0.5 transition-colors"
+                      />
+                    </div>
                     {/* Tags + mini curve (always visible) */}
-                    <div className="px-5 pt-4 pb-3 flex items-start gap-4">
+                    <div className="px-5 pt-1 pb-3 flex items-start gap-4">
                       <div className="flex flex-wrap gap-1.5 flex-1">
                         {prefTags.map((tag) => (
                           <span
@@ -530,18 +579,24 @@ export default function App() {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setExpandedHistoryId(isExpanded ? null : entry.id)}
-                      className="w-full flex items-center justify-between px-5 py-3 text-left border-t border-[#1e1e2e] hover:bg-[#0d0d14] transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center border-t border-[#1e1e2e]">
+                      <button
+                        onClick={() => setExpandedHistoryId(isExpanded ? null : entry.id)}
+                        className="flex-1 flex items-center gap-3 px-5 py-3 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                      >
                         <span className="text-[#7c3aed] text-sm font-medium">
                           {entry.tracks.length} tracks
                         </span>
                         <span className="text-xs text-[#475569]">{label}</span>
-                      </div>
-                      <span className="text-[#475569] text-xs">{isExpanded ? '▲' : '▼'}</span>
-                    </button>
+                        <span className="text-[#475569] text-xs ml-auto">{isExpanded ? '▲' : '▼'}</span>
+                      </button>
+                      <button
+                        onClick={() => downloadM3U(entry.tracks, `${entry.name}.m3u`)}
+                        className="px-4 py-3 text-xs text-[#94a3b8] hover:text-[#e2e8f0] border-l border-[#1e1e2e] hover:bg-[#0d0d14] transition-colors cursor-pointer shrink-0"
+                      >
+                        Export M3U
+                      </button>
+                    </div>
 
                     {isExpanded && (
                       <div className="border-t border-[#1e1e2e]">
@@ -582,6 +637,44 @@ export default function App() {
             </div>
           )}
         </main>
+      )}
+
+      {playlistPicker && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setPlaylistPicker(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#12121a] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-[#e2e8f0]">Select a Playlist</h3>
+              <button
+                className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
+                onClick={() => setPlaylistPicker(null)}
+              >
+                Close
+              </button>
+            </div>
+            {playlistPicker.length === 0 ? (
+              <p className="text-sm text-[#94a3b8] py-4">No playlists found in Apple Music.</p>
+            ) : (
+              <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto">
+                {playlistPicker.map((playlist) => (
+                  <button
+                    key={playlist.name}
+                    onClick={() => runAppleMusicAnalysis(playlist.name)}
+                    className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2.5 hover:border-[#7c3aed] transition-colors cursor-pointer"
+                  >
+                    <div className="text-sm text-[#e2e8f0]">{playlist.name}</div>
+                    <div className="text-[11px] text-[#475569] mt-0.5">{playlist.count} track{playlist.count === 1 ? '' : 's'}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {swapModal && (

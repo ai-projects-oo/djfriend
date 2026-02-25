@@ -59,6 +59,7 @@ export interface DJPreferences {
 
 export interface HistoryEntry {
   id: string;
+  name: string;
   timestamp: number;
   tracks: SetTrack[];
   prefs: DJPreferences;

@@ -7,6 +7,25 @@ import EnergyCurveEditor, { DEFAULT_CURVE } from './components/EnergyCurveEditor
 import PreferencesForm from './components/PreferencesForm';
 import SetTracklist from './components/SetTracklist';
 import { downloadM3U } from './lib/m3uExport';
+import {
+  getStoredToken,
+  storeToken,
+  storePendingExport,
+  getPendingExport,
+  clearPendingExport,
+  redirectToSpotifyLogin,
+  exchangeCodeForToken,
+  searchTracksOnSpotify,
+  createPlaylistFromMatches,
+} from './lib/spotifyExport';
+import type { SpotifyMatchResult } from './lib/spotifyExport';
+
+type SpotifyExportStatus =
+  | { phase: 'searching'; completed: number; total: number }
+  | { phase: 'review'; matches: SpotifyMatchResult[]; playlistName: string }
+  | { phase: 'creating' }
+  | { phase: 'done'; playlistUrl: string; matched: number; total: number }
+  | { phase: 'error'; message: string };
 
 const DEFAULT_PREFS: DJPreferences = {
   setDuration: 60,
@@ -82,6 +101,8 @@ export default function App() {
   const [swapVisibleCount, setSwapVisibleCount] = useState(5);
   const [playlistPicker, setPlaylistPicker] = useState<Array<{ name: string; count: number }> | null>(null);
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+  const [spotifyExportStatus, setSpotifyExportStatus] = useState<SpotifyExportStatus | null>(null);
+  const [openHistoryExportId, setOpenHistoryExportId] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('djfriend-history', JSON.stringify(history));
@@ -105,6 +126,41 @@ export default function App() {
       .catch(() => {
         // Silently ignore — user can load manually
       });
+  }, []);
+
+  // Handle Spotify OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return;
+
+    // Clean up the URL so the code isn't re-processed on refresh
+    window.history.replaceState({}, '', window.location.pathname);
+
+    void (async () => {
+      try {
+        const { access_token, expires_in } = await exchangeCodeForToken(code);
+        storeToken(access_token, expires_in);
+
+        const pending = getPendingExport();
+        clearPendingExport();
+
+        if (pending) {
+          setSpotifyExportStatus({ phase: 'searching', completed: 0, total: pending.tracks.length });
+          const matches = await searchTracksOnSpotify(
+            pending.tracks,
+            access_token,
+            (completed, total) => setSpotifyExportStatus({ phase: 'searching', completed, total }),
+          );
+          setSpotifyExportStatus({ phase: 'review', matches, playlistName: pending.name });
+        }
+      } catch (err) {
+        setSpotifyExportStatus({
+          phase: 'error',
+          message: err instanceof Error ? err.message : 'Spotify auth failed.',
+        });
+      }
+    })();
   }, []);
 
   const openPlaylistPicker = useCallback(async () => {
@@ -335,6 +391,77 @@ export default function App() {
     setHistory((prev) => prev.map((e) => e.id === id ? { ...e, name: newName } : e));
   }, []);
 
+  const startSpotifyExport = useCallback(async (tracks: SetTrack[], playlistName: string) => {
+    const token = getStoredToken();
+    if (!token) {
+      storePendingExport(tracks, playlistName);
+      try {
+        await redirectToSpotifyLogin();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not start Spotify login.');
+      }
+      return;
+    }
+    setSpotifyExportStatus({ phase: 'searching', completed: 0, total: tracks.length });
+    try {
+      const matches = await searchTracksOnSpotify(
+        tracks,
+        token,
+        (completed, total) => setSpotifyExportStatus({ phase: 'searching', completed, total }),
+      );
+      setSpotifyExportStatus({ phase: 'review', matches, playlistName });
+    } catch (err) {
+      setSpotifyExportStatus({ phase: 'error', message: err instanceof Error ? err.message : 'Export failed.' });
+    }
+  }, []);
+
+  const handleExportSpotify = useCallback(async () => {
+    if (generatedSet.length === 0) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const name = `DJFriend Set ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    await startSpotifyExport(generatedSet, name);
+  }, [generatedSet, startSpotifyExport]);
+
+  const handleToggleSpotifyMatch = useCallback((index: number) => {
+    setSpotifyExportStatus((prev) => {
+      if (!prev || prev.phase !== 'review') return prev;
+      const matches = [...prev.matches];
+      matches[index] = { ...matches[index], excluded: !matches[index].excluded };
+      return { ...prev, matches };
+    });
+  }, []);
+
+  const handleConfirmSpotifyExport = useCallback(async (matches: SpotifyMatchResult[], playlistName: string) => {
+    const token = getStoredToken();
+    if (!token) {
+      setSpotifyExportStatus({ phase: 'error', message: 'Spotify session expired. Please try again.' });
+      return;
+    }
+    setSpotifyExportStatus({ phase: 'creating' });
+    try {
+      const result = await createPlaylistFromMatches(matches, playlistName, token);
+
+      // Save to history — all non-excluded tracks (found or not), using original local SetTrack data
+      const includedTracks = matches
+        .filter((m) => !m.excluded)
+        .map((m) => m.track);
+      const entry: HistoryEntry = {
+        id: Date.now().toString(),
+        name: playlistName,
+        timestamp: Date.now(),
+        tracks: includedTracks,
+        prefs: { ...prefs },
+        curve: curve.map((p) => ({ ...p })),
+      };
+      setHistory((prev) => [entry, ...prev]);
+
+      setSpotifyExportStatus({ phase: 'done', ...result });
+    } catch (err) {
+      setSpotifyExportStatus({ phase: 'error', message: err instanceof Error ? err.message : 'Export failed.' });
+    }
+  }, [prefs, curve]);
+
   const handleRemoveTrack = useCallback((index: number) => {
     setGeneratedSet((prev) => {
       if (index < 0 || index >= prev.length) return prev;
@@ -486,6 +613,7 @@ export default function App() {
               onSwapTrack={handleSwapTrack}
               onRemoveTrack={handleRemoveTrack}
               onExport={handleExportM3U}
+              onExportSpotify={() => { void handleExportSpotify(); }}
             />
           </div>
         </main>
@@ -590,12 +718,30 @@ export default function App() {
                         <span className="text-xs text-[#475569]">{label}</span>
                         <span className="text-[#475569] text-xs ml-auto">{isExpanded ? '▲' : '▼'}</span>
                       </button>
-                      <button
-                        onClick={() => downloadM3U(entry.tracks, `${entry.name}.m3u`)}
-                        className="px-4 py-3 text-xs text-[#94a3b8] hover:text-[#e2e8f0] border-l border-[#1e1e2e] hover:bg-[#0d0d14] transition-colors cursor-pointer shrink-0"
-                      >
-                        Export M3U
-                      </button>
+                      <div className="relative border-l border-[#1e1e2e] shrink-0">
+                        <button
+                          onClick={() => setOpenHistoryExportId(openHistoryExportId === entry.id ? null : entry.id)}
+                          className="flex items-center gap-1.5 px-4 py-3 text-xs text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                        >
+                          Export <span className="text-[9px]">▾</span>
+                        </button>
+                        {openHistoryExportId === entry.id && (
+                          <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                            <button
+                              onClick={() => { downloadM3U(entry.tracks, `${entry.name}.m3u`); setOpenHistoryExportId(null); }}
+                              className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                            >
+                              Export as M3U
+                            </button>
+                            <button
+                              onClick={() => { void startSpotifyExport(entry.tracks, entry.name); setOpenHistoryExportId(null); }}
+                              className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                            >
+                              Export to Spotify
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {isExpanded && (
@@ -737,6 +883,145 @@ export default function App() {
                     </button>
                   </div>
                 )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {spotifyExportStatus && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => {
+            if (spotifyExportStatus.phase === 'done' || spotifyExportStatus.phase === 'error') {
+              setSpotifyExportStatus(null);
+            }
+          }}
+        >
+          <div
+            className={`w-full rounded-xl border border-[#2a2a3a] bg-[#12121a] p-6 ${spotifyExportStatus.phase === 'review' ? 'max-w-lg' : 'max-w-sm'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {spotifyExportStatus.phase === 'searching' && (
+              <>
+                <h3 className="text-sm font-semibold text-[#e2e8f0] mb-4">Searching Spotify…</h3>
+                <div className="flex flex-col gap-3">
+                  <div className="w-full h-1.5 rounded-full bg-[#1f2937] overflow-hidden">
+                    <div
+                      className="h-full bg-[#1db954] transition-all"
+                      style={{
+                        width: spotifyExportStatus.total > 0
+                          ? `${Math.round((spotifyExportStatus.completed / spotifyExportStatus.total) * 100)}%`
+                          : '0%',
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs text-[#94a3b8] tabular-nums">
+                    {spotifyExportStatus.completed} / {spotifyExportStatus.total} tracks
+                  </span>
+                </div>
+              </>
+            )}
+
+            {spotifyExportStatus.phase === 'review' && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-[#e2e8f0]">Review Spotify matches</h3>
+                  <span className="text-xs text-[#475569]">
+                    {spotifyExportStatus.matches.filter((m) => m.match && !m.excluded).length} / {spotifyExportStatus.matches.length} will be added
+                  </span>
+                </div>
+                <div className="flex flex-col max-h-[55vh] overflow-y-auto mb-4">
+                  {spotifyExportStatus.matches.map(({ track, match, confidence, excluded }, idx) => (
+                    <div
+                      key={track.file}
+                      className={`grid grid-cols-[20px_1fr_1fr_24px] gap-2 items-start py-1.5 border-b border-[#1e1e2e] last:border-0 ${excluded ? 'opacity-40' : ''}`}
+                    >
+                      <span className="text-[11px] text-[#475569] tabular-nums pt-0.5">{idx + 1}</span>
+                      <div className="min-w-0">
+                        <div className="text-xs text-[#e2e8f0] truncate">{track.title}</div>
+                        <div className="text-[11px] text-[#475569] truncate">{track.artist}</div>
+                      </div>
+                      <div className="min-w-0">
+                        {match ? (
+                          <>
+                            <div className={`text-xs truncate ${confidence === 'exact' ? 'text-[#1db954]' : 'text-[#f59e0b]'}`}>
+                              {match.name}
+                            </div>
+                            <div className="text-[11px] text-[#475569] truncate">{match.artists}</div>
+                          </>
+                        ) : (
+                          <div className="text-xs text-[#ef4444]">Not found</div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleToggleSpotifyMatch(idx)}
+                        title={excluded ? 'Re-include' : 'Remove from playlist'}
+                        className="mt-0.5 text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer text-xs leading-none"
+                      >
+                        {excluded ? '↩' : '✕'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { void handleConfirmSpotifyExport(spotifyExportStatus.matches, spotifyExportStatus.playlistName); }}
+                    disabled={spotifyExportStatus.matches.every((m) => !m.match || m.excluded)}
+                    className="flex-1 px-4 py-2 rounded-md bg-[#1db954] text-[#000] text-sm font-semibold hover:bg-[#1ed760] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Create playlist
+                  </button>
+                  <button
+                    onClick={() => setSpotifyExportStatus(null)}
+                    className="px-4 py-2 rounded-md border border-[#2a2a3a] text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+
+            {spotifyExportStatus.phase === 'creating' && (
+              <p className="text-sm text-[#94a3b8]">Creating playlist…</p>
+            )}
+
+            {spotifyExportStatus.phase === 'done' && (
+              <>
+                <h3 className="text-sm font-semibold text-[#e2e8f0] mb-3">Playlist created</h3>
+                <p className="text-sm text-[#94a3b8] mb-4">
+                  {spotifyExportStatus.matched} of {spotifyExportStatus.total} tracks added.
+                </p>
+                <div className="flex gap-2">
+                  <a
+                    href={spotifyExportStatus.playlistUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setSpotifyExportStatus(null)}
+                    className="flex-1 text-center px-4 py-2 rounded-md bg-[#1db954] text-[#000] text-sm font-semibold hover:bg-[#1ed760] transition-colors"
+                  >
+                    Open in Spotify
+                  </a>
+                  <button
+                    onClick={() => setSpotifyExportStatus(null)}
+                    className="px-4 py-2 rounded-md border border-[#2a2a3a] text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+
+            {spotifyExportStatus.phase === 'error' && (
+              <>
+                <h3 className="text-sm font-semibold text-[#ef4444] mb-3">Export failed</h3>
+                <p className="text-sm text-[#94a3b8] mb-4">{spotifyExportStatus.message}</p>
+                <button
+                  onClick={() => setSpotifyExportStatus(null)}
+                  className="px-4 py-2 rounded-md border border-[#2a2a3a] text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
               </>
             )}
           </div>

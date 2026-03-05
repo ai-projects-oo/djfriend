@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import type { SetTrack, DJPreferences } from '../types';
 import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
@@ -8,6 +9,7 @@ interface Props {
   onSwapTrack: (index: number) => void;
   onRemoveTrack: (index: number) => void;
   onExport?: () => void;
+  onExportSpotify?: () => void;
 }
 
 function totalDurationMinutes(tracks: SetTrack[]): number {
@@ -15,7 +17,20 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
   return Math.round(totalSecs / 60);
 }
 
-export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack, onExport }: Props) {
+export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack, onExport, onExportSpotify }: Props) {
+  const [exportOpen, setExportOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [exportOpen]);
   if (tracks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
@@ -49,13 +64,32 @@ export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack
           )}
         </div>
 
-        <button
-          onClick={() => { downloadM3U(tracks); onExport?.(); }}
-          className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-sm text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-        >
-          <span>↓</span>
-          Export as M3U
-        </button>
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setExportOpen((o) => !o)}
+            className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-sm text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+          >
+            <span>↓</span>
+            Export
+            <span className="text-[10px]">▾</span>
+          </button>
+          {exportOpen && (
+            <div className="absolute right-0 top-full mt-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+              <button
+                onClick={() => { downloadM3U(tracks); onExport?.(); setExportOpen(false); }}
+                className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+              >
+                Export as M3U
+              </button>
+              <button
+                onClick={() => { onExportSpotify?.(); setExportOpen(false); }}
+                className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+              >
+                Export to Spotify
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Table */}

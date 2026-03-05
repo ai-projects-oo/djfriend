@@ -488,19 +488,20 @@ async function analyzeAppleMusicLibrary(
   }
 }
 
-// ─── Read SONGS_FOLDER from the parent project's .env ────────────────────────
-function readSongsFolder(): string | null {
+// ─── Read values from the parent project's .env ──────────────────────────────
+function readEnvVar(name: string): string | null {
   const envPath = path.resolve(__dirname, '.env')
   if (!fs.existsSync(envPath)) return null
   const contents = fs.readFileSync(envPath, 'utf-8')
   for (const line of contents.split('\n')) {
-    const match = line.match(/^\s*SONGS_FOLDER\s*=\s*(.+)\s*$/)
+    const match = line.match(new RegExp(`^\\s*${name}\\s*=\\s*(.+)\\s*$`))
     if (match) return match[1].trim()
   }
   return null
 }
 
-const songsFolder = readSongsFolder()
+const songsFolder = readEnvVar('SONGS_FOLDER')
+const spotifyClientId = readEnvVar('SPOTIFY_CLIENT_ID')
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -673,9 +674,14 @@ export default defineConfig({
       },
     },
   ],
-  // Inject SONGS_FOLDER into client code so M3U export can build absolute paths
+  // Inject env values into client code
   define: {
     __SONGS_FOLDER__: JSON.stringify(songsFolder ?? ''),
+    __SPOTIFY_CLIENT_ID__: JSON.stringify(spotifyClientId ?? ''),
+  },
+  server: {
+    port: 8888,
+    host: '127.0.0.1',
   },
   resolve: {
     alias: {

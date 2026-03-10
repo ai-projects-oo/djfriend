@@ -610,6 +610,27 @@ export default defineConfig({
           }
         })
 
+        server.middlewares.use('/api/play-in-music', async (req, res, next) => {
+          if (req.method !== 'POST') { next(); return }
+          const body = await readJsonBody(req) as Record<string, unknown>
+          const filePath = typeof body.filePath === 'string' ? body.filePath : null
+          const artist = typeof body.artist === 'string' ? body.artist : ''
+          const title = typeof body.title === 'string' ? body.title : ''
+
+          const script = filePath
+            ? `tell application "Music"\nactivate\nopen POSIX file "${filePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"\nend tell`
+            : `tell application "Music"\nactivate\nset r to (search library playlist 1 for "${`${artist} ${title}`.replace(/"/g, '\\"')}")\nif length of r > 0 then\nplay item 1 of r\nend if\nend tell`
+
+          try {
+            await execFileAsync('osascript', ['-e', script])
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ok: true }))
+          } catch (err) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Playback failed' }))
+          }
+        })
+
         server.middlewares.use('/api/apple-music-playlists', async (req, res, next) => {
           if (req.method !== 'GET') { next(); return }
           try {

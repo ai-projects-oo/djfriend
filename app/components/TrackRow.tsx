@@ -40,8 +40,15 @@ export default function TrackRow({ track, index, onSwap, onRemove }: Props) {
   return (
     <tr className="border-b border-[#1e1e2e] hover:bg-[#12121a] transition-colors group">
       {/* # */}
-      <td className="py-3 pl-4 pr-2 text-[#475569] text-sm tabular-nums w-10">
-        {index + 1}
+      <td className="py-3 pl-4 pr-2 w-10">
+        <span className="group-hover:hidden text-[#475569] text-sm tabular-nums">{index + 1}</span>
+        <button
+          onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+          className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+          title="Play in Apple Music"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
       </td>
 
       {/* Title / Artist */}

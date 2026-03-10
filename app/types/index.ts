@@ -65,3 +65,19 @@ export interface HistoryEntry {
   prefs: DJPreferences;
   curve: CurvePoint[];
 }
+
+export interface ImportTrack {
+  spotifyId: string;
+  title: string;
+  artist: string;
+  inLibrary: boolean;
+  unavailable?: boolean;
+}
+
+export interface ImportEntry {
+  id: string;
+  name: string;
+  timestamp: number;
+  playlistId: string;
+  tracks: ImportTrack[];
+}

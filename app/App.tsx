@@ -41,6 +41,7 @@ type ImportStatus =
   | { phase: 'loading'; loaded: number; total: number }
   | { phase: 'error'; message: string };
 
+
 const DEFAULT_PREFS: DJPreferences = {
   setDuration: 60,
   venueType: 'Club',
@@ -132,6 +133,8 @@ export default function App() {
   const [pendingImportUrl, setPendingImportUrl] = useState<string | null>(null);
   const [spotifyPlaylistPicker, setSpotifyPlaylistPicker] = useState<SpotifyUserPlaylist[] | null>(null);
   const [loadingSpotifyPlaylists, setLoadingSpotifyPlaylists] = useState(false);
+  const [openStoreLinkKey, setOpenStoreLinkKey] = useState<string | null>(null);
+  const storeLinkRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!openHistoryExportId) return;
@@ -161,6 +164,17 @@ export default function App() {
     void runImport(url, library);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingImportUrl, library]);
+
+  useEffect(() => {
+    if (!openStoreLinkKey) return;
+    const handler = (e: MouseEvent) => {
+      if (storeLinkRef.current && !storeLinkRef.current.contains(e.target as Node)) {
+        setOpenStoreLinkKey(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openStoreLinkKey]);
 
   // Auto-load /public/result.json on mount
   useEffect(() => {
@@ -1009,7 +1023,7 @@ export default function App() {
                             <tr className="bg-[#0d0d14]">
                               <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">#</th>
                               <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Track</th>
-                              <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">In Library</th>
+                              <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-8"></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1036,13 +1050,53 @@ export default function App() {
                                   )}
                                 </td>
                                 <td className="py-2.5 px-2 pr-5">
-                                  {track.unavailable ? (
-                                    <span className="text-xs text-[#475569]">— N/A</span>
-                                  ) : track.inLibrary ? (
-                                    <span className="text-xs text-emerald-400">✓ Yes</span>
-                                  ) : (
-                                    <span className="text-xs text-red-400">✗ Missing</span>
-                                  )}
+                                  {track.inLibrary || track.unavailable ? null : (() => {
+                                    const key = `${entry.id}-${track.spotifyId}-${idx}`;
+                                    const q = encodeURIComponent(`${track.artist} ${track.title}`);
+                                    return (
+                                      <div ref={openStoreLinkKey === key ? storeLinkRef : null} className="relative inline-block">
+                                        <button
+                                          onClick={() => setOpenStoreLinkKey(openStoreLinkKey === key ? null : key)}
+                                          className="text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                          title="Buy this track"
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                                            <line x1="3" y1="6" x2="21" y2="6"/>
+                                            <path d="M16 10a4 4 0 0 1-8 0"/>
+                                          </svg>
+                                        </button>
+                                        {openStoreLinkKey === key && (
+                                          <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[140px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                                            <a
+                                              href={`https://www.beatport.com/search?q=${q}`}
+                                              target="_blank" rel="noopener noreferrer"
+                                              onClick={() => setOpenStoreLinkKey(null)}
+                                              className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                            >
+                                              Beatport
+                                            </a>
+                                            <a
+                                              href={`https://bandcamp.com/search?q=${q}&item_type=t`}
+                                              target="_blank" rel="noopener noreferrer"
+                                              onClick={() => setOpenStoreLinkKey(null)}
+                                              className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                            >
+                                              Bandcamp
+                                            </a>
+                                            <a
+                                              href={`https://www.traxsource.com/search?term=${q}`}
+                                              target="_blank" rel="noopener noreferrer"
+                                              onClick={() => setOpenStoreLinkKey(null)}
+                                              className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                            >
+                                              Traxsource
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                               </tr>
                             ))}

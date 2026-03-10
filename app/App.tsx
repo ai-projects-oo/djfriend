@@ -914,8 +914,17 @@ export default function App() {
                           </thead>
                           <tbody>
                             {entry.tracks.map((track, idx) => (
-                              <tr key={track.file} className="border-t border-[#1e1e2e] hover:bg-[#0d0d14]">
-                                <td className="py-2.5 pl-5 pr-2 text-xs text-[#475569] tabular-nums">{idx + 1}</td>
+                              <tr key={track.file} className="group border-t border-[#1e1e2e] hover:bg-[#0d0d14]">
+                                <td className="py-2.5 pl-5 pr-2 w-10">
+                                  <span className="group-hover:hidden text-xs text-[#475569] tabular-nums">{idx + 1}</span>
+                                  <button
+                                    onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+                                    className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+                                    title="Play in Apple Music"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                  </button>
+                                </td>
                                 <td className="py-2.5 px-2">
                                   <div className="text-sm text-[#e2e8f0] truncate max-w-xs">
                                     {track.title}
@@ -1030,7 +1039,7 @@ export default function App() {
                             {entry.tracks.map((track, idx) => (
                               <tr
                                 key={`${track.spotifyId}-${idx}`}
-                                className={`border-t border-[#1e1e2e] ${
+                                className={`group border-t border-[#1e1e2e] ${
                                   track.unavailable
                                     ? 'opacity-40'
                                     : track.inLibrary
@@ -1038,7 +1047,24 @@ export default function App() {
                                     : 'bg-red-950/20 hover:bg-red-950/30'
                                 }`}
                               >
-                                <td className={`py-2.5 pl-5 pr-2 text-xs tabular-nums ${track.inLibrary ? 'text-[#475569]' : 'text-red-500/60'}`}>{idx + 1}</td>
+                                <td className="py-2.5 pl-5 pr-2 w-10">
+                                  <span className={`group-hover:hidden text-xs tabular-nums ${track.inLibrary ? 'text-[#475569]' : 'text-red-500/60'}`}>{idx + 1}</span>
+                                  {!track.unavailable && (
+                                    <button
+                                      onClick={() => {
+                                        if (track.inLibrary) {
+                                          void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ artist: track.artist, title: track.title }) });
+                                        } else {
+                                          window.open(`spotify:track:${track.spotifyId}`);
+                                        }
+                                      }}
+                                      className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+                                      title={track.inLibrary ? 'Play in Apple Music' : 'Play in Spotify'}
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                    </button>
+                                  )}
+                                </td>
                                 <td className="py-2.5 px-2">
                                   <div className={`text-sm truncate max-w-xs ${track.unavailable ? 'text-[#475569] italic' : track.inLibrary ? 'text-[#e2e8f0]' : 'text-red-400'}`}>
                                     {track.title}

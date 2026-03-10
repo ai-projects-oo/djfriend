@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Song, SetTrack, DJPreferences, CurvePoint, HistoryEntry } from './types';
+import type { Song, SetTrack, DJPreferences, CurvePoint, HistoryEntry, ImportEntry, ImportTrack } from './types';
 import { generateSet } from './lib/setGenerator';
 import { camelotHarmonyScore, isHarmonicWarning } from './lib/camelot';
 import { buildSvgPath } from './lib/curveInterpolation';
@@ -19,12 +19,26 @@ import {
   createPlaylistFromMatches,
 } from './lib/spotifyExport';
 import type { SpotifyMatchResult } from './lib/spotifyExport';
+import {
+  storePendingImport,
+  getPendingImport,
+  clearPendingImport,
+  parsePlaylistId,
+  fetchPlaylistTracks,
+  fetchUserPlaylists,
+  matchInLibrary,
+} from './lib/spotifyImport';
+import type { SpotifyUserPlaylist } from './lib/spotifyImport';
 
 type SpotifyExportStatus =
   | { phase: 'searching'; completed: number; total: number }
   | { phase: 'review'; matches: SpotifyMatchResult[]; playlistName: string }
   | { phase: 'creating' }
   | { phase: 'done'; playlistUrl: string; matched: number; total: number }
+  | { phase: 'error'; message: string };
+
+type ImportStatus =
+  | { phase: 'loading'; loaded: number; total: number }
   | { phase: 'error'; message: string };
 
 const DEFAULT_PREFS: DJPreferences = {
@@ -71,7 +85,7 @@ function matchesGenrePref(song: Song, genre: string): boolean {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'Generator' | 'History'>('Generator');
+  const [activeTab, setActiveTab] = useState<'Generator' | 'History' | 'Import'>('Generator');
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
       const raw = localStorage.getItem('djfriend-history');
@@ -103,10 +117,50 @@ export default function App() {
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [spotifyExportStatus, setSpotifyExportStatus] = useState<SpotifyExportStatus | null>(null);
   const [openHistoryExportId, setOpenHistoryExportId] = useState<string | null>(null);
+  const historyExportRef = useRef<HTMLDivElement | null>(null);
+  const [importHistory, setImportHistory] = useState<ImportEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem('djfriend-imports');
+      return raw ? (JSON.parse(raw) as ImportEntry[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [expandedImportId, setExpandedImportId] = useState<string | null>(null);
+  const [importUrl, setImportUrl] = useState('');
+  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const [pendingImportUrl, setPendingImportUrl] = useState<string | null>(null);
+  const [spotifyPlaylistPicker, setSpotifyPlaylistPicker] = useState<SpotifyUserPlaylist[] | null>(null);
+  const [loadingSpotifyPlaylists, setLoadingSpotifyPlaylists] = useState(false);
+
+  useEffect(() => {
+    if (!openHistoryExportId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (historyExportRef.current && !historyExportRef.current.contains(e.target as Node)) {
+        setOpenHistoryExportId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openHistoryExportId]);
 
   useEffect(() => {
     localStorage.setItem('djfriend-history', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem('djfriend-imports', JSON.stringify(importHistory));
+  }, [importHistory]);
+
+  // Auto-run import after OAuth redirect, once library is ready
+  useEffect(() => {
+    if (!pendingImportUrl) return;
+    if (library.length === 0) return; // wait for library to load
+    const url = pendingImportUrl;
+    setPendingImportUrl(null);
+    void runImport(url, library);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingImportUrl, library]);
 
   // Auto-load /public/result.json on mount
   useEffect(() => {
@@ -153,6 +207,23 @@ export default function App() {
             (completed, total) => setSpotifyExportStatus({ phase: 'searching', completed, total }),
           );
           setSpotifyExportStatus({ phase: 'review', matches, playlistName: pending.name });
+        }
+
+        const pendingImport = getPendingImport();
+        clearPendingImport();
+        if (pendingImport === '__browse__') {
+          setActiveTab('Import');
+          setLoadingSpotifyPlaylists(true);
+          try {
+            const playlists = await fetchUserPlaylists(access_token);
+            setSpotifyPlaylistPicker(playlists);
+          } finally {
+            setLoadingSpotifyPlaylists(false);
+          }
+        } else if (pendingImport) {
+          setActiveTab('Import');
+          setImportUrl(pendingImport);
+          setPendingImportUrl(pendingImport);
         }
       } catch (err) {
         setSpotifyExportStatus({
@@ -391,6 +462,72 @@ export default function App() {
     setHistory((prev) => prev.map((e) => e.id === id ? { ...e, name: newName } : e));
   }, []);
 
+  const runImport = useCallback(async (url: string, lib: Song[]) => {
+    const playlistId = parsePlaylistId(url);
+    if (!playlistId) {
+      setImportStatus({ phase: 'error', message: 'Invalid Spotify playlist URL or ID.' });
+      return;
+    }
+
+    const token = getStoredToken();
+    if (!token) {
+      storePendingImport(url);
+      await redirectToSpotifyLogin();
+      return;
+    }
+
+    setImportStatus({ phase: 'loading', loaded: 0, total: 0 });
+    try {
+      const { playlistName, tracks } = await fetchPlaylistTracks(
+        playlistId,
+        token,
+        (loaded, total) => setImportStatus({ phase: 'loading', loaded, total }),
+      );
+
+      const importTracks: ImportTrack[] = tracks.map((t) => ({
+        ...t,
+        inLibrary: !t.unavailable && matchInLibrary(t.spotifyId, t.title, t.artist, lib),
+      }));
+
+      const entry: ImportEntry = {
+        id: Date.now().toString(),
+        name: playlistName,
+        timestamp: Date.now(),
+        playlistId,
+        tracks: importTracks,
+      };
+
+      setImportHistory((prev) => [entry, ...prev]);
+      setImportUrl('');
+      setImportStatus(null);
+      setExpandedImportId(entry.id);
+    } catch (err) {
+      setImportStatus({ phase: 'error', message: err instanceof Error ? err.message : 'Import failed.' });
+    }
+  }, []);
+
+  const handleImport = useCallback(() => {
+    void runImport(importUrl, library);
+  }, [runImport, importUrl, library]);
+
+  const handleBrowseSpotifyPlaylists = useCallback(async () => {
+    const token = getStoredToken();
+    if (!token) {
+      storePendingImport('__browse__');
+      await redirectToSpotifyLogin();
+      return;
+    }
+    setLoadingSpotifyPlaylists(true);
+    try {
+      const playlists = await fetchUserPlaylists(token);
+      setSpotifyPlaylistPicker(playlists);
+    } catch (err) {
+      setImportStatus({ phase: 'error', message: err instanceof Error ? err.message : 'Failed to load playlists.' });
+    } finally {
+      setLoadingSpotifyPlaylists(false);
+    }
+  }, []);
+
   const startSpotifyExport = useCallback(async (tracks: SetTrack[], playlistName: string) => {
     const token = getStoredToken();
     if (!token) {
@@ -527,7 +664,7 @@ export default function App() {
 
         {/* Tab nav */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1">
-          {(['Generator', 'History'] as const).map((tab) => (
+          {(['Generator', 'History', 'Import'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -541,6 +678,11 @@ export default function App() {
               {tab === 'History' && history.length > 0 && (
                 <span className="ml-1.5 text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
                   {history.length}
+                </span>
+              )}
+              {tab === 'Import' && importHistory.length > 0 && (
+                <span className="ml-1.5 text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                  {importHistory.length}
                 </span>
               )}
             </button>
@@ -718,7 +860,7 @@ export default function App() {
                         <span className="text-xs text-[#475569]">{label}</span>
                         <span className="text-[#475569] text-xs ml-auto">{isExpanded ? '▲' : '▼'}</span>
                       </button>
-                      <div className="relative border-l border-[#1e1e2e] shrink-0">
+                      <div ref={openHistoryExportId === entry.id ? historyExportRef : null} className="relative border-l border-[#1e1e2e] shrink-0">
                         <button
                           onClick={() => setOpenHistoryExportId(openHistoryExportId === entry.id ? null : entry.id)}
                           className="flex items-center gap-1.5 px-4 py-3 text-xs text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#0d0d14] transition-colors cursor-pointer"
@@ -783,6 +925,186 @@ export default function App() {
             </div>
           )}
         </main>
+      )}
+
+      {activeTab === 'Import' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+          {/* Import input */}
+          <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-5">
+            <h2 className="text-sm font-semibold text-[#e2e8f0] mb-3">Import Spotify Playlist</h2>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleImport(); }}
+                placeholder="Add playlist Spotify link"
+                className="flex-1 bg-[#0d0d14] border border-[#2a2a3a] rounded-lg px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#475569] focus:outline-none focus:border-[#7c3aed] transition-colors"
+              />
+              <button
+                onClick={handleImport}
+                disabled={!importUrl.trim() || importStatus?.phase === 'loading'}
+                className="px-4 py-2 text-sm font-medium bg-[#7c3aed] text-white rounded-lg hover:bg-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                Import
+              </button>
+              <button
+                onClick={() => { void handleBrowseSpotifyPlaylists(); }}
+                disabled={loadingSpotifyPlaylists || importStatus?.phase === 'loading'}
+                className="px-4 py-2 text-sm font-medium border border-[#2a2a3a] text-[#94a3b8] rounded-lg hover:text-[#e2e8f0] hover:border-[#7c3aed] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer whitespace-nowrap"
+              >
+                {loadingSpotifyPlaylists ? 'Loading…' : 'Browse my playlists'}
+              </button>
+            </div>
+            {importStatus?.phase === 'loading' && (
+              <p className="mt-2 text-xs text-[#94a3b8]">
+                {importStatus.total > 0
+                  ? `Loading tracks… ${importStatus.loaded} / ${importStatus.total}`
+                  : 'Connecting to Spotify…'}
+              </p>
+            )}
+            {importStatus?.phase === 'error' && (
+              <p className="mt-2 text-xs text-red-400">{importStatus.message}</p>
+            )}
+          </div>
+
+          {/* Import history */}
+          {importHistory.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
+              <span className="text-4xl">🎵</span>
+              <p className="text-sm">No playlists imported yet. Paste a Spotify playlist URL above.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {importHistory.map((entry) => {
+                const isExpanded = expandedImportId === entry.id;
+                const date = new Date(entry.timestamp);
+                const label = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                  + ' · ' + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+                const inLibraryCount = entry.tracks.filter((t) => t.inLibrary).length;
+
+                return (
+                  <div key={entry.id} className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
+                    <button
+                      onClick={() => setExpandedImportId(isExpanded ? null : entry.id)}
+                      className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-[#e2e8f0] truncate">{entry.name}</div>
+                        <div className="text-xs text-[#475569] mt-0.5">{label}</div>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-3">
+                        <span className="text-xs text-[#94a3b8]">
+                          <span className="text-[#7c3aed] font-medium">{inLibraryCount}</span>
+                          <span className="text-[#475569]"> / {entry.tracks.length} in library</span>
+                        </span>
+                        <span className="text-[#475569] text-xs">{isExpanded ? '▲' : '▼'}</span>
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-[#1e1e2e]">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="bg-[#0d0d14]">
+                              <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">#</th>
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Track</th>
+                              <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">In Library</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {entry.tracks.map((track, idx) => (
+                              <tr
+                                key={`${track.spotifyId}-${idx}`}
+                                className={`border-t border-[#1e1e2e] ${
+                                  track.unavailable
+                                    ? 'opacity-40'
+                                    : track.inLibrary
+                                    ? 'hover:bg-[#0d0d14]'
+                                    : 'bg-red-950/20 hover:bg-red-950/30'
+                                }`}
+                              >
+                                <td className={`py-2.5 pl-5 pr-2 text-xs tabular-nums ${track.inLibrary ? 'text-[#475569]' : 'text-red-500/60'}`}>{idx + 1}</td>
+                                <td className="py-2.5 px-2">
+                                  <div className={`text-sm truncate max-w-xs ${track.unavailable ? 'text-[#475569] italic' : track.inLibrary ? 'text-[#e2e8f0]' : 'text-red-400'}`}>
+                                    {track.title}
+                                  </div>
+                                  {track.artist && (
+                                    <div className={`text-[11px] truncate ${track.inLibrary ? 'text-[#475569]' : 'text-red-500/70'}`}>
+                                      {track.artist}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-2 pr-5">
+                                  {track.unavailable ? (
+                                    <span className="text-xs text-[#475569]">— N/A</span>
+                                  ) : track.inLibrary ? (
+                                    <span className="text-xs text-emerald-400">✓ Yes</span>
+                                  ) : (
+                                    <span className="text-xs text-red-400">✗ Missing</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      )}
+
+      {spotifyPlaylistPicker && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setSpotifyPlaylistPicker(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#12121a] flex flex-col max-h-[70vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e2e] shrink-0">
+              <h3 className="text-sm font-semibold text-[#e2e8f0]">Your Spotify Playlists</h3>
+              <button
+                className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
+                onClick={() => setSpotifyPlaylistPicker(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {spotifyPlaylistPicker.length === 0 ? (
+                <p className="text-sm text-[#94a3b8] px-4 py-6 text-center">No playlists found.</p>
+              ) : (
+                spotifyPlaylistPicker.map((pl) => (
+                  <button
+                    key={pl.id}
+                    onClick={() => {
+                      setSpotifyPlaylistPicker(null);
+                      void runImport(`https://open.spotify.com/playlist/${pl.id}`, library);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 border-b border-[#1e1e2e] hover:bg-[#1a1a2e] transition-colors cursor-pointer text-left"
+                  >
+                    {pl.imageUrl && (
+                      <img src={pl.imageUrl} alt="" className="w-9 h-9 rounded object-cover shrink-0" />
+                    )}
+                    {!pl.imageUrl && (
+                      <div className="w-9 h-9 rounded bg-[#2a2a3a] shrink-0 flex items-center justify-center text-[#475569] text-xs">♪</div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-[#e2e8f0] truncate">{pl.name}</div>
+                      <div className="text-[11px] text-[#475569]">{pl.trackCount} tracks</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {playlistPicker && (

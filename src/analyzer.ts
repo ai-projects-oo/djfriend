@@ -64,26 +64,46 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const decodeAudio: (buf: Buffer) => Promise<AudioBuffer> = require('audio-decode').default;
 
+    let t = Date.now();
     const fileBuffer = fs.readFileSync(filePath);
-    const audioBuffer = await decodeAudio(fileBuffer);
+    console.error(`  [timing] read file: ${Date.now() - t}ms`);
 
+    t = Date.now();
+    const audioBuffer = await decodeAudio(fileBuffer);
+    console.error(`  [timing] decode audio (${audioBuffer.sampleRate}Hz, ${audioBuffer.numberOfChannels}ch, ${(audioBuffer.length / audioBuffer.sampleRate).toFixed(1)}s): ${Date.now() - t}ms`);
+
+    t = Date.now();
     // Essentia algorithms require mono 44100 Hz PCM
     let channelData = audioBuffer.getChannelData(0);
     if (audioBuffer.sampleRate !== 44100) {
       channelData = resample(channelData, audioBuffer.sampleRate, 44100);
+      console.error(`  [timing] resample: ${Date.now() - t}ms`);
+      t = Date.now();
+    }
+
+    // Truncate to 90 s — BPM/key are stable throughout a track and Essentia
+    // algorithms scale linearly with sample count. Full tracks were taking 10–30s.
+    const MAX_SAMPLES = 90 * 44100;
+    if (channelData.length > MAX_SAMPLES) {
+      channelData = channelData.slice(0, MAX_SAMPLES);
     }
 
     const e = getEssentia();
     const audioVector = e.arrayToVector(channelData);
+    console.error(`  [timing] arrayToVector (${channelData.length} samples): ${Date.now() - t}ms`);
 
     // BPM — RhythmExtractor2013 is the most accurate algorithm in essentia.js
+    t = Date.now();
     const rhythmResult = e.RhythmExtractor2013(audioVector, 208, 'multifeature', 40);
-    let bpm = Math.round(rhythmResult.bpm * 10) / 10;
+    const bpm = Math.round(rhythmResult.bpm * 10) / 10;
+    console.error(`  [timing] RhythmExtractor2013: ${Date.now() - t}ms`);
 
     // Key — returns { key: 'A', scale: 'major'|'minor', strength: 0–1 }
+    t = Date.now();
     const keyResult = e.KeyExtractor(audioVector);
     const pitchClass = KEY_TO_PITCH[keyResult.key] ?? -1;
     const mode = keyResult.scale === 'major' ? 1 : 0;
+    console.error(`  [timing] KeyExtractor: ${Date.now() - t}ms`);
 
     // RMS loudness — baseline component of energy
     let sumSq = 0;
@@ -98,10 +118,12 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     // Onset rate: ballads ~2–4/sec, pop ~4–8/sec, dance/EDM ~8–15/sec.
     let energy: number;
     try {
+      t = Date.now();
       const onsetResult = e.OnsetRate(audioVector);
       const onsetRate: number = onsetResult.onsetRate ?? 0;
       const onsetScore = Math.min(1, onsetRate / 8); // 8 onsets/sec ≈ peak energy
       energy = Math.round((onsetScore * 0.7 + rmsScore * 0.3) * 1000) / 1000;
+      console.error(`  [timing] OnsetRate: ${Date.now() - t}ms`);
     } catch {
       // OnsetRate unavailable — fall back to RMS only
       energy = Math.round(rmsScore * 1000) / 1000;

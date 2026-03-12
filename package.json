@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "analyze": "tsx src/analyze.ts",
+    "bench": "tsx src/bench.ts",
     "clear-results": "rm -f ~/Music/djfriend-results-v3.json && echo 'Cleared cache'",
     "lint": "eslint .",
     "preview": "vite preview"

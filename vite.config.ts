@@ -503,6 +503,108 @@ function readEnvVar(name: string): string | null {
 const songsFolder = readEnvVar('SONGS_FOLDER')
 const spotifyClientId = readEnvVar('SPOTIFY_CLIENT_ID')
 
+import type { Connect } from 'vite'
+
+function setupMiddlewares(middlewares: Connect.Server): void {
+  if (songsFolder) {
+    middlewares.use('/results.json', (_req, res, next) => {
+      const filePath = path.join(songsFolder, 'results.json')
+      if (!fs.existsSync(filePath)) { next(); return }
+      res.setHeader('Content-Type', 'application/json')
+      fs.createReadStream(filePath).pipe(res)
+    })
+  }
+
+  middlewares.use('/api/analyze-folder', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>): void => { res.write(`${JSON.stringify(event)}\n`) }
+    try {
+      const body = await readJsonBody(req)
+      const folderPath = typeof (body as Record<string, unknown>)?.folderPath === 'string'
+        ? ((body as Record<string, unknown>).folderPath as string).trim() : ''
+      if (!folderPath) { writeEvent({ type: 'error', message: 'Missing folderPath.' }); res.end(); return }
+      if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) {
+        writeEvent({ type: 'error', message: 'Folder path does not exist or is not a directory.' }); res.end(); return
+      }
+      const analysis = await analyzeLibrary(folderPath, path.basename(folderPath), writeEvent)
+      writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: path.basename(folderPath), songs: analysis.songs, resultsJson: analysis.resultsJson })
+      res.end()
+    } catch (err) {
+      writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Analysis failed.' }); res.end()
+    }
+  })
+
+  middlewares.use('/api/analyze-upload', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>): void => { res.write(`${JSON.stringify(event)}\n`) }
+    let tempRoot: string | null = null
+    try {
+      const parsed = await parseUploadedFolder(req as NodeJS.ReadableStream & { headers: Record<string, string | string[] | undefined> })
+      tempRoot = parsed.tempRoot
+      const analysis = await analyzeLibrary(parsed.rootPath, parsed.rootLabel, writeEvent)
+      writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: parsed.rootLabel, songs: analysis.songs, resultsJson: analysis.resultsJson })
+      res.end()
+    } catch (err) {
+      writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Upload analysis failed.' }); res.end()
+    } finally {
+      if (tempRoot && fs.existsSync(tempRoot)) fs.rmSync(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  middlewares.use('/api/play-in-music', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    const body = await readJsonBody(req) as Record<string, unknown>
+    const filePath = typeof body.filePath === 'string' ? body.filePath : null
+    const artist = typeof body.artist === 'string' ? body.artist : ''
+    const title = typeof body.title === 'string' ? body.title : ''
+    const script = filePath
+      ? `tell application "Music"\nactivate\nopen POSIX file "${filePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"\nend tell`
+      : `tell application "Music"\nactivate\nset r to (search library playlist 1 for "${`${artist} ${title}`.replace(/"/g, '\\"')}")\nif length of r > 0 then\nplay item 1 of r\nend if\nend tell`
+    try {
+      await execFileAsync('osascript', ['-e', script])
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true }))
+    } catch (err) {
+      res.statusCode = 500
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Playback failed' }))
+    }
+  })
+
+  middlewares.use('/api/apple-music-playlists', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    try {
+      const playlists = await listAppleMusicPlaylists()
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify(playlists))
+    } catch (err) {
+      res.statusCode = 500
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to list playlists.' }))
+    }
+  })
+
+  middlewares.use('/api/analyze-apple-music', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>): void => { res.write(`${JSON.stringify(event)}\n`) }
+    try {
+      const body = await readJsonBody(req)
+      const playlistName = typeof (body as Record<string, unknown>)?.playlistName === 'string'
+        ? ((body as Record<string, unknown>).playlistName as string).trim() : ''
+      if (!playlistName) { writeEvent({ type: 'error', message: 'Missing playlistName.' }); res.end(); return }
+      const analysis = await analyzeAppleMusicLibrary(playlistName, writeEvent)
+      writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: 'Apple Music', songs: analysis.songs, resultsJson: analysis.resultsJson })
+      res.end()
+    } catch (err) {
+      writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Apple Music analysis failed.' }); res.end()
+    }
+  })
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -512,178 +614,8 @@ export default defineConfig({
     // and copy it into dist/ during build.
     {
       name: 'songs-folder',
-      configureServer(server) {
-        if (songsFolder) {
-          server.middlewares.use('/results.json', (_req, res, next) => {
-            const filePath = path.join(songsFolder, 'results.json')
-            if (!fs.existsSync(filePath)) { next(); return }
-            res.setHeader('Content-Type', 'application/json')
-            fs.createReadStream(filePath).pipe(res)
-          })
-        }
-
-        server.middlewares.use('/api/analyze-folder', async (req, res, next) => {
-          if (req.method !== 'POST') {
-            next()
-            return
-          }
-
-          res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-          res.setHeader('Cache-Control', 'no-cache')
-
-          const writeEvent = (event: Record<string, unknown>): void => {
-            res.write(`${JSON.stringify(event)}\n`)
-          }
-
-          try {
-            const body = await readJsonBody(req)
-            const folderPath = typeof (body as Record<string, unknown>)?.folderPath === 'string'
-              ? ((body as Record<string, unknown>).folderPath as string).trim()
-              : ''
-
-            if (!folderPath) {
-              writeEvent({ type: 'error', message: 'Missing folderPath.' })
-              res.end()
-              return
-            }
-            if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) {
-              writeEvent({ type: 'error', message: 'Folder path does not exist or is not a directory.' })
-              res.end()
-              return
-            }
-
-            const analysis = await analyzeLibrary(folderPath, path.basename(folderPath), writeEvent)
-
-            writeEvent({
-              type: 'done',
-              total: analysis.total,
-              analyzed: analysis.analyzed,
-              libraryName: path.basename(folderPath),
-              songs: analysis.songs,
-              resultsJson: analysis.resultsJson,
-            })
-            res.end()
-          } catch (err) {
-            const message = err instanceof Error ? err.message : 'Analysis failed.'
-            writeEvent({ type: 'error', message })
-            res.end()
-          }
-        })
-
-        server.middlewares.use('/api/analyze-upload', async (req, res, next) => {
-          if (req.method !== 'POST') {
-            next()
-            return
-          }
-
-          res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-          res.setHeader('Cache-Control', 'no-cache')
-
-          const writeEvent = (event: Record<string, unknown>): void => {
-            res.write(`${JSON.stringify(event)}\n`)
-          }
-
-          let tempRoot: string | null = null
-          try {
-            const parsed = await parseUploadedFolder(
-              req as NodeJS.ReadableStream & { headers: Record<string, string | string[] | undefined> },
-            )
-            tempRoot = parsed.tempRoot
-            const analysis = await analyzeLibrary(parsed.rootPath, parsed.rootLabel, writeEvent)
-            writeEvent({
-              type: 'done',
-              total: analysis.total,
-              analyzed: analysis.analyzed,
-              libraryName: parsed.rootLabel,
-              songs: analysis.songs,
-              resultsJson: analysis.resultsJson,
-            })
-            res.end()
-          } catch (err) {
-            const message = err instanceof Error ? err.message : 'Upload analysis failed.'
-            writeEvent({ type: 'error', message })
-            res.end()
-          } finally {
-            if (tempRoot && fs.existsSync(tempRoot)) {
-              fs.rmSync(tempRoot, { recursive: true, force: true })
-            }
-          }
-        })
-
-        server.middlewares.use('/api/play-in-music', async (req, res, next) => {
-          if (req.method !== 'POST') { next(); return }
-          const body = await readJsonBody(req) as Record<string, unknown>
-          const filePath = typeof body.filePath === 'string' ? body.filePath : null
-          const artist = typeof body.artist === 'string' ? body.artist : ''
-          const title = typeof body.title === 'string' ? body.title : ''
-
-          const script = filePath
-            ? `tell application "Music"\nactivate\nopen POSIX file "${filePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"\nend tell`
-            : `tell application "Music"\nactivate\nset r to (search library playlist 1 for "${`${artist} ${title}`.replace(/"/g, '\\"')}")\nif length of r > 0 then\nplay item 1 of r\nend if\nend tell`
-
-          try {
-            await execFileAsync('osascript', ['-e', script])
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ ok: true }))
-          } catch (err) {
-            res.statusCode = 500
-            res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Playback failed' }))
-          }
-        })
-
-        server.middlewares.use('/api/apple-music-playlists', async (req, res, next) => {
-          if (req.method !== 'GET') { next(); return }
-          try {
-            const playlists = await listAppleMusicPlaylists()
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify(playlists))
-          } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to list playlists.'
-            res.statusCode = 500
-            res.end(JSON.stringify({ error: message }))
-          }
-        })
-
-        server.middlewares.use('/api/analyze-apple-music', async (req, res, next) => {
-          if (req.method !== 'POST') {
-            next()
-            return
-          }
-
-          res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-          res.setHeader('Cache-Control', 'no-cache')
-
-          const writeEvent = (event: Record<string, unknown>): void => {
-            res.write(`${JSON.stringify(event)}\n`)
-          }
-
-          try {
-            const body = await readJsonBody(req)
-            const playlistName = typeof (body as Record<string, unknown>)?.playlistName === 'string'
-              ? ((body as Record<string, unknown>).playlistName as string).trim()
-              : ''
-            if (!playlistName) {
-              writeEvent({ type: 'error', message: 'Missing playlistName.' })
-              res.end()
-              return
-            }
-            const analysis = await analyzeAppleMusicLibrary(playlistName, writeEvent)
-            writeEvent({
-              type: 'done',
-              total: analysis.total,
-              analyzed: analysis.analyzed,
-              libraryName: 'Apple Music',
-              songs: analysis.songs,
-              resultsJson: analysis.resultsJson,
-            })
-            res.end()
-          } catch (err) {
-            const message = err instanceof Error ? err.message : 'Apple Music analysis failed.'
-            writeEvent({ type: 'error', message })
-            res.end()
-          }
-        })
-      },
+      configureServer(server) { setupMiddlewares(server.middlewares) },
+      configurePreviewServer(server) { setupMiddlewares(server.middlewares) },
       closeBundle() {
         if (!songsFolder) return
         const src = path.join(songsFolder, 'results.json')
@@ -701,6 +633,10 @@ export default defineConfig({
     __SPOTIFY_CLIENT_ID__: JSON.stringify(spotifyClientId ?? ''),
   },
   server: {
+    port: 8888,
+    host: '127.0.0.1',
+  },
+  preview: {
     port: 8888,
     host: '127.0.0.1',
   },

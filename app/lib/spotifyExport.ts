@@ -136,12 +136,34 @@ async function getSpotifyUserId(token: string): Promise<string> {
   return data.id;
 }
 
+/** Strip Mixed In Key prefix like "6A - 4 - " or "11B - 7 - " from titles. */
+function stripMixedInKeyPrefix(str: string): string {
+  return str.replace(/^[0-9]{1,2}[AB]\s*-\s*[0-9]+\s*-\s*/i, '').trim();
+}
+
+/** Remove "feat. X" / "ft. X" / "featuring X" from titles and artist names. */
+function stripFeatured(str: string): string {
+  return str.replace(/\s+(?:feat\.?|ft\.?|featuring)\s+.*/i, '').trim();
+}
+
 function cleanSearchStr(str: string): string {
-  return str.replace(/\s*\([^)]*\)/g, '').replace(/\s*\[[^\]]*\]/g, '').trim();
+  return stripFeatured(
+    stripMixedInKeyPrefix(str).replace(/\s*\([^)]*\)/g, '').replace(/\s*\[[^\]]*\]/g, ''),
+  ).trim();
+}
+
+/** Remove characters that confuse Spotify's search parser, and normalize Unicode diacritics. */
+function sanitizeForQuery(str: string): string {
+  return str
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // ö→o, é→e, etc.
+    .replace(/&/g, '')
+    .replace(/[()[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function normalizeStr(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /** True if the candidate has sufficient word overlap with original. */
@@ -161,7 +183,7 @@ function isConfidentMatch(
   origTitle: string, origArtist: string,
   spotTitle: string, spotArtists: string,
 ): boolean {
-  return hasWordOverlap(origTitle, spotTitle) && hasWordOverlap(origArtist, spotArtists);
+  return hasWordOverlap(stripMixedInKeyPrefix(origTitle), spotTitle) && hasWordOverlap(origArtist, spotArtists);
 }
 
 interface SpotifyTrackResult {
@@ -172,7 +194,7 @@ interface SpotifyTrackResult {
 
 /** 'exact' = full titles match after normalization; 'partial' = version/edit differs */
 function matchConfidence(origTitle: string, spotTitle: string): 'exact' | 'partial' {
-  return normalizeStr(origTitle) === normalizeStr(spotTitle) ? 'exact' : 'partial';
+  return normalizeStr(stripMixedInKeyPrefix(origTitle)) === normalizeStr(spotTitle) ? 'exact' : 'partial';
 }
 
 export interface SpotifyMatchResult {
@@ -182,30 +204,79 @@ export interface SpotifyMatchResult {
   excluded: boolean;
 }
 
-async function searchSpotify(q: string, token: string): Promise<SpotifyTrackResult | null> {
+async function searchSpotify(q: string, token: string): Promise<SpotifyTrackResult[]> {
   const data = await spotifyFetch<{
     tracks: { items: Array<{ uri: string; name: string; artists: Array<{ name: string }> }> };
   }>(
-    `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`,
+    `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,
     token,
   );
-  const item = data.tracks.items[0];
-  if (!item) return null;
-  return { uri: item.uri, name: item.name, artists: item.artists.map((a) => a.name).join(', ') };
+  return data.tracks.items.map((item) => ({
+    uri: item.uri,
+    name: item.name,
+    artists: item.artists.map((a) => a.name).join(', '),
+  }));
+}
+
+/** Score a candidate against the original title/artist. Higher = better match. */
+function scoreMatch(origTitle: string, origArtist: string, result: SpotifyTrackResult): number {
+  const cleanOrig = normalizeStr(stripMixedInKeyPrefix(origTitle));
+  const cleanSpot = normalizeStr(result.name);
+  let score = 0;
+  if (cleanOrig === cleanSpot) score += 2;
+  else if (cleanSpot.includes(cleanOrig) || cleanOrig.includes(cleanSpot)) score += 1;
+  if (normalizeStr(origArtist) === normalizeStr(result.artists)) score += 1;
+  return score;
+}
+
+/** Pick the best confident match from a list of candidates. */
+function pickBest(
+  origTitle: string, origArtist: string, candidates: SpotifyTrackResult[],
+): SpotifyTrackResult | null {
+  const confident = candidates.filter((r) => isConfidentMatch(origTitle, origArtist, r.name, r.artists));
+  if (confident.length === 0) return null;
+  return confident.reduce((best, r) =>
+    scoreMatch(origTitle, origArtist, r) >= scoreMatch(origTitle, origArtist, best) ? r : best,
+  );
 }
 
 async function searchTrack(artist: string, title: string, token: string): Promise<SpotifyTrackResult | null> {
+  const rawTitle = stripMixedInKeyPrefix(title);
   const cleanTitle = cleanSearchStr(title);
   const cleanArtist = cleanSearchStr(artist);
+  const queryArtist = sanitizeForQuery(cleanArtist);
+  const queryRawTitle = sanitizeForQuery(rawTitle);
+  const queryCleanTitle = sanitizeForQuery(cleanTitle);
 
-  for (const q of [
-    `track:${cleanTitle} artist:${cleanArtist}`,
-    `${cleanArtist} ${cleanTitle}`,
-  ]) {
-    const result = await searchSpotify(q, token);
-    if (result && isConfidentMatch(cleanTitle, cleanArtist, result.name, result.artists)) {
-      return result;
-    }
+  // If title still contains "Artist - Title" embedded (e.g. "BSTC feat. JL - Love It"),
+  // extract just the part after the last " - " as a fallback title.
+  const dashIdx = rawTitle.lastIndexOf(' - ');
+  const queryTitleOnly = dashIdx !== -1
+    ? sanitizeForQuery(stripFeatured(rawTitle.slice(dashIdx + 3).replace(/\s*\([^)]*\)/g, '').trim()))
+    : null;
+
+  // Short title: first word only — handles cases where the tail differs
+  // (e.g. local "Karl-Lowe street groove" vs Spotify "Karl-Löwe-St. Groove").
+  // "Interstate Karl-Lowe" finds it; "Interstate Karl-Lowe street" does not.
+  const shortTitle = queryCleanTitle.split(' ')[0];
+
+  const queries = [
+    `track:${queryCleanTitle} artist:${queryArtist}`,
+    `${queryArtist} ${queryRawTitle}`,
+    `${queryArtist} ${queryCleanTitle}`,
+    `${queryArtist} ${shortTitle}`,
+    queryRawTitle,
+    queryCleanTitle,
+    ...(queryTitleOnly ? [`${queryArtist} ${queryTitleOnly}`, queryTitleOnly] : []),
+  ];
+
+  const seen = new Set<string>();
+  const uniqueQueries = queries.filter((q) => (seen.has(q) ? false : (seen.add(q), true)));
+
+  for (const q of uniqueQueries) {
+    const results = await searchSpotify(q, token);
+    const best = pickBest(rawTitle, cleanArtist, results);
+    if (best) return best;
   }
 
   return null;

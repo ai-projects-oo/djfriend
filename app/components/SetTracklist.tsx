@@ -105,6 +105,7 @@ export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Key</th>
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider hidden lg:table-cell">Scale</th>
                 <th className="py-2 px-2 pr-4 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Energy</th>
+                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider hidden xl:table-cell">Genre</th>
                 <th className="py-2 pl-2 pr-4 text-right text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>

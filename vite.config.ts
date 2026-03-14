@@ -8,6 +8,7 @@ import os from 'os'
 import { promisify } from 'util'
 import { execFile } from 'child_process'
 import Busboy from 'busboy'
+import * as mm from 'music-metadata'
 import { scanFolder } from './src/scanner'
 import { analyzeAudio } from './src/analyzer'
 import { toCamelot } from './src/camelot'
@@ -23,6 +24,7 @@ interface AppSong {
   // Local file metadata (from ID3 tags / Apple Music database) — what actually plays
   artist: string
   title: string
+  duration?: number // seconds
   // Spotify match metadata — may differ from the local file (different version, wrong match, etc.)
   spotifyArtist?: string
   spotifyTitle?: string
@@ -31,6 +33,7 @@ interface AppSong {
   camelot: string
   energy: number
   genres: string[]
+  genresFromSpotify?: boolean // true = genres came from Spotify (not final), false/absent = from ID3 tags
 }
 
 function collectAudioDirs(rootPath: string): string[] {
@@ -363,6 +366,12 @@ async function analyzeLibrary(
 
       const cached = existing[relativeFilePath]
       if (cached) {
+        if (cached.duration == null) {
+          try {
+            const meta = await mm.parseFile(track.filePath, { duration: true })
+            if (meta.format.duration != null) cached.duration = meta.format.duration
+          } catch { /* ignore */ }
+        }
         resultsJson[relativeFilePath] = cached
         continue
       }
@@ -371,25 +380,29 @@ async function analyzeLibrary(
         const match = await searchTrack(track.artist, track.title, token)
         const [features, genres] = await Promise.all([
           analyzeAudio(track.filePath),
-          match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([]),
+          track.localGenres.length === 0 && match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([]),
         ])
+        console.error(`  [spotify] "${track.artist} - ${track.title}" → matched: "${match?.spotifyArtist ?? 'NO MATCH'} - ${match?.spotifyTitle ?? ''}" | artistId: ${match?.artistId ?? '-'} | genres: [${(track.localGenres.length > 0 ? track.localGenres : genres).join(', ')}]${track.localGenres.length > 0 ? ' (from ID3)' : ''}`)
 
         if (!features) continue
         const keyInfo = toCamelot(features.pitchClass, features.mode)
         if (!keyInfo) continue
 
+        const finalGenres = track.localGenres.length > 0 ? track.localGenres : genres
         const song: AppSong = {
           filePath: relativeFilePath,
           file: relativeFilePath,
           artist: track.artist ?? 'Unknown artist',
           title: track.title,
+          ...(track.duration != null ? { duration: track.duration } : {}),
           spotifyArtist: match?.spotifyArtist,
           spotifyTitle: match?.spotifyTitle,
-          bpm: normalizeBpm(features.bpm, features.energy, genres),
+          bpm: normalizeBpm(features.bpm, features.energy, finalGenres),
           key: keyInfo.keyName,
           camelot: keyInfo.camelot,
           energy: features.energy,
-          genres,
+          genres: finalGenres,
+          ...(track.localGenres.length === 0 ? { genresFromSpotify: true } : {}),
         }
         resultsJson[relativeFilePath] = song
       } catch {
@@ -442,16 +455,33 @@ async function analyzeAppleMusicLibrary(
 
     const cached = existing[key]
     if (cached) {
+      if (cached.duration == null && track.duration != null) {
+        cached.duration = track.duration
+      } else if (cached.duration == null) {
+        try {
+          const meta = await mm.parseFile(track.filePath, { duration: true })
+          if (meta.format.duration != null) cached.duration = meta.format.duration
+        } catch { /* ignore */ }
+      }
       resultsJson[key] = cached
       continue
     }
 
     try {
+      // Read local genres from ID3 tags before hitting Spotify
+      let localGenres: string[] = []
+      try {
+        const meta = await mm.parseFile(track.filePath, { duration: false })
+        localGenres = meta.common.genre ?? []
+      } catch { /* ignore */ }
+
       const match = await searchTrack(track.artist, track.title, token)
-      const [features, genres] = await Promise.all([
+      const [features, spotifyGenres] = await Promise.all([
         analyzeAudio(track.filePath),
-        match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([]),
+        localGenres.length === 0 && match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([]),
       ])
+      const genres = localGenres.length > 0 ? localGenres : spotifyGenres
+      console.error(`  [spotify] "${track.artist} - ${track.title}" → matched: "${match?.spotifyArtist ?? 'NO MATCH'} - ${match?.spotifyTitle ?? ''}" | genres: [${genres.join(', ')}]${localGenres.length > 0 ? ' (from ID3)' : ''}`)
 
       if (!features) continue
       const keyInfo = toCamelot(features.pitchClass, features.mode)
@@ -462,6 +492,7 @@ async function analyzeAppleMusicLibrary(
         file: track.filePath,
         artist: track.artist ?? 'Unknown artist',
         title: track.title,
+        ...(track.duration != null ? { duration: track.duration } : {}),
         spotifyArtist: match?.spotifyArtist,
         spotifyTitle: match?.spotifyTitle,
         bpm: normalizeBpm(features.bpm, features.energy, genres),
@@ -469,6 +500,7 @@ async function analyzeAppleMusicLibrary(
         camelot: keyInfo.camelot,
         energy: features.energy,
         genres,
+        ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}),
       }
       resultsJson[key] = song
     } catch {
@@ -603,6 +635,7 @@ function setupMiddlewares(middlewares: Connect.Server): void {
       writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Apple Music analysis failed.' }); res.end()
     }
   })
+
 }
 
 // https://vite.dev/config/

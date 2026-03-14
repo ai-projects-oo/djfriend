@@ -3,6 +3,8 @@ export interface ScannedTrack {
   filePath: string;
   artist: string | null;
   title: string;
+  duration: number | null; // seconds
+  localGenres: string[];   // genres from ID3 tags (empty if not tagged)
 }
 
 export interface SpotifyMatch {

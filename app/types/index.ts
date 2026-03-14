@@ -12,6 +12,7 @@ export interface Song {
   camelot: string; // e.g. "5B"
   energy: number; // 0.0 – 1.0
   genres: string[];
+  genresFromSpotify?: boolean; // true = genres from Spotify API (not final), absent/false = from ID3 tags
 }
 
 export interface SetTrack extends Song {

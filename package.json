@@ -10,7 +10,7 @@
     "bench": "tsx src/bench.ts",
     "clear-results": "rm -f ~/Music/djfriend-results-v3.json && echo 'Cleared cache'",
     "go": "npm run build && npm run preview",
-    "clean": "rm -rf dist && rm -f ~/Music/djfriend-results-v3.json && echo 'Cleared build cache and results'",
+    "clean": "rm -rf dist && rm -f ~/Music/djfriend-results-v3.json && rm -f \"/Users/ozben/Music/Music/Media.localized/Music/results.json\" && echo 'Cleared build cache and results'",
     "lint": "eslint .",
     "preview": "vite preview"
   },

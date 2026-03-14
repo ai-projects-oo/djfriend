@@ -1,12 +1,22 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Song, SetTrack, DJPreferences, CurvePoint, HistoryEntry, ImportEntry, ImportTrack } from './types';
-import { generateSet } from './lib/setGenerator';
-import { camelotHarmonyScore, isHarmonicWarning } from './lib/camelot';
-import { buildSvgPath } from './lib/curveInterpolation';
-import EnergyCurveEditor, { DEFAULT_CURVE } from './components/EnergyCurveEditor';
-import PreferencesForm from './components/PreferencesForm';
-import SetTracklist from './components/SetTracklist';
-import { downloadM3U } from './lib/m3uExport';
+import { useState, useCallback, useEffect, useRef } from "react";
+import type {
+  Song,
+  SetTrack,
+  DJPreferences,
+  CurvePoint,
+  HistoryEntry,
+  ImportEntry,
+  ImportTrack,
+} from "./types";
+import { generateSet } from "./lib/setGenerator";
+import { camelotHarmonyScore, isHarmonicWarning } from "./lib/camelot";
+import { buildSvgPath } from "./lib/curveInterpolation";
+import EnergyCurveEditor, {
+  DEFAULT_CURVE,
+} from "./components/EnergyCurveEditor";
+import PreferencesForm from "./components/PreferencesForm";
+import SetTracklist from "./components/SetTracklist";
+import { downloadM3U } from "./lib/m3uExport";
 import {
   getStoredToken,
   storeToken,
@@ -17,8 +27,8 @@ import {
   exchangeCodeForToken,
   searchTracksOnSpotify,
   createPlaylistFromMatches,
-} from './lib/spotifyExport';
-import type { SpotifyMatchResult } from './lib/spotifyExport';
+} from "./lib/spotifyExport";
+import type { SpotifyMatchResult } from "./lib/spotifyExport";
 import {
   storePendingImport,
   getPendingImport,
@@ -27,49 +37,50 @@ import {
   fetchPlaylistTracks,
   fetchUserPlaylists,
   matchInLibrary,
-} from './lib/spotifyImport';
-import type { SpotifyUserPlaylist } from './lib/spotifyImport';
+} from "./lib/spotifyImport";
+import type { SpotifyUserPlaylist } from "./lib/spotifyImport";
 
 type SpotifyExportStatus =
-  | { phase: 'searching'; completed: number; total: number }
-  | { phase: 'review'; matches: SpotifyMatchResult[]; playlistName: string }
-  | { phase: 'creating' }
-  | { phase: 'done'; playlistUrl: string; matched: number; total: number }
-  | { phase: 'error'; message: string };
+  | { phase: "searching"; completed: number; total: number }
+  | { phase: "review"; matches: SpotifyMatchResult[]; playlistName: string }
+  | { phase: "creating" }
+  | { phase: "done"; playlistUrl: string; matched: number; total: number }
+  | { phase: "error"; message: string };
 
 type ImportStatus =
-  | { phase: 'loading'; loaded: number; total: number }
-  | { phase: 'error'; message: string };
-
+  | { phase: "loading"; loaded: number; total: number }
+  | { phase: "error"; message: string };
 
 const DEFAULT_PREFS: DJPreferences = {
   setDuration: 60,
-  venueType: 'Club',
-  audienceAgeRange: '25–35',
-  audiencePurpose: 'Dancing',
-  occasionType: 'Peak time',
-  genre: 'Any',
+  venueType: "Club",
+  audienceAgeRange: "25–35",
+  audiencePurpose: "Dancing",
+  occasionType: "Peak time",
+  genre: "Any",
 };
 
 function isValidSong(obj: unknown): obj is Song {
-  if (typeof obj !== 'object' || obj === null) return false;
+  if (typeof obj !== "object" || obj === null) return false;
   const o = obj as Record<string, unknown>;
   return (
-    typeof o['file'] === 'string' &&
-    typeof o['artist'] === 'string' &&
-    typeof o['title'] === 'string' &&
-    typeof o['bpm'] === 'number' &&
-    typeof o['key'] === 'string' &&
-    typeof o['camelot'] === 'string' &&
-    typeof o['energy'] === 'number' &&
-    Array.isArray(o['genres'])
+    typeof o["file"] === "string" &&
+    typeof o["artist"] === "string" &&
+    typeof o["title"] === "string" &&
+    typeof o["bpm"] === "number" &&
+    typeof o["key"] === "string" &&
+    typeof o["camelot"] === "string" &&
+    typeof o["energy"] === "number" &&
+    Array.isArray(o["genres"])
   );
 }
 
 function parseSongs(raw: unknown): Song[] | null {
   const source = Array.isArray(raw)
     ? raw
-    : (typeof raw === 'object' && raw !== null ? Object.values(raw as Record<string, unknown>) : null);
+    : typeof raw === "object" && raw !== null
+      ? Object.values(raw as Record<string, unknown>)
+      : null;
   if (!source) return null;
   const valid = source.filter(isValidSong);
   return valid.length > 0 ? valid : null;
@@ -80,31 +91,41 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function matchesGenrePref(song: Song, genre: string): boolean {
-  if (genre === 'Any') return true;
+  if (genre === "Any") return true;
   const needle = genre.toLowerCase();
-  return song.genres.some((g) => g.toLowerCase().includes(needle));
+  return song.genres.some((g) => {
+    const gl = g.toLowerCase();
+    return gl.includes(needle) || needle.includes(gl);
+  });
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'Generator' | 'History' | 'Import'>('Generator');
+  const [activeTab, setActiveTab] = useState<
+    "Generator" | "History" | "Import"
+  >("Generator");
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
-      const raw = localStorage.getItem('djfriend-history');
+      const raw = localStorage.getItem("djfriend-history");
       return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
     } catch {
       return [];
     }
   });
-  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(
+    null,
+  );
   const [library, setLibrary] = useState<Song[]>([]);
-  const [libraryName, setLibraryName] = useState<string>('');
+  const [libraryName, setLibraryName] = useState<string>("");
   const [prefs, setPrefs] = useState<DJPreferences>(DEFAULT_PREFS);
   const [curve, setCurve] = useState<CurvePoint[]>(DEFAULT_CURVE);
   const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [autoRegen, setAutoRegen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState<{ completed: number; total: number }>({
+  const [analysisProgress, setAnalysisProgress] = useState<{
+    completed: number;
+    total: number;
+  }>({
     completed: 0,
     total: 0,
   });
@@ -114,24 +135,32 @@ export default function App() {
     suggestions: Array<{ song: Song; score: number }>;
   } | null>(null);
   const [swapVisibleCount, setSwapVisibleCount] = useState(5);
-  const [playlistPicker, setPlaylistPicker] = useState<Array<{ name: string; count: number }> | null>(null);
+  const [playlistPicker, setPlaylistPicker] = useState<Array<{
+    name: string;
+    count: number;
+  }> | null>(null);
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
-  const [spotifyExportStatus, setSpotifyExportStatus] = useState<SpotifyExportStatus | null>(null);
-  const [openHistoryExportId, setOpenHistoryExportId] = useState<string | null>(null);
+  const [spotifyExportStatus, setSpotifyExportStatus] =
+    useState<SpotifyExportStatus | null>(null);
+  const [openHistoryExportId, setOpenHistoryExportId] = useState<string | null>(
+    null,
+  );
   const historyExportRef = useRef<HTMLDivElement | null>(null);
   const [importHistory, setImportHistory] = useState<ImportEntry[]>(() => {
     try {
-      const raw = localStorage.getItem('djfriend-imports');
+      const raw = localStorage.getItem("djfriend-imports");
       return raw ? (JSON.parse(raw) as ImportEntry[]) : [];
     } catch {
       return [];
     }
   });
   const [expandedImportId, setExpandedImportId] = useState<string | null>(null);
-  const [importUrl, setImportUrl] = useState('');
+  const [importUrl, setImportUrl] = useState("");
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const [pendingImportUrl, setPendingImportUrl] = useState<string | null>(null);
-  const [spotifyPlaylistPicker, setSpotifyPlaylistPicker] = useState<SpotifyUserPlaylist[] | null>(null);
+  const [spotifyPlaylistPicker, setSpotifyPlaylistPicker] = useState<
+    SpotifyUserPlaylist[] | null
+  >(null);
   const [loadingSpotifyPlaylists, setLoadingSpotifyPlaylists] = useState(false);
   const [openStoreLinkKey, setOpenStoreLinkKey] = useState<string | null>(null);
   const storeLinkRef = useRef<HTMLDivElement | null>(null);
@@ -139,20 +168,23 @@ export default function App() {
   useEffect(() => {
     if (!openHistoryExportId) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (historyExportRef.current && !historyExportRef.current.contains(e.target as Node)) {
+      if (
+        historyExportRef.current &&
+        !historyExportRef.current.contains(e.target as Node)
+      ) {
         setOpenHistoryExportId(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openHistoryExportId]);
 
   useEffect(() => {
-    localStorage.setItem('djfriend-history', JSON.stringify(history));
+    localStorage.setItem("djfriend-history", JSON.stringify(history));
   }, [history]);
 
   useEffect(() => {
-    localStorage.setItem('djfriend-imports', JSON.stringify(importHistory));
+    localStorage.setItem("djfriend-imports", JSON.stringify(importHistory));
   }, [importHistory]);
 
   // Auto-run import after OAuth redirect, once library is ready
@@ -162,32 +194,35 @@ export default function App() {
     const url = pendingImportUrl;
     setPendingImportUrl(null);
     void runImport(url, library);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingImportUrl, library]);
 
   useEffect(() => {
     if (!openStoreLinkKey) return;
     const handler = (e: MouseEvent) => {
-      if (storeLinkRef.current && !storeLinkRef.current.contains(e.target as Node)) {
+      if (
+        storeLinkRef.current &&
+        !storeLinkRef.current.contains(e.target as Node)
+      ) {
         setOpenStoreLinkKey(null);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, [openStoreLinkKey]);
 
   // Auto-load /public/result.json on mount
   useEffect(() => {
-    fetch('/results.json')
+    fetch("/results.json")
       .then((r) => {
-        if (!r.ok) throw new Error('not found');
+        if (!r.ok) throw new Error("not found");
         return r.json() as Promise<unknown>;
       })
       .then((data) => {
         const songs = parseSongs(data);
         if (songs) {
           setLibrary(songs);
-          setLibraryName('results.json (auto-loaded)');
+          setLibraryName("results.json (auto-loaded)");
           setError(null);
         }
       })
@@ -199,11 +234,11 @@ export default function App() {
   // Handle Spotify OAuth callback
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
+    const code = params.get("code");
     if (!code) return;
 
     // Clean up the URL so the code isn't re-processed on refresh
-    window.history.replaceState({}, '', window.location.pathname);
+    window.history.replaceState({}, "", window.location.pathname);
 
     void (async () => {
       try {
@@ -214,19 +249,28 @@ export default function App() {
         clearPendingExport();
 
         if (pending) {
-          setSpotifyExportStatus({ phase: 'searching', completed: 0, total: pending.tracks.length });
+          setSpotifyExportStatus({
+            phase: "searching",
+            completed: 0,
+            total: pending.tracks.length,
+          });
           const matches = await searchTracksOnSpotify(
             pending.tracks,
             access_token,
-            (completed, total) => setSpotifyExportStatus({ phase: 'searching', completed, total }),
+            (completed, total) =>
+              setSpotifyExportStatus({ phase: "searching", completed, total }),
           );
-          setSpotifyExportStatus({ phase: 'review', matches, playlistName: pending.name });
+          setSpotifyExportStatus({
+            phase: "review",
+            matches,
+            playlistName: pending.name,
+          });
         }
 
         const pendingImport = getPendingImport();
         clearPendingImport();
-        if (pendingImport === '__browse__') {
-          setActiveTab('Import');
+        if (pendingImport === "__browse__") {
+          setActiveTab("Import");
           setLoadingSpotifyPlaylists(true);
           try {
             const playlists = await fetchUserPlaylists(access_token);
@@ -235,14 +279,14 @@ export default function App() {
             setLoadingSpotifyPlaylists(false);
           }
         } else if (pendingImport) {
-          setActiveTab('Import');
+          setActiveTab("Import");
           setImportUrl(pendingImport);
           setPendingImportUrl(pendingImport);
         }
       } catch (err) {
         setSpotifyExportStatus({
-          phase: 'error',
-          message: err instanceof Error ? err.message : 'Spotify auth failed.',
+          phase: "error",
+          message: err instanceof Error ? err.message : "Spotify auth failed.",
         });
       }
     })();
@@ -252,12 +296,14 @@ export default function App() {
     setLoadingPlaylists(true);
     setError(null);
     try {
-      const res = await fetch('/api/apple-music-playlists');
-      if (!res.ok) throw new Error('Could not load playlists.');
-      const data = await res.json() as Array<{ name: string; count: number }>;
+      const res = await fetch("/api/apple-music-playlists");
+      if (!res.ok) throw new Error("Could not load playlists.");
+      const data = (await res.json()) as Array<{ name: string; count: number }>;
       setPlaylistPicker(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load playlists.');
+      setError(
+        err instanceof Error ? err.message : "Failed to load playlists.",
+      );
     } finally {
       setLoadingPlaylists(false);
     }
@@ -271,56 +317,64 @@ export default function App() {
     setGeneratedSet([]);
 
     try {
-      const response = await fetch('/api/analyze-apple-music', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/analyze-apple-music", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playlistName }),
       });
 
       if (!response.ok || !response.body) {
-        throw new Error('Could not start folder analysis.');
+        throw new Error("Could not start folder analysis.");
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
+      let buffer = "";
 
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
 
         for (const line of lines) {
           if (!line.trim()) continue;
           const event = JSON.parse(line) as
-            | { type: 'start'; total: number }
-            | { type: 'progress'; completed: number; total: number }
-            | { type: 'folder_done'; folder: string }
-            | { type: 'done'; songs: unknown; libraryName: string; resultsJson: Record<string, unknown> }
-            | { type: 'error'; message: string };
+            | { type: "start"; total: number }
+            | { type: "progress"; completed: number; total: number }
+            | { type: "folder_done"; folder: string }
+            | {
+                type: "done";
+                songs: unknown;
+                libraryName: string;
+                resultsJson: Record<string, unknown>;
+              }
+            | { type: "error"; message: string };
 
-          if (event.type === 'start') {
+          if (event.type === "start") {
             setAnalysisProgress({ completed: 0, total: event.total });
             continue;
           }
 
-          if (event.type === 'progress') {
-            setAnalysisProgress({ completed: event.completed, total: event.total });
+          if (event.type === "progress") {
+            setAnalysisProgress({
+              completed: event.completed,
+              total: event.total,
+            });
             continue;
           }
 
-          if (event.type === 'error') {
+          if (event.type === "error") {
             setError(event.message);
             continue;
           }
 
-          if (event.type === 'done') {
+          if (event.type === "done") {
             const songs = parseSongs(event.songs);
             if (!songs) {
-              setError('Analysis completed but returned invalid song data.');
+              setError("Analysis completed but returned invalid song data.");
               continue;
             }
             setLibrary(songs);
@@ -331,7 +385,8 @@ export default function App() {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Folder analysis failed.';
+      const message =
+        err instanceof Error ? err.message : "Folder analysis failed.";
       setError(message);
     } finally {
       setIsAnalyzing(false);
@@ -369,9 +424,12 @@ export default function App() {
       if (index < 0 || index >= generatedSet.length) return [];
       const currentSet = generatedSet;
       const current = currentSet[index];
-      const usedFiles = new Set(currentSet.filter((_, i) => i !== index).map((track) => track.file));
+      const usedFiles = new Set(
+        currentSet.filter((_, i) => i !== index).map((track) => track.file),
+      );
       const previousTrack = index > 0 ? currentSet[index - 1] : null;
-      const nextTrack = index < currentSet.length - 1 ? currentSet[index + 1] : null;
+      const nextTrack =
+        index < currentSet.length - 1 ? currentSet[index + 1] : null;
 
       const candidates = library.filter(
         (song) =>
@@ -382,11 +440,21 @@ export default function App() {
 
       const scored = candidates.map((candidate) => {
         const energyDiff = Math.abs(candidate.energy - current.targetEnergy);
-        const fromPrevHarmony = previousTrack ? camelotHarmonyScore(previousTrack.camelot, candidate.camelot) : 1;
-        const toNextHarmony = nextTrack ? camelotHarmonyScore(candidate.camelot, nextTrack.camelot) : 1;
-        const fromPrevBpmDiff = previousTrack ? Math.abs(candidate.bpm - previousTrack.bpm) : 0;
-        const toNextBpmDiff = nextTrack ? Math.abs(candidate.bpm - nextTrack.bpm) : 0;
-        const fromPrevBpm = previousTrack ? 1 - clamp(fromPrevBpmDiff / 20, 0, 1) : 1;
+        const fromPrevHarmony = previousTrack
+          ? camelotHarmonyScore(previousTrack.camelot, candidate.camelot)
+          : 1;
+        const toNextHarmony = nextTrack
+          ? camelotHarmonyScore(candidate.camelot, nextTrack.camelot)
+          : 1;
+        const fromPrevBpmDiff = previousTrack
+          ? Math.abs(candidate.bpm - previousTrack.bpm)
+          : 0;
+        const toNextBpmDiff = nextTrack
+          ? Math.abs(candidate.bpm - nextTrack.bpm)
+          : 0;
+        const fromPrevBpm = previousTrack
+          ? 1 - clamp(fromPrevBpmDiff / 20, 0, 1)
+          : 1;
         const toNextBpm = nextTrack ? 1 - clamp(toNextBpmDiff / 20, 0, 1) : 1;
         const energyScore = 1 - energyDiff;
         const baseScore =
@@ -407,7 +475,12 @@ export default function App() {
           toNextHarmony > 0 &&
           fromPrevBpmDiff <= 20 &&
           toNextBpmDiff <= 20;
-        return { candidate, strictFit, relaxedFit, score: baseScore + (strictFit ? 0.05 : 0) };
+        return {
+          candidate,
+          strictFit,
+          relaxedFit,
+          score: baseScore + (strictFit ? 0.05 : 0),
+        };
       });
 
       const strict = scored.filter((s) => s.strictFit);
@@ -427,38 +500,44 @@ export default function App() {
     [buildSwapSuggestions],
   );
 
-  const applySwapSuggestion = useCallback((song: Song) => {
-    setGeneratedSet((prev) => {
-      if (!swapModal) return prev;
-      const index = swapModal.index;
-      if (index < 0 || index >= prev.length) return prev;
-      const previousTrack = index > 0 ? prev[index - 1] : null;
-      const next = [...prev];
-      next[index] = {
-        ...song,
-        slot: prev[index].slot,
-        targetEnergy: prev[index].targetEnergy,
-        harmonicWarning: previousTrack
-          ? isHarmonicWarning(previousTrack.camelot, song.camelot)
-          : false,
-      };
-      if (index + 1 < next.length) {
-        const after = next[index + 1];
-        next[index + 1] = {
-          ...after,
-          harmonicWarning: isHarmonicWarning(next[index].camelot, after.camelot),
+  const applySwapSuggestion = useCallback(
+    (song: Song) => {
+      setGeneratedSet((prev) => {
+        if (!swapModal) return prev;
+        const index = swapModal.index;
+        if (index < 0 || index >= prev.length) return prev;
+        const previousTrack = index > 0 ? prev[index - 1] : null;
+        const next = [...prev];
+        next[index] = {
+          ...song,
+          slot: prev[index].slot,
+          targetEnergy: prev[index].targetEnergy,
+          harmonicWarning: previousTrack
+            ? isHarmonicWarning(previousTrack.camelot, song.camelot)
+            : false,
         };
-      }
-      return next;
-    });
-    setSwapModal(null);
-    setSwapVisibleCount(5);
-  }, [swapModal]);
+        if (index + 1 < next.length) {
+          const after = next[index + 1];
+          next[index + 1] = {
+            ...after,
+            harmonicWarning: isHarmonicWarning(
+              next[index].camelot,
+              after.camelot,
+            ),
+          };
+        }
+        return next;
+      });
+      setSwapModal(null);
+      setSwapVisibleCount(5);
+    },
+    [swapModal],
+  );
 
   const handleExportM3U = useCallback(() => {
     if (generatedSet.length === 0) return;
     const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
+    const pad = (n: number) => String(n).padStart(2, "0");
     const name = `djfriend-set-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
     const entry: HistoryEntry = {
       id: Date.now().toString(),
@@ -473,13 +552,18 @@ export default function App() {
   }, [generatedSet, prefs, curve]);
 
   const handleRenameEntry = useCallback((id: string, newName: string) => {
-    setHistory((prev) => prev.map((e) => e.id === id ? { ...e, name: newName } : e));
+    setHistory((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, name: newName } : e)),
+    );
   }, []);
 
   const runImport = useCallback(async (url: string, lib: Song[]) => {
     const playlistId = parsePlaylistId(url);
     if (!playlistId) {
-      setImportStatus({ phase: 'error', message: 'Invalid Spotify playlist URL or ID.' });
+      setImportStatus({
+        phase: "error",
+        message: "Invalid Spotify playlist URL or ID.",
+      });
       return;
     }
 
@@ -490,17 +574,18 @@ export default function App() {
       return;
     }
 
-    setImportStatus({ phase: 'loading', loaded: 0, total: 0 });
+    setImportStatus({ phase: "loading", loaded: 0, total: 0 });
     try {
       const { playlistName, tracks } = await fetchPlaylistTracks(
         playlistId,
         token,
-        (loaded, total) => setImportStatus({ phase: 'loading', loaded, total }),
+        (loaded, total) => setImportStatus({ phase: "loading", loaded, total }),
       );
 
       const importTracks: ImportTrack[] = tracks.map((t) => ({
         ...t,
-        inLibrary: !t.unavailable && matchInLibrary(t.spotifyId, t.title, t.artist, lib),
+        inLibrary:
+          !t.unavailable && matchInLibrary(t.spotifyId, t.title, t.artist, lib),
       }));
 
       const entry: ImportEntry = {
@@ -512,11 +597,14 @@ export default function App() {
       };
 
       setImportHistory((prev) => [entry, ...prev]);
-      setImportUrl('');
+      setImportUrl("");
       setImportStatus(null);
       setExpandedImportId(entry.id);
     } catch (err) {
-      setImportStatus({ phase: 'error', message: err instanceof Error ? err.message : 'Import failed.' });
+      setImportStatus({
+        phase: "error",
+        message: err instanceof Error ? err.message : "Import failed.",
+      });
     }
   }, []);
 
@@ -527,7 +615,7 @@ export default function App() {
   const handleBrowseSpotifyPlaylists = useCallback(async () => {
     const token = getStoredToken();
     if (!token) {
-      storePendingImport('__browse__');
+      storePendingImport("__browse__");
       await redirectToSpotifyLogin();
       return;
     }
@@ -536,82 +624,117 @@ export default function App() {
       const playlists = await fetchUserPlaylists(token);
       setSpotifyPlaylistPicker(playlists);
     } catch (err) {
-      setImportStatus({ phase: 'error', message: err instanceof Error ? err.message : 'Failed to load playlists.' });
+      setImportStatus({
+        phase: "error",
+        message:
+          err instanceof Error ? err.message : "Failed to load playlists.",
+      });
     } finally {
       setLoadingSpotifyPlaylists(false);
     }
   }, []);
 
-  const startSpotifyExport = useCallback(async (tracks: SetTrack[], playlistName: string) => {
-    const token = getStoredToken();
-    if (!token) {
-      storePendingExport(tracks, playlistName);
-      try {
-        await redirectToSpotifyLogin();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not start Spotify login.');
+  const startSpotifyExport = useCallback(
+    async (tracks: SetTrack[], playlistName: string) => {
+      const token = getStoredToken();
+      if (!token) {
+        storePendingExport(tracks, playlistName);
+        try {
+          await redirectToSpotifyLogin();
+        } catch (err) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Could not start Spotify login.",
+          );
+        }
+        return;
       }
-      return;
-    }
-    setSpotifyExportStatus({ phase: 'searching', completed: 0, total: tracks.length });
-    try {
-      const matches = await searchTracksOnSpotify(
-        tracks,
-        token,
-        (completed, total) => setSpotifyExportStatus({ phase: 'searching', completed, total }),
-      );
-      setSpotifyExportStatus({ phase: 'review', matches, playlistName });
-    } catch (err) {
-      setSpotifyExportStatus({ phase: 'error', message: err instanceof Error ? err.message : 'Export failed.' });
-    }
-  }, []);
+      setSpotifyExportStatus({
+        phase: "searching",
+        completed: 0,
+        total: tracks.length,
+      });
+      try {
+        const matches = await searchTracksOnSpotify(
+          tracks,
+          token,
+          (completed, total) =>
+            setSpotifyExportStatus({ phase: "searching", completed, total }),
+        );
+        setSpotifyExportStatus({ phase: "review", matches, playlistName });
+      } catch (err) {
+        setSpotifyExportStatus({
+          phase: "error",
+          message: err instanceof Error ? err.message : "Export failed.",
+        });
+      }
+    },
+    [],
+  );
 
   const handleExportSpotify = useCallback(async () => {
     if (generatedSet.length === 0) return;
     const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
+    const pad = (n: number) => String(n).padStart(2, "0");
     const name = `DJFriend Set ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
     await startSpotifyExport(generatedSet, name);
   }, [generatedSet, startSpotifyExport]);
 
   const handleToggleSpotifyMatch = useCallback((index: number) => {
     setSpotifyExportStatus((prev) => {
-      if (!prev || prev.phase !== 'review') return prev;
+      if (!prev || prev.phase !== "review") return prev;
       const matches = [...prev.matches];
-      matches[index] = { ...matches[index], excluded: !matches[index].excluded };
+      matches[index] = {
+        ...matches[index],
+        excluded: !matches[index].excluded,
+      };
       return { ...prev, matches };
     });
   }, []);
 
-  const handleConfirmSpotifyExport = useCallback(async (matches: SpotifyMatchResult[], playlistName: string) => {
-    const token = getStoredToken();
-    if (!token) {
-      setSpotifyExportStatus({ phase: 'error', message: 'Spotify session expired. Please try again.' });
-      return;
-    }
-    setSpotifyExportStatus({ phase: 'creating' });
-    try {
-      const result = await createPlaylistFromMatches(matches, playlistName, token);
+  const handleConfirmSpotifyExport = useCallback(
+    async (matches: SpotifyMatchResult[], playlistName: string) => {
+      const token = getStoredToken();
+      if (!token) {
+        setSpotifyExportStatus({
+          phase: "error",
+          message: "Spotify session expired. Please try again.",
+        });
+        return;
+      }
+      setSpotifyExportStatus({ phase: "creating" });
+      try {
+        const result = await createPlaylistFromMatches(
+          matches,
+          playlistName,
+          token,
+        );
 
-      // Save to history — all non-excluded tracks (found or not), using original local SetTrack data
-      const includedTracks = matches
-        .filter((m) => !m.excluded)
-        .map((m) => m.track);
-      const entry: HistoryEntry = {
-        id: Date.now().toString(),
-        name: playlistName,
-        timestamp: Date.now(),
-        tracks: includedTracks,
-        prefs: { ...prefs },
-        curve: curve.map((p) => ({ ...p })),
-      };
-      setHistory((prev) => [entry, ...prev]);
+        // Save to history — all non-excluded tracks (found or not), using original local SetTrack data
+        const includedTracks = matches
+          .filter((m) => !m.excluded)
+          .map((m) => m.track);
+        const entry: HistoryEntry = {
+          id: Date.now().toString(),
+          name: playlistName,
+          timestamp: Date.now(),
+          tracks: includedTracks,
+          prefs: { ...prefs },
+          curve: curve.map((p) => ({ ...p })),
+        };
+        setHistory((prev) => [entry, ...prev]);
 
-      setSpotifyExportStatus({ phase: 'done', ...result });
-    } catch (err) {
-      setSpotifyExportStatus({ phase: 'error', message: err instanceof Error ? err.message : 'Export failed.' });
-    }
-  }, [prefs, curve]);
+        setSpotifyExportStatus({ phase: "done", ...result });
+      } catch (err) {
+        setSpotifyExportStatus({
+          phase: "error",
+          message: err instanceof Error ? err.message : "Export failed.",
+        });
+      }
+    },
+    [prefs, curve],
+  );
 
   const handleRemoveTrack = useCallback((index: number) => {
     setGeneratedSet((prev) => {
@@ -620,7 +743,8 @@ export default function App() {
       const resequenced = next.map((track, i) => ({
         ...track,
         slot: i,
-        harmonicWarning: i > 0 ? isHarmonicWarning(next[i - 1].camelot, track.camelot) : false,
+        harmonicWarning:
+          i > 0 ? isHarmonicWarning(next[i - 1].camelot, track.camelot) : false,
       }));
       return resequenced;
     });
@@ -628,7 +752,12 @@ export default function App() {
 
   const progressPercent =
     analysisProgress.total > 0
-      ? Math.min(100, Math.round((analysisProgress.completed / analysisProgress.total) * 100))
+      ? Math.min(
+          100,
+          Math.round(
+            (analysisProgress.completed / analysisProgress.total) * 100,
+          ),
+        )
       : 0;
   const availableGenres = Array.from(
     new Set(library.flatMap((song) => song.genres).filter(Boolean)),
@@ -641,7 +770,9 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-xl">🎧</span>
-            <span className="font-bold text-lg tracking-tight text-[#e2e8f0]">DJFriend</span>
+            <span className="font-bold text-lg tracking-tight text-[#e2e8f0]">
+              DJFriend
+            </span>
             {libraryName && (
               <span className="hidden sm:inline text-xs text-[#475569] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded">
                 {libraryName} · {library.length} tracks
@@ -651,7 +782,9 @@ export default function App() {
 
           <div className="flex items-center gap-2">
             {error && (
-              <span className="text-xs text-[#ef4444] hidden sm:inline">{error}</span>
+              <span className="text-xs text-[#ef4444] hidden sm:inline">
+                {error}
+              </span>
             )}
             {isAnalyzing && (
               <div className="hidden sm:flex items-center gap-2 min-w-[180px]">
@@ -671,30 +804,34 @@ export default function App() {
               disabled={isAnalyzing || loadingPlaylists}
               className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isAnalyzing ? 'Analyzing…' : loadingPlaylists ? 'Loading…' : 'Analyze Apple Music'}
+              {isAnalyzing
+                ? "Analyzing…"
+                : loadingPlaylists
+                  ? "Loading…"
+                  : "Analyze Apple Music"}
             </button>
           </div>
         </div>
 
         {/* Tab nav */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1">
-          {(['Generator', 'History', 'Import'] as const).map((tab) => (
+          {(["Generator", "History", "Import"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
                 activeTab === tab
-                  ? 'border-[#7c3aed] text-[#e2e8f0]'
-                  : 'border-transparent text-[#475569] hover:text-[#94a3b8]'
+                  ? "border-[#7c3aed] text-[#e2e8f0]"
+                  : "border-transparent text-[#475569] hover:text-[#94a3b8]"
               }`}
             >
               {tab}
-              {tab === 'History' && history.length > 0 && (
+              {tab === "History" && history.length > 0 && (
                 <span className="ml-1.5 text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
                   {history.length}
                 </span>
               )}
-              {tab === 'Import' && importHistory.length > 0 && (
+              {tab === "Import" && importHistory.length > 0 && (
                 <span className="ml-1.5 text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
                   {importHistory.length}
                 </span>
@@ -710,22 +847,21 @@ export default function App() {
         </div>
       )}
 
-      {activeTab === 'Generator' && library.length === 0 && (
+      {activeTab === "Generator" && library.length === 0 && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
           <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4 text-sm text-[#94a3b8]">
-            No library loaded. Click{' '}
+            No library loaded. Click{" "}
             <button
               onClick={openPlaylistPicker}
               className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
             >
               Analyze Apple Music
-            </button>{' '}
-            to analyze your local Apple Music file tracks and export <code className="text-[#e2e8f0]">results.json</code>.
+            </button>{" "}
           </div>
         </div>
       )}
 
-      {activeTab === 'Generator' && (
+      {activeTab === "Generator" && (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
           <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
             {/* Preferences panel */}
@@ -769,26 +905,55 @@ export default function App() {
               onSwapTrack={handleSwapTrack}
               onRemoveTrack={handleRemoveTrack}
               onExport={handleExportM3U}
-              onExportSpotify={() => { void handleExportSpotify(); }}
+              onExportSpotify={() => {
+                void handleExportSpotify();
+              }}
             />
           </div>
         </main>
       )}
 
-      {activeTab === 'History' && (
+      {activeTab === "History" && (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           {history.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-[#475569] gap-3">
               <span className="text-4xl">📋</span>
-              <p className="text-sm">No playlists exported yet. Generate a set and click Export as M3U.</p>
+              <p className="text-sm">
+                No playlists exported yet. Generate a set and click Export as
+                M3U.
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={() => {
+                    if (confirm("Clear all history? This cannot be undone.")) {
+                      setHistory([]);
+                      setImportHistory([]);
+                      localStorage.removeItem("djfriend-history");
+                      localStorage.removeItem("djfriend-imports");
+                    }
+                  }}
+                  className="text-xs text-[#475569] hover:text-[#ef4444] transition-colors cursor-pointer"
+                >
+                  Clear all history
+                </button>
+              </div>
               {history.map((entry) => {
                 const isExpanded = expandedHistoryId === entry.id;
                 const date = new Date(entry.timestamp);
-                const label = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-                  + ' · ' + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+                const label =
+                  date.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  }) +
+                  " · " +
+                  date.toLocaleTimeString(undefined, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
 
                 // Mini curve: 300×56 viewBox, no padding
                 const miniW = 300;
@@ -796,7 +961,7 @@ export default function App() {
                 const miniPath = buildSvgPath(entry.curve, miniW, miniH, 120);
                 const miniFill = miniPath
                   ? `${miniPath} L ${miniW} ${miniH} L 0 ${miniH} Z`
-                  : '';
+                  : "";
 
                 const prefTags = [
                   `${entry.prefs.setDuration} min`,
@@ -804,16 +969,21 @@ export default function App() {
                   entry.prefs.audienceAgeRange,
                   entry.prefs.audiencePurpose,
                   entry.prefs.occasionType,
-                  ...(entry.prefs.genre !== 'Any' ? [entry.prefs.genre] : []),
+                  ...(entry.prefs.genre !== "Any" ? [entry.prefs.genre] : []),
                 ];
 
                 return (
-                  <div key={entry.id} className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
+                  <div
+                    key={entry.id}
+                    className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden"
+                  >
                     {/* Editable name */}
                     <div className="px-5 pt-4 pb-2">
                       <input
                         value={entry.name}
-                        onChange={(e) => handleRenameEntry(entry.id, e.target.value)}
+                        onChange={(e) =>
+                          handleRenameEntry(entry.id, e.target.value)
+                        }
                         className="w-full bg-transparent text-sm font-semibold text-[#e2e8f0] border-b border-transparent hover:border-[#2a2a3a] focus:border-[#7c3aed] focus:outline-none pb-0.5 transition-colors"
                       />
                     </div>
@@ -835,10 +1005,14 @@ export default function App() {
                           width="100%"
                           height={miniH}
                           preserveAspectRatio="none"
-                          style={{ display: 'block' }}
+                          style={{ display: "block" }}
                         >
                           {miniFill && (
-                            <path d={miniFill} fill="#7c3aed" fillOpacity="0.15" />
+                            <path
+                              d={miniFill}
+                              fill="#7c3aed"
+                              fillOpacity="0.15"
+                            />
                           )}
                           {miniPath && (
                             <path
@@ -865,18 +1039,35 @@ export default function App() {
 
                     <div className="flex items-center border-t border-[#1e1e2e]">
                       <button
-                        onClick={() => setExpandedHistoryId(isExpanded ? null : entry.id)}
+                        onClick={() =>
+                          setExpandedHistoryId(isExpanded ? null : entry.id)
+                        }
                         className="flex-1 flex items-center gap-3 px-5 py-3 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
                       >
                         <span className="text-[#7c3aed] text-sm font-medium">
                           {entry.tracks.length} tracks
                         </span>
                         <span className="text-xs text-[#475569]">{label}</span>
-                        <span className="text-[#475569] text-xs ml-auto">{isExpanded ? '▲' : '▼'}</span>
+                        <span className="text-[#475569] text-xs ml-auto">
+                          {isExpanded ? "▲" : "▼"}
+                        </span>
                       </button>
-                      <div ref={openHistoryExportId === entry.id ? historyExportRef : null} className="relative border-l border-[#1e1e2e] shrink-0">
+                      <div
+                        ref={
+                          openHistoryExportId === entry.id
+                            ? historyExportRef
+                            : null
+                        }
+                        className="relative border-l border-[#1e1e2e] shrink-0"
+                      >
                         <button
-                          onClick={() => setOpenHistoryExportId(openHistoryExportId === entry.id ? null : entry.id)}
+                          onClick={() =>
+                            setOpenHistoryExportId(
+                              openHistoryExportId === entry.id
+                                ? null
+                                : entry.id,
+                            )
+                          }
                           className="flex items-center gap-1.5 px-4 py-3 text-xs text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#0d0d14] transition-colors cursor-pointer"
                         >
                           Export <span className="text-[9px]">▾</span>
@@ -884,13 +1075,22 @@ export default function App() {
                         {openHistoryExportId === entry.id && (
                           <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
                             <button
-                              onClick={() => { downloadM3U(entry.tracks, `${entry.name}.m3u`); setOpenHistoryExportId(null); }}
+                              onClick={() => {
+                                downloadM3U(entry.tracks, `${entry.name}.m3u`);
+                                setOpenHistoryExportId(null);
+                              }}
                               className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                             >
                               Export as M3U
                             </button>
                             <button
-                              onClick={() => { void startSpotifyExport(entry.tracks, entry.name); setOpenHistoryExportId(null); }}
+                              onClick={() => {
+                                void startSpotifyExport(
+                                  entry.tracks,
+                                  entry.name,
+                                );
+                                setOpenHistoryExportId(null);
+                              }}
                               className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
                             >
                               Export to Spotify
@@ -905,24 +1105,62 @@ export default function App() {
                         <table className="w-full border-collapse">
                           <thead>
                             <tr className="bg-[#0d0d14]">
-                              <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">#</th>
-                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Track</th>
-                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">BPM</th>
-                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Key</th>
-                              <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Energy</th>
+                              <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">
+                                #
+                              </th>
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
+                                Track
+                              </th>
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
+                                BPM
+                              </th>
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
+                                Key
+                              </th>
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
+                                Energy
+                              </th>
+                              <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider hidden xl:table-cell">
+                                Genre
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
                             {entry.tracks.map((track, idx) => (
-                              <tr key={track.file} className="group border-t border-[#1e1e2e] hover:bg-[#0d0d14]">
+                              <tr
+                                key={track.file}
+                                className="group border-t border-[#1e1e2e] hover:bg-[#0d0d14]"
+                              >
                                 <td className="py-2.5 pl-5 pr-2 w-10">
-                                  <span className="group-hover:hidden text-xs text-[#475569] tabular-nums">{idx + 1}</span>
+                                  <span className="group-hover:hidden text-xs text-[#475569] tabular-nums">
+                                    {idx + 1}
+                                  </span>
                                   <button
-                                    onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+                                    onClick={() =>
+                                      void fetch("/api/play-in-music", {
+                                        method: "POST",
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                        },
+                                        body: JSON.stringify({
+                                          filePath: track.filePath,
+                                          artist: track.artist,
+                                          title: track.title,
+                                        }),
+                                      })
+                                    }
                                     className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
                                     title="Play in Apple Music"
                                   >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="13"
+                                      height="13"
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                    >
+                                      <polygon points="5 3 19 12 5 21 5 3" />
+                                    </svg>
                                   </button>
                                 </td>
                                 <td className="py-2.5 px-2">
@@ -933,9 +1171,28 @@ export default function App() {
                                     {track.artist}
                                   </div>
                                 </td>
-                                <td className="py-2.5 px-2 text-sm text-[#94a3b8] tabular-nums">{Math.round(track.bpm)}</td>
-                                <td className="py-2.5 px-2 text-sm text-[#94a3b8]">{track.camelot}</td>
-                                <td className="py-2.5 px-2 pr-5 text-sm text-[#94a3b8] tabular-nums">{Math.round(track.energy * 100)}%</td>
+                                <td className="py-2.5 px-2 text-sm text-[#94a3b8] tabular-nums">
+                                  {Math.round(track.bpm)}
+                                </td>
+                                <td className="py-2.5 px-2 text-sm text-[#94a3b8]">
+                                  {track.camelot}
+                                </td>
+                                <td className="py-2.5 px-2 text-sm text-[#94a3b8] tabular-nums">
+                                  {Math.round(track.energy * 100)}%
+                                </td>
+                                <td className="py-2.5 px-2 pr-5 hidden xl:table-cell">
+                                  {track.genres && track.genres.length > 0 ? (
+                                    <span
+                                      className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
+                                      title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
+                                    >
+                                      {track.genres.slice(0, 2).join(' · ')}
+                                      {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-[#2a2a3a]">—</span>
+                                  )}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -950,44 +1207,56 @@ export default function App() {
         </main>
       )}
 
-      {activeTab === 'Import' && (
+      {activeTab === "Import" && (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           {/* Import input */}
           <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-5">
-            <h2 className="text-sm font-semibold text-[#e2e8f0] mb-3">Import Spotify Playlist</h2>
+            <h2 className="text-sm font-semibold text-[#e2e8f0] mb-3">
+              Import Spotify Playlist
+            </h2>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleImport(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleImport();
+                }}
                 placeholder="Add playlist Spotify link"
                 className="flex-1 bg-[#0d0d14] border border-[#2a2a3a] rounded-lg px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#475569] focus:outline-none focus:border-[#7c3aed] transition-colors"
               />
               <button
                 onClick={handleImport}
-                disabled={!importUrl.trim() || importStatus?.phase === 'loading'}
+                disabled={
+                  !importUrl.trim() || importStatus?.phase === "loading"
+                }
                 className="px-4 py-2 text-sm font-medium bg-[#7c3aed] text-white rounded-lg hover:bg-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Import
               </button>
               <button
-                onClick={() => { void handleBrowseSpotifyPlaylists(); }}
-                disabled={loadingSpotifyPlaylists || importStatus?.phase === 'loading'}
+                onClick={() => {
+                  void handleBrowseSpotifyPlaylists();
+                }}
+                disabled={
+                  loadingSpotifyPlaylists || importStatus?.phase === "loading"
+                }
                 className="px-4 py-2 text-sm font-medium border border-[#2a2a3a] text-[#94a3b8] rounded-lg hover:text-[#e2e8f0] hover:border-[#7c3aed] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer whitespace-nowrap"
               >
-                {loadingSpotifyPlaylists ? 'Loading…' : 'Browse my playlists'}
+                {loadingSpotifyPlaylists ? "Loading…" : "Browse my playlists"}
               </button>
             </div>
-            {importStatus?.phase === 'loading' && (
+            {importStatus?.phase === "loading" && (
               <p className="mt-2 text-xs text-[#94a3b8]">
                 {importStatus.total > 0
                   ? `Loading tracks… ${importStatus.loaded} / ${importStatus.total}`
-                  : 'Connecting to Spotify…'}
+                  : "Connecting to Spotify…"}
               </p>
             )}
-            {importStatus?.phase === 'error' && (
-              <p className="mt-2 text-xs text-red-400">{importStatus.message}</p>
+            {importStatus?.phase === "error" && (
+              <p className="mt-2 text-xs text-red-400">
+                {importStatus.message}
+              </p>
             )}
           </div>
 
@@ -995,33 +1264,62 @@ export default function App() {
           {importHistory.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
               <span className="text-4xl">🎵</span>
-              <p className="text-sm">No playlists imported yet. Paste a Spotify playlist URL above.</p>
+              <p className="text-sm">
+                No playlists imported yet. Paste a Spotify playlist URL above.
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
               {importHistory.map((entry) => {
                 const isExpanded = expandedImportId === entry.id;
                 const date = new Date(entry.timestamp);
-                const label = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-                  + ' · ' + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-                const inLibraryCount = entry.tracks.filter((t) => t.inLibrary).length;
+                const label =
+                  date.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  }) +
+                  " · " +
+                  date.toLocaleTimeString(undefined, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+                const inLibraryCount = entry.tracks.filter(
+                  (t) => t.inLibrary,
+                ).length;
 
                 return (
-                  <div key={entry.id} className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
+                  <div
+                    key={entry.id}
+                    className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden"
+                  >
                     <button
-                      onClick={() => setExpandedImportId(isExpanded ? null : entry.id)}
+                      onClick={() =>
+                        setExpandedImportId(isExpanded ? null : entry.id)
+                      }
                       className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-[#e2e8f0] truncate">{entry.name}</div>
-                        <div className="text-xs text-[#475569] mt-0.5">{label}</div>
+                        <div className="text-sm font-semibold text-[#e2e8f0] truncate">
+                          {entry.name}
+                        </div>
+                        <div className="text-xs text-[#475569] mt-0.5">
+                          {label}
+                        </div>
                       </div>
                       <div className="shrink-0 flex items-center gap-3">
                         <span className="text-xs text-[#94a3b8]">
-                          <span className="text-[#7c3aed] font-medium">{inLibraryCount}</span>
-                          <span className="text-[#475569]"> / {entry.tracks.length} in library</span>
+                          <span className="text-[#7c3aed] font-medium">
+                            {inLibraryCount}
+                          </span>
+                          <span className="text-[#475569]">
+                            {" "}
+                            / {entry.tracks.length} in library
+                          </span>
                         </span>
-                        <span className="text-[#475569] text-xs">{isExpanded ? '▲' : '▼'}</span>
+                        <span className="text-[#475569] text-xs">
+                          {isExpanded ? "▲" : "▼"}
+                        </span>
                       </div>
                     </button>
 
@@ -1030,8 +1328,12 @@ export default function App() {
                         <table className="w-full border-collapse">
                           <thead>
                             <tr className="bg-[#0d0d14]">
-                              <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">#</th>
-                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Track</th>
+                              <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">
+                                #
+                              </th>
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
+                                Track
+                              </th>
                               <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-8"></th>
                             </tr>
                           </thead>
@@ -1041,88 +1343,161 @@ export default function App() {
                                 key={`${track.spotifyId}-${idx}`}
                                 className={`group border-t border-[#1e1e2e] ${
                                   track.unavailable
-                                    ? 'opacity-40'
+                                    ? "opacity-40"
                                     : track.inLibrary
-                                    ? 'hover:bg-[#0d0d14]'
-                                    : 'bg-red-950/20 hover:bg-red-950/30'
+                                      ? "hover:bg-[#0d0d14]"
+                                      : "bg-red-950/20 hover:bg-red-950/30"
                                 }`}
                               >
                                 <td className="py-2.5 pl-5 pr-2 w-10">
-                                  <span className={`group-hover:hidden text-xs tabular-nums ${track.inLibrary ? 'text-[#475569]' : 'text-red-500/60'}`}>{idx + 1}</span>
+                                  <span
+                                    className={`group-hover:hidden text-xs tabular-nums ${track.inLibrary ? "text-[#475569]" : "text-red-500/60"}`}
+                                  >
+                                    {idx + 1}
+                                  </span>
                                   {!track.unavailable && (
                                     <button
                                       onClick={() => {
                                         if (track.inLibrary) {
-                                          void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ artist: track.artist, title: track.title }) });
+                                          void fetch("/api/play-in-music", {
+                                            method: "POST",
+                                            headers: {
+                                              "Content-Type":
+                                                "application/json",
+                                            },
+                                            body: JSON.stringify({
+                                              artist: track.artist,
+                                              title: track.title,
+                                            }),
+                                          });
                                         } else {
-                                          window.open(`spotify:track:${track.spotifyId}`);
+                                          window.open(
+                                            `spotify:track:${track.spotifyId}`,
+                                          );
                                         }
                                       }}
                                       className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-                                      title={track.inLibrary ? 'Play in Apple Music' : 'Play in Spotify'}
+                                      title={
+                                        track.inLibrary
+                                          ? "Play in Apple Music"
+                                          : "Play in Spotify"
+                                      }
                                     >
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="13"
+                                        height="13"
+                                        viewBox="0 0 24 24"
+                                        fill="currentColor"
+                                      >
+                                        <polygon points="5 3 19 12 5 21 5 3" />
+                                      </svg>
                                     </button>
                                   )}
                                 </td>
                                 <td className="py-2.5 px-2">
-                                  <div className={`text-sm truncate max-w-xs ${track.unavailable ? 'text-[#475569] italic' : track.inLibrary ? 'text-[#e2e8f0]' : 'text-red-400'}`}>
+                                  <div
+                                    className={`text-sm truncate max-w-xs ${track.unavailable ? "text-[#475569] italic" : track.inLibrary ? "text-[#e2e8f0]" : "text-red-400"}`}
+                                  >
                                     {track.title}
                                   </div>
                                   {track.artist && (
-                                    <div className={`text-[11px] truncate ${track.inLibrary ? 'text-[#475569]' : 'text-red-500/70'}`}>
+                                    <div
+                                      className={`text-[11px] truncate ${track.inLibrary ? "text-[#475569]" : "text-red-500/70"}`}
+                                    >
                                       {track.artist}
                                     </div>
                                   )}
                                 </td>
                                 <td className="py-2.5 px-2 pr-5">
-                                  {track.inLibrary || track.unavailable ? null : (() => {
-                                    const key = `${entry.id}-${track.spotifyId}-${idx}`;
-                                    const q = encodeURIComponent(`${track.artist} ${track.title}`);
-                                    return (
-                                      <div ref={openStoreLinkKey === key ? storeLinkRef : null} className="relative inline-block">
-                                        <button
-                                          onClick={() => setOpenStoreLinkKey(openStoreLinkKey === key ? null : key)}
-                                          className="text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                                          title="Buy this track"
-                                        >
-                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-                                            <line x1="3" y1="6" x2="21" y2="6"/>
-                                            <path d="M16 10a4 4 0 0 1-8 0"/>
-                                          </svg>
-                                        </button>
-                                        {openStoreLinkKey === key && (
-                                          <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[140px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
-                                            <a
-                                              href={`https://www.beatport.com/search?q=${q}`}
-                                              target="_blank" rel="noopener noreferrer"
-                                              onClick={() => setOpenStoreLinkKey(null)}
-                                              className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                  {track.inLibrary || track.unavailable
+                                    ? null
+                                    : (() => {
+                                        const key = `${entry.id}-${track.spotifyId}-${idx}`;
+                                        const q = encodeURIComponent(
+                                          `${track.artist} ${track.title}`,
+                                        );
+                                        return (
+                                          <div
+                                            ref={
+                                              openStoreLinkKey === key
+                                                ? storeLinkRef
+                                                : null
+                                            }
+                                            className="relative inline-block"
+                                          >
+                                            <button
+                                              onClick={() =>
+                                                setOpenStoreLinkKey(
+                                                  openStoreLinkKey === key
+                                                    ? null
+                                                    : key,
+                                                )
+                                              }
+                                              className="text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                              title="Buy this track"
                                             >
-                                              Beatport
-                                            </a>
-                                            <a
-                                              href={`https://bandcamp.com/search?q=${q}&item_type=t`}
-                                              target="_blank" rel="noopener noreferrer"
-                                              onClick={() => setOpenStoreLinkKey(null)}
-                                              className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
-                                            >
-                                              Bandcamp
-                                            </a>
-                                            <a
-                                              href={`https://www.traxsource.com/search?term=${q}`}
-                                              target="_blank" rel="noopener noreferrer"
-                                              onClick={() => setOpenStoreLinkKey(null)}
-                                              className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
-                                            >
-                                              Traxsource
-                                            </a>
+                                              <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="14"
+                                                height="14"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                              >
+                                                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                                                <line
+                                                  x1="3"
+                                                  y1="6"
+                                                  x2="21"
+                                                  y2="6"
+                                                />
+                                                <path d="M16 10a4 4 0 0 1-8 0" />
+                                              </svg>
+                                            </button>
+                                            {openStoreLinkKey === key && (
+                                              <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[140px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                                                <a
+                                                  href={`https://www.beatport.com/search?q=${q}`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  onClick={() =>
+                                                    setOpenStoreLinkKey(null)
+                                                  }
+                                                  className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                                >
+                                                  Beatport
+                                                </a>
+                                                <a
+                                                  href={`https://bandcamp.com/search?q=${q}&item_type=t`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  onClick={() =>
+                                                    setOpenStoreLinkKey(null)
+                                                  }
+                                                  className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                                >
+                                                  Bandcamp
+                                                </a>
+                                                <a
+                                                  href={`https://www.traxsource.com/search?term=${q}`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  onClick={() =>
+                                                    setOpenStoreLinkKey(null)
+                                                  }
+                                                  className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                                >
+                                                  Traxsource
+                                                </a>
+                                              </div>
+                                            )}
                                           </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
+                                        );
+                                      })()}
                                 </td>
                               </tr>
                             ))}
@@ -1148,7 +1523,9 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e2e] shrink-0">
-              <h3 className="text-sm font-semibold text-[#e2e8f0]">Your Spotify Playlists</h3>
+              <h3 className="text-sm font-semibold text-[#e2e8f0]">
+                Your Spotify Playlists
+              </h3>
               <button
                 className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
                 onClick={() => setSpotifyPlaylistPicker(null)}
@@ -1158,26 +1535,41 @@ export default function App() {
             </div>
             <div className="overflow-y-auto flex-1">
               {spotifyPlaylistPicker.length === 0 ? (
-                <p className="text-sm text-[#94a3b8] px-4 py-6 text-center">No playlists found.</p>
+                <p className="text-sm text-[#94a3b8] px-4 py-6 text-center">
+                  No playlists found.
+                </p>
               ) : (
                 spotifyPlaylistPicker.map((pl) => (
                   <button
                     key={pl.id}
                     onClick={() => {
                       setSpotifyPlaylistPicker(null);
-                      void runImport(`https://open.spotify.com/playlist/${pl.id}`, library);
+                      void runImport(
+                        `https://open.spotify.com/playlist/${pl.id}`,
+                        library,
+                      );
                     }}
                     className="w-full flex items-center gap-3 px-4 py-3 border-b border-[#1e1e2e] hover:bg-[#1a1a2e] transition-colors cursor-pointer text-left"
                   >
                     {pl.imageUrl && (
-                      <img src={pl.imageUrl} alt="" className="w-9 h-9 rounded object-cover shrink-0" />
+                      <img
+                        src={pl.imageUrl}
+                        alt=""
+                        className="w-9 h-9 rounded object-cover shrink-0"
+                      />
                     )}
                     {!pl.imageUrl && (
-                      <div className="w-9 h-9 rounded bg-[#2a2a3a] shrink-0 flex items-center justify-center text-[#475569] text-xs">♪</div>
+                      <div className="w-9 h-9 rounded bg-[#2a2a3a] shrink-0 flex items-center justify-center text-[#475569] text-xs">
+                        ♪
+                      </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-[#e2e8f0] truncate">{pl.name}</div>
-                      <div className="text-[11px] text-[#475569]">{pl.trackCount} tracks</div>
+                      <div className="text-sm text-[#e2e8f0] truncate">
+                        {pl.name}
+                      </div>
+                      <div className="text-[11px] text-[#475569]">
+                        {pl.trackCount} tracks
+                      </div>
                     </div>
                   </button>
                 ))
@@ -1197,7 +1589,9 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-[#e2e8f0]">Select a Playlist</h3>
+              <h3 className="text-sm font-semibold text-[#e2e8f0]">
+                Select a Playlist
+              </h3>
               <button
                 className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
                 onClick={() => setPlaylistPicker(null)}
@@ -1206,7 +1600,9 @@ export default function App() {
               </button>
             </div>
             {playlistPicker.length === 0 ? (
-              <p className="text-sm text-[#94a3b8] py-4">No playlists found in Apple Music.</p>
+              <p className="text-sm text-[#94a3b8] py-4">
+                No playlists found in Apple Music.
+              </p>
             ) : (
               <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto">
                 {playlistPicker.map((playlist) => (
@@ -1215,8 +1611,12 @@ export default function App() {
                     onClick={() => runAppleMusicAnalysis(playlist.name)}
                     className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2.5 hover:border-[#7c3aed] transition-colors cursor-pointer"
                   >
-                    <div className="text-sm text-[#e2e8f0]">{playlist.name}</div>
-                    <div className="text-[11px] text-[#475569] mt-0.5">{playlist.count} track{playlist.count === 1 ? '' : 's'}</div>
+                    <div className="text-sm text-[#e2e8f0]">
+                      {playlist.name}
+                    </div>
+                    <div className="text-[11px] text-[#475569] mt-0.5">
+                      {playlist.count} track{playlist.count === 1 ? "" : "s"}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -1238,7 +1638,9 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-[#e2e8f0]">Swap Suggestions</h3>
+              <h3 className="text-sm font-semibold text-[#e2e8f0]">
+                Swap Suggestions
+              </h3>
               <button
                 className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
                 onClick={() => {
@@ -1252,7 +1654,8 @@ export default function App() {
 
             {swapModal.suggestions.length === 0 ? (
               <div className="text-sm text-[#94a3b8] py-6">
-                No fitting suggestions found for this slot with current set constraints.
+                No fitting suggestions found for this slot with current set
+                constraints.
               </div>
             ) : (
               <>
@@ -1269,7 +1672,9 @@ export default function App() {
                           {song.title} - {song.artist}
                         </div>
                         <div className="text-[11px] text-[#94a3b8] mt-1">
-                          {song.camelot} • {Math.round(song.bpm)} BPM • {Math.round(song.energy * 100)}% energy • relevance {Math.round(score * 100)}%
+                          {song.camelot} • {Math.round(song.bpm)} BPM •{" "}
+                          {Math.round(song.energy * 100)}% energy • relevance{" "}
+                          {Math.round(score * 100)}%
                         </div>
                       </button>
                     ))}
@@ -1278,7 +1683,11 @@ export default function App() {
                 {swapVisibleCount < swapModal.suggestions.length && (
                   <div className="mt-3 flex justify-center">
                     <button
-                      onClick={() => setSwapVisibleCount((count) => Math.min(count + 5, swapModal.suggestions.length))}
+                      onClick={() =>
+                        setSwapVisibleCount((count) =>
+                          Math.min(count + 5, swapModal.suggestions.length),
+                        )
+                      }
                       className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                     >
                       More
@@ -1295,81 +1704,118 @@ export default function App() {
         <div
           className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
           onClick={() => {
-            if (spotifyExportStatus.phase === 'done' || spotifyExportStatus.phase === 'error') {
+            if (
+              spotifyExportStatus.phase === "done" ||
+              spotifyExportStatus.phase === "error"
+            ) {
               setSpotifyExportStatus(null);
             }
           }}
         >
           <div
-            className={`w-full rounded-xl border border-[#2a2a3a] bg-[#12121a] p-6 ${spotifyExportStatus.phase === 'review' ? 'max-w-lg' : 'max-w-sm'}`}
+            className={`w-full rounded-xl border border-[#2a2a3a] bg-[#12121a] p-6 ${spotifyExportStatus.phase === "review" ? "max-w-lg" : "max-w-sm"}`}
             onClick={(e) => e.stopPropagation()}
           >
-            {spotifyExportStatus.phase === 'searching' && (
+            {spotifyExportStatus.phase === "searching" && (
               <>
-                <h3 className="text-sm font-semibold text-[#e2e8f0] mb-4">Searching Spotify…</h3>
+                <h3 className="text-sm font-semibold text-[#e2e8f0] mb-4">
+                  Searching Spotify…
+                </h3>
                 <div className="flex flex-col gap-3">
                   <div className="w-full h-1.5 rounded-full bg-[#1f2937] overflow-hidden">
                     <div
                       className="h-full bg-[#1db954] transition-all"
                       style={{
-                        width: spotifyExportStatus.total > 0
-                          ? `${Math.round((spotifyExportStatus.completed / spotifyExportStatus.total) * 100)}%`
-                          : '0%',
+                        width:
+                          spotifyExportStatus.total > 0
+                            ? `${Math.round((spotifyExportStatus.completed / spotifyExportStatus.total) * 100)}%`
+                            : "0%",
                       }}
                     />
                   </div>
                   <span className="text-xs text-[#94a3b8] tabular-nums">
-                    {spotifyExportStatus.completed} / {spotifyExportStatus.total} tracks
+                    {spotifyExportStatus.completed} /{" "}
+                    {spotifyExportStatus.total} tracks
                   </span>
                 </div>
               </>
             )}
 
-            {spotifyExportStatus.phase === 'review' && (
+            {spotifyExportStatus.phase === "review" && (
               <>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-[#e2e8f0]">Review Spotify matches</h3>
+                  <h3 className="text-sm font-semibold text-[#e2e8f0]">
+                    Review Spotify matches
+                  </h3>
                   <span className="text-xs text-[#475569]">
-                    {spotifyExportStatus.matches.filter((m) => m.match && !m.excluded).length} / {spotifyExportStatus.matches.length} will be added
+                    {
+                      spotifyExportStatus.matches.filter(
+                        (m) => m.match && !m.excluded,
+                      ).length
+                    }{" "}
+                    / {spotifyExportStatus.matches.length} will be added
                   </span>
                 </div>
                 <div className="flex flex-col max-h-[55vh] overflow-y-auto mb-4">
-                  {spotifyExportStatus.matches.map(({ track, match, confidence, excluded }, idx) => (
-                    <div
-                      key={track.file}
-                      className={`grid grid-cols-[20px_1fr_1fr_24px] gap-2 items-start py-1.5 border-b border-[#1e1e2e] last:border-0 ${excluded ? 'opacity-40' : ''}`}
-                    >
-                      <span className="text-[11px] text-[#475569] tabular-nums pt-0.5">{idx + 1}</span>
-                      <div className="min-w-0">
-                        <div className="text-xs text-[#e2e8f0] truncate">{track.title}</div>
-                        <div className="text-[11px] text-[#475569] truncate">{track.artist}</div>
-                      </div>
-                      <div className="min-w-0">
-                        {match ? (
-                          <>
-                            <div className={`text-xs truncate ${confidence === 'exact' ? 'text-[#1db954]' : 'text-[#f59e0b]'}`}>
-                              {match.name}
-                            </div>
-                            <div className="text-[11px] text-[#475569] truncate">{match.artists}</div>
-                          </>
-                        ) : (
-                          <div className="text-xs text-[#ef4444]">Not found</div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleToggleSpotifyMatch(idx)}
-                        title={excluded ? 'Re-include' : 'Remove from playlist'}
-                        className="mt-0.5 text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer text-xs leading-none"
+                  {spotifyExportStatus.matches.map(
+                    ({ track, match, confidence, excluded }, idx) => (
+                      <div
+                        key={track.file}
+                        className={`grid grid-cols-[20px_1fr_1fr_24px] gap-2 items-start py-1.5 border-b border-[#1e1e2e] last:border-0 ${excluded ? "opacity-40" : ""}`}
                       >
-                        {excluded ? '↩' : '✕'}
-                      </button>
-                    </div>
-                  ))}
+                        <span className="text-[11px] text-[#475569] tabular-nums pt-0.5">
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs text-[#e2e8f0] truncate">
+                            {track.title}
+                          </div>
+                          <div className="text-[11px] text-[#475569] truncate">
+                            {track.artist}
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          {match ? (
+                            <>
+                              <div
+                                className={`text-xs truncate ${confidence === "exact" ? "text-[#1db954]" : "text-[#f59e0b]"}`}
+                              >
+                                {match.name}
+                              </div>
+                              <div className="text-[11px] text-[#475569] truncate">
+                                {match.artists}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-xs text-[#ef4444]">
+                              Not found
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleToggleSpotifyMatch(idx)}
+                          title={
+                            excluded ? "Re-include" : "Remove from playlist"
+                          }
+                          className="mt-0.5 text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer text-xs leading-none"
+                        >
+                          {excluded ? "↩" : "✕"}
+                        </button>
+                      </div>
+                    ),
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { void handleConfirmSpotifyExport(spotifyExportStatus.matches, spotifyExportStatus.playlistName); }}
-                    disabled={spotifyExportStatus.matches.every((m) => !m.match || m.excluded)}
+                    onClick={() => {
+                      void handleConfirmSpotifyExport(
+                        spotifyExportStatus.matches,
+                        spotifyExportStatus.playlistName,
+                      );
+                    }}
+                    disabled={spotifyExportStatus.matches.every(
+                      (m) => !m.match || m.excluded,
+                    )}
                     className="flex-1 px-4 py-2 rounded-md bg-[#1db954] text-[#000] text-sm font-semibold hover:bg-[#1ed760] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Create playlist
@@ -1384,15 +1830,18 @@ export default function App() {
               </>
             )}
 
-            {spotifyExportStatus.phase === 'creating' && (
+            {spotifyExportStatus.phase === "creating" && (
               <p className="text-sm text-[#94a3b8]">Creating playlist…</p>
             )}
 
-            {spotifyExportStatus.phase === 'done' && (
+            {spotifyExportStatus.phase === "done" && (
               <>
-                <h3 className="text-sm font-semibold text-[#e2e8f0] mb-3">Playlist created</h3>
+                <h3 className="text-sm font-semibold text-[#e2e8f0] mb-3">
+                  Playlist created
+                </h3>
                 <p className="text-sm text-[#94a3b8] mb-4">
-                  {spotifyExportStatus.matched} of {spotifyExportStatus.total} tracks added.
+                  {spotifyExportStatus.matched} of {spotifyExportStatus.total}{" "}
+                  tracks added.
                 </p>
                 <div className="flex gap-2">
                   <a
@@ -1414,10 +1863,14 @@ export default function App() {
               </>
             )}
 
-            {spotifyExportStatus.phase === 'error' && (
+            {spotifyExportStatus.phase === "error" && (
               <>
-                <h3 className="text-sm font-semibold text-[#ef4444] mb-3">Export failed</h3>
-                <p className="text-sm text-[#94a3b8] mb-4">{spotifyExportStatus.message}</p>
+                <h3 className="text-sm font-semibold text-[#ef4444] mb-3">
+                  Export failed
+                </h3>
+                <p className="text-sm text-[#94a3b8] mb-4">
+                  {spotifyExportStatus.message}
+                </p>
                 <button
                   onClick={() => setSpotifyExportStatus(null)}
                   className="px-4 py-2 rounded-md border border-[#2a2a3a] text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors cursor-pointer"

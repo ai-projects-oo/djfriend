@@ -121,6 +121,21 @@ export default function TrackRow({ track, index, onSwap, onRemove }: Props) {
         </div>
       </td>
 
+      {/* Genre */}
+      <td className="py-3 px-2 hidden xl:table-cell">
+        {track.genres && track.genres.length > 0 ? (
+          <span
+            className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
+            title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
+          >
+            {track.genres.slice(0, 2).join(' · ')}
+            {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
+          </span>
+        ) : (
+          <span className="text-[10px] text-[#2a2a3a]">—</span>
+        )}
+      </td>
+
       <td className="py-3 pl-2 pr-4 text-right">
         <div className="flex items-center justify-end gap-1">
           <button

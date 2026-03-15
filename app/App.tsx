@@ -1456,7 +1456,7 @@ export default function App() {
                                                 )
                                               }
                                               className="text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                                              title="Buy this track"
+                                              title="Find this track"
                                             >
                                               <svg
                                                 xmlns="http://www.w3.org/2000/svg"
@@ -1480,7 +1480,8 @@ export default function App() {
                                               </svg>
                                             </button>
                                             {openStoreLinkKey === key && (
-                                              <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[140px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                                              <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                                                <div className="px-4 py-2 text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1e1e2e]">Find on…</div>
                                                 <a
                                                   href={`https://www.beatport.com/search?q=${q}`}
                                                   target="_blank"

@@ -14,6 +14,7 @@ import { scanFolder } from './src/scanner'
 import { analyzeAudio } from './src/analyzer'
 import { toCamelot } from './src/camelot'
 import { authenticate, getArtistGenres, searchTrack } from './src/spotify'
+import { readSettings, writeSettings } from './src/settings'
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
 const execFileAsync = promisify(execFile)
@@ -323,9 +324,9 @@ async function analyzeLibrary(
   rootLabel: string,
   writeEvent: (event: Record<string, unknown>) => void,
 ): Promise<{ total: number; analyzed: number; songs: AppSong[]; resultsJson: Record<string, AppSong> }> {
-  const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = process.env
+  const { spotifyClientId: SPOTIFY_CLIENT_ID, spotifyClientSecret: SPOTIFY_CLIENT_SECRET } = readSettings()
   if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
-    throw new Error('Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET in .env.')
+    throw new Error('Spotify credentials not configured. Open Settings to add your Client ID and Secret.')
   }
 
   const audioFolders = collectAudioDirs(rootPath)
@@ -429,9 +430,9 @@ async function analyzeAppleMusicLibrary(
   playlistName: string,
   writeEvent: (event: Record<string, unknown>) => void,
 ): Promise<{ total: number; analyzed: number; songs: AppSong[]; resultsJson: Record<string, AppSong> }> {
-  const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = process.env
+  const { spotifyClientId: SPOTIFY_CLIENT_ID, spotifyClientSecret: SPOTIFY_CLIENT_SECRET } = readSettings()
   if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
-    throw new Error('Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET in .env.')
+    throw new Error('Spotify credentials not configured. Open Settings to add your Client ID and Secret.')
   }
 
   const tracks = await listAppleMusicTracks(playlistName)
@@ -635,6 +636,28 @@ function setupMiddlewares(middlewares: Connect.Server): void {
     } catch (err) {
       writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Apple Music analysis failed.' }); res.end()
     }
+  })
+
+  middlewares.use('/api/settings', async (req, res, next) => {
+    if (req.method === 'GET') {
+      const s = readSettings()
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ spotifyClientId: s.spotifyClientId ?? '', hasSecret: !!s.spotifyClientSecret }))
+      return
+    }
+    if (req.method === 'POST') {
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const updates: Record<string, string> = {}
+      if (typeof body.spotifyClientId === 'string') updates.spotifyClientId = body.spotifyClientId.trim()
+      if (typeof body.spotifyClientSecret === 'string' && body.spotifyClientSecret.trim()) {
+        updates.spotifyClientSecret = body.spotifyClientSecret.trim()
+      }
+      writeSettings(updates)
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true }))
+      return
+    }
+    next()
   })
 
   middlewares.use('/api/update-tags', async (req, res, next) => {

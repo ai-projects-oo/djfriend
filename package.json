@@ -1,8 +1,9 @@
 {
   "name": "djfriend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "electron-compiled/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -12,7 +13,30 @@
     "go": "npm run build && npm run preview",
     "clean": "rm -rf dist && rm -f ~/Music/djfriend-results-v3.json && rm -f \"/Users/ozben/Music/Music/Media.localized/Music/results.json\" && echo 'Cleared build cache and results'",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:dev": "npm run build && tsx electron/main.ts",
+    "dist": "npm run build && tsc -p tsconfig.electron.json && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.djfriend.app",
+    "productName": "DJFriend",
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }]
+    },
+    "files": [
+      "dist/**",
+      "electron-compiled/**",
+      "src/**",
+      "vite.config.ts",
+      "tsconfig*.json",
+      "package.json",
+      "node_modules/**"
+    ],
+    "asar": false,
+    "extraMetadata": {
+      "main": "electron-compiled/main.js"
+    }
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.8",
@@ -42,6 +66,8 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.24",
+    "electron": "^41.0.2",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

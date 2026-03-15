@@ -1486,33 +1486,30 @@ export default function App() {
                                                   href={`https://www.beatport.com/search?q=${q}`}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
-                                                  onClick={() =>
-                                                    setOpenStoreLinkKey(null)
-                                                  }
-                                                  className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                                  onClick={() => setOpenStoreLinkKey(null)}
+                                                  className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                                                 >
+                                                  <img src="https://www.google.com/s2/favicons?domain=beatport.com&sz=16" width="14" height="14" className="rounded-sm flex-shrink-0" alt="" />
                                                   Beatport
                                                 </a>
                                                 <a
                                                   href={`https://bandcamp.com/search?q=${q}&item_type=t`}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
-                                                  onClick={() =>
-                                                    setOpenStoreLinkKey(null)
-                                                  }
-                                                  className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                                  onClick={() => setOpenStoreLinkKey(null)}
+                                                  className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
                                                 >
+                                                  <img src="https://www.google.com/s2/favicons?domain=bandcamp.com&sz=16" width="14" height="14" className="rounded-sm flex-shrink-0" alt="" />
                                                   Bandcamp
                                                 </a>
                                                 <a
                                                   href={`https://www.traxsource.com/search?term=${q}`}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
-                                                  onClick={() =>
-                                                    setOpenStoreLinkKey(null)
-                                                  }
-                                                  className="flex px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                                  onClick={() => setOpenStoreLinkKey(null)}
+                                                  className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
                                                 >
+                                                  <img src="https://www.google.com/s2/favicons?domain=traxsource.com&sz=16" width="14" height="14" className="rounded-sm flex-shrink-0" alt="" />
                                                   Traxsource
                                                 </a>
                                               </div>

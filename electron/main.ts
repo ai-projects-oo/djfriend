@@ -1,45 +1,39 @@
 import { app, BrowserWindow, shell } from 'electron'
-import { spawn, ChildProcess } from 'child_process'
+import { createServer } from 'http'
 import path from 'path'
-import http from 'http'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const PORT = 8888
-let server: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
 
-function waitForServer(maxMs = 30_000): Promise<void> {
-  const deadline = Date.now() + maxMs
-  return new Promise((resolve, reject) => {
-    function attempt() {
-      http.get(`http://127.0.0.1:${PORT}`, (res) => {
-        res.resume()
-        if (res.statusCode && res.statusCode < 500) resolve()
-        else retry()
-      }).on('error', retry)
-    }
-    function retry() {
-      if (Date.now() > deadline) { reject(new Error('Server did not start in time')); return }
-      setTimeout(attempt, 300)
-    }
-    attempt()
-  })
-}
+async function startServer() {
+  // Dynamic imports so Electron loads them from inside the ASAR
+  const connect = (await import('connect')).default
+  const serveStatic = (await import('serve-static')).default
+  const { setupMiddlewares } = await import('../src/api.js')
 
-function startServer() {
-  const root = path.join(__dirname, '..')
-  // Use the locally installed vite binary
-  const vite = path.join(root, 'node_modules', '.bin', 'vite')
-  server = spawn(vite, ['preview'], {
-    cwd: root,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, FORCE_COLOR: '0' },
+  const app = connect()
+
+  // Serve the built React frontend
+  const distPath = path.join(__dirname, '..', 'dist')
+  app.use(serveStatic(distPath) as Parameters<typeof app.use>[0])
+
+  // All API routes
+  setupMiddlewares(app)
+
+  // SPA fallback: serve index.html for any unmatched route
+  app.use((_req, res) => {
+    const indexPath = path.join(distPath, 'index.html')
+    res.setHeader('Content-Type', 'text/html')
+    fs.createReadStream(indexPath).pipe(res)
   })
-  server.stdout?.on('data', (d: Buffer) => process.stdout.write(d))
-  server.stderr?.on('data', (d: Buffer) => process.stderr.write(d))
-  server.on('error', (err) => console.error('[server] failed to start:', err.message))
+
+  return new Promise<void>((resolve, reject) => {
+    createServer(app).listen(PORT, '127.0.0.1', () => resolve()).on('error', reject)
+  })
 }
 
 function createWindow() {
@@ -58,7 +52,6 @@ function createWindow() {
 
   mainWindow.loadURL(`http://127.0.0.1:${PORT}`)
 
-  // Open all target="_blank" links in the default browser, not in Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
@@ -68,12 +61,11 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  startServer()
   try {
-    await waitForServer()
+    await startServer()
     createWindow()
   } catch (err) {
-    console.error('Could not connect to server:', err)
+    console.error('Failed to start server:', err)
     app.quit()
   }
 })
@@ -84,8 +76,4 @@ app.on('activate', () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
-})
-
-app.on('will-quit', () => {
-  server?.kill()
 })

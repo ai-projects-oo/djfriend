@@ -272,7 +272,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     }
     if (req.method === 'POST') {
       const body = await readJsonBody(req) as Record<string, unknown>
-      const updates: Record<string, string> = {}
+      const updates: Partial<import('./settings.js').Settings> = {}
       if (typeof body.spotifyClientId === 'string') updates.spotifyClientId = body.spotifyClientId.trim()
       if (typeof body.spotifyClientSecret === 'string' && body.spotifyClientSecret.trim()) updates.spotifyClientSecret = body.spotifyClientSecret.trim()
       writeSettings(updates)

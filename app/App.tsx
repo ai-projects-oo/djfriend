@@ -1455,13 +1455,13 @@ export default function App() {
                                                     : key,
                                                 )
                                               }
-                                              className="text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                              className="text-[#475569] hover:text-[#7c3aed] transition-colors cursor-pointer"
                                               title="Find this track"
                                             >
                                               <svg
                                                 xmlns="http://www.w3.org/2000/svg"
-                                                width="14"
-                                                height="14"
+                                                width="15"
+                                                height="15"
                                                 viewBox="0 0 24 24"
                                                 fill="none"
                                                 stroke="currentColor"
@@ -1469,8 +1469,14 @@ export default function App() {
                                                 strokeLinecap="round"
                                                 strokeLinejoin="round"
                                               >
-                                                <circle cx="11" cy="11" r="8" />
-                                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                                {/* Shopping cart */}
+                                                <circle cx="8" cy="21" r="1" fill="currentColor" stroke="none" />
+                                                <circle cx="19" cy="21" r="1" fill="currentColor" stroke="none" />
+                                                <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+                                                {/* Music note inside cart */}
+                                                <path d="M11 16v-5l5-1.3v5" strokeWidth="1.5" />
+                                                <circle cx="11" cy="16" r="1.1" fill="currentColor" stroke="none" />
+                                                <circle cx="16" cy="14.7" r="1.1" fill="currentColor" stroke="none" />
                                               </svg>
                                             </button>
                                             {openStoreLinkKey === key && (

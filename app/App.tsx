@@ -1435,9 +1435,21 @@ export default function App() {
                                     ? null
                                     : (() => {
                                         const key = `${entry.id}-${track.spotifyId}-${idx}`;
-                                        const q = encodeURIComponent(
-                                          `${track.artist} ${track.title}`,
+                                        const primaryArtist = track.artist
+                                          ? track.artist.split(/\s*[,&]\s*/)[0].trim()
+                                          : '';
+                                        // Normalize title: replace filename-style " - " separator with space
+                                        // so "Different Circles - Nicson Remix" → "Different Circles Nicson Remix"
+                                        const normalizedTitle = track.title.replace(/\s+-\s+/g, ' ');
+                                        // Base title: strip remix/mix/edit/dub/instrumental suffix for Bandcamp
+                                        const baseTitle = track.title
+                                          .replace(/\s+-\s+.*?(remix|mix|edit|dub|instrumental|rework|bootleg|flip|version|vip)\s*$/i, '')
+                                          .replace(/\s+\(.*?(remix|mix|edit|dub|instrumental|rework|bootleg|flip|version|vip)\s*\)\s*$/i, '')
+                                          .trim() || normalizedTitle;
+                                        const qFull = encodeURIComponent(
+                                          [primaryArtist, normalizedTitle].filter(Boolean).join(' '),
                                         );
+                                        const qTitle = encodeURIComponent(baseTitle);
                                         return (
                                           <div
                                             ref={
@@ -1483,7 +1495,7 @@ export default function App() {
                                               <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
                                                 <div className="px-4 py-2 text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1e1e2e]">Find on…</div>
                                                 <a
-                                                  href={`https://www.beatport.com/search?q=${q}`}
+                                                  href={`https://www.beatport.com/search/tracks?q=${qFull}`}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
                                                   onClick={() => setOpenStoreLinkKey(null)}
@@ -1493,7 +1505,7 @@ export default function App() {
                                                   Beatport
                                                 </a>
                                                 <a
-                                                  href={`https://bandcamp.com/search?q=${q}&item_type=t`}
+                                                  href={`https://bandcamp.com/search?q=${qTitle}&item_type=t`}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
                                                   onClick={() => setOpenStoreLinkKey(null)}
@@ -1503,7 +1515,7 @@ export default function App() {
                                                   Bandcamp
                                                 </a>
                                                 <a
-                                                  href={`https://www.traxsource.com/search?term=${q}`}
+                                                  href={`https://www.traxsource.com/search?term=${qFull}`}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
                                                   onClick={() => setOpenStoreLinkKey(null)}

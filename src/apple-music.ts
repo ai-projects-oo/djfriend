@@ -96,6 +96,8 @@ export async function getTracksFromPlaylist(): Promise<{ tracks: ScannedTrack[];
       filePath,
       artist: (t.Artist as string) ?? null,
       title: (t.Name as string) ?? path.basename(filePath, path.extname(filePath)),
+      duration: typeof t['Total Time'] === 'number' ? (t['Total Time'] as number) / 1000 : null,
+      localGenres: typeof t['Genre'] === 'string' ? [(t['Genre'] as string)] : [],
     });
   }
 

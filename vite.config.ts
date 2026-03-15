@@ -9,6 +9,7 @@ import { promisify } from 'util'
 import { execFile } from 'child_process'
 import Busboy from 'busboy'
 import * as mm from 'music-metadata'
+import NodeID3 from 'node-id3'
 import { scanFolder } from './src/scanner'
 import { analyzeAudio } from './src/analyzer'
 import { toCamelot } from './src/camelot'
@@ -633,6 +634,78 @@ function setupMiddlewares(middlewares: Connect.Server): void {
       res.end()
     } catch (err) {
       writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Apple Music analysis failed.' }); res.end()
+    }
+  })
+
+  middlewares.use('/api/update-tags', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    try {
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const filePath = typeof body.filePath === 'string' ? body.filePath.trim() : null
+      const tags = typeof body.tags === 'object' && body.tags !== null ? body.tags as Record<string, unknown> : null
+      if (!filePath || !tags) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing filePath or tags' })); return }
+
+      // Resolve to absolute path
+      let absolutePath = filePath
+      if (!path.isAbsolute(filePath) && songsFolder) absolutePath = path.join(songsFolder, filePath)
+      if (!fs.existsSync(absolutePath)) { res.statusCode = 404; res.end(JSON.stringify({ error: 'File not found' })); return }
+      if (!AUDIO_EXTENSIONS.has(path.extname(absolutePath).toLowerCase())) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Not an audio file' })); return }
+
+      // Build node-id3 tag object
+      const id3Tags: NodeID3.Tags = {}
+      if (typeof tags.title === 'string') id3Tags.title = tags.title.trim()
+      if (typeof tags.artist === 'string') id3Tags.artist = tags.artist.trim()
+      if (typeof tags.genre === 'string') id3Tags.genre = tags.genre.trim()
+      if (typeof tags.bpm === 'number') id3Tags.bpm = String(Math.round(tags.bpm))
+      if (Object.keys(id3Tags).length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: 'No tags to update' })); return }
+
+      const ext = path.extname(absolutePath).toLowerCase()
+      if (ext !== '.mp3') { res.statusCode = 400; res.end(JSON.stringify({ error: `Tag editing only supported for MP3 files (got ${ext})` })); return }
+
+      let result: true | Error
+      try {
+        result = NodeID3.update(id3Tags, absolutePath)
+      } catch {
+        // Some files have UFID/GEOB frames with undefined values that cause node-id3 to
+        // throw during re-encoding. Fall back: read existing friendly-format tags, drop
+        // problematic frames, merge our changes, and write.
+        const existing = NodeID3.read(absolutePath)
+        const merged = { ...existing, ...id3Tags } as Record<string, unknown>
+        // Remove fields that can crash node-id3's encoder when frame data is malformed
+        delete merged.raw
+        delete merged.uniqueFileIdentifier
+        delete merged.generalObject
+        delete merged.privateFrames
+        result = NodeID3.write(merged as NodeID3.Tags, absolutePath)
+      }
+      if (result !== true) throw new Error(result instanceof Error ? result.message : 'node-id3 write failed')
+
+      // Patch results.json(s) so cache stays in sync
+      const patchResults = (resultsPath: string, key: string): void => {
+        if (!fs.existsSync(resultsPath)) return
+        try {
+          const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+          const entry = results[key]
+          if (!entry) return
+          if (typeof tags.title === 'string' && tags.title.trim()) entry.title = tags.title.trim()
+          if (typeof tags.artist === 'string' && tags.artist.trim()) entry.artist = tags.artist.trim()
+          if (typeof tags.genre === 'string') {
+            entry.genres = tags.genre.trim() ? tags.genre.split(',').map((g: string) => g.trim()).filter(Boolean) : []
+            delete entry.genresFromSpotify
+          }
+          if (typeof tags.bpm === 'number') entry.bpm = tags.bpm
+          fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+        } catch { /* ignore */ }
+      }
+
+      if (songsFolder) patchResults(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'))
+      patchResults(APPLE_RESULTS_PATH, absolutePath)
+
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true }))
+    } catch (err) {
+      res.statusCode = 500
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to update tags' }))
     }
   })
 

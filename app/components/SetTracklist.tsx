@@ -8,6 +8,7 @@ interface Props {
   prefs: DJPreferences;
   onSwapTrack: (index: number) => void;
   onRemoveTrack: (index: number) => void;
+  onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number }) => void;
   onExport?: () => void;
   onExportSpotify?: () => void;
 }
@@ -17,7 +18,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
   return Math.round(totalSecs / 60);
 }
 
-export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -117,6 +118,7 @@ export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack
                   index={idx}
                   onSwap={() => onSwapTrack(idx)}
                   onRemove={() => onRemoveTrack(idx)}
+                  onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}
                 />
               ))}
             </tbody>

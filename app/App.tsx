@@ -750,6 +750,26 @@ export default function App() {
     });
   }, []);
 
+  const handleUpdateTrack = useCallback((index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number }) => {
+    const patch = {
+      ...(tags.title !== undefined ? { title: tags.title } : {}),
+      ...(tags.artist !== undefined ? { artist: tags.artist } : {}),
+      ...(tags.genre !== undefined ? {
+        genres: tags.genre ? tags.genre.split(',').map(g => g.trim()).filter(Boolean) : [],
+        genresFromSpotify: false,
+      } : {}),
+      ...(tags.bpm !== undefined ? { bpm: tags.bpm } : {}),
+    };
+    setGeneratedSet(prev => {
+      if (index < 0 || index >= prev.length) return prev;
+      return prev.map((t, i) => i === index ? { ...t, ...patch } : t);
+    });
+    const fileKey = generatedSet[index]?.file;
+    if (fileKey) {
+      setLibrary(prev => prev.map(s => s.file === fileKey ? { ...s, ...patch } : s));
+    }
+  }, [generatedSet]);
+
   const progressPercent =
     analysisProgress.total > 0
       ? Math.min(
@@ -904,6 +924,7 @@ export default function App() {
               prefs={prefs}
               onSwapTrack={handleSwapTrack}
               onRemoveTrack={handleRemoveTrack}
+              onUpdateTrack={handleUpdateTrack}
               onExport={handleExportM3U}
               onExportSpotify={() => {
                 void handleExportSpotify();

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RefreshCcw, Trash2 } from 'lucide-react';
+import { RefreshCcw, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { SetTrack } from '../types';
 
 interface Props {
@@ -7,11 +7,12 @@ interface Props {
   index: number;
   onSwap: () => void;
   onRemove: () => void;
+  onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number }) => void;
 }
 
 const CAMELOT_COLORS: Record<string, string> = {
-  A: '#06b6d4', // cyan for minor keys
-  B: '#7c3aed', // violet for major keys
+  A: '#06b6d4',
+  B: '#7c3aed',
 };
 
 function camelotBadgeColor(camelot: string): string {
@@ -31,131 +32,258 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function TrackRow({ track, index, onSwap, onRemove }: Props) {
+export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack }: Props) {
   const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
-  const artist = track.artist;
-  const title = track.title;
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [editTitle, setEditTitle] = useState('');
+  const [editArtist, setEditArtist] = useState('');
+  const [editGenre, setEditGenre] = useState('');
+  const [editBpm, setEditBpm] = useState('');
+
   const barColor = energyBarColor(track.energy);
+  const isLocal = Boolean(track.filePath);
+  const isMp3 = track.filePath?.toLowerCase().endsWith('.mp3') ?? false;
+
+  function openEdit() {
+    setEditTitle(track.title);
+    setEditArtist(track.artist);
+    setEditGenre(track.genres.join(', '));
+    setEditBpm(track.bpm > 0 ? String(Math.round(track.bpm)) : '');
+    setSaveError(null);
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setSaveError(null);
+  }
+
+  async function saveEdit() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const tags: { title?: string; artist?: string; genre?: string; bpm?: number } = {};
+      if (editTitle.trim() !== track.title) tags.title = editTitle.trim();
+      if (editArtist.trim() !== track.artist) tags.artist = editArtist.trim();
+      const currentGenre = track.genres.join(', ');
+      if (editGenre.trim() !== currentGenre) tags.genre = editGenre.trim();
+      const newBpm = parseFloat(editBpm);
+      if (!isNaN(newBpm) && newBpm !== track.bpm) tags.bpm = newBpm;
+
+      if (Object.keys(tags).length > 0) {
+        const res = await fetch('/api/update-tags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath: track.filePath, tags }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(err.error ?? 'Save failed');
+        }
+        onUpdateTrack(tags);
+      }
+      setEditing(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <tr className="border-b border-[#1e1e2e] hover:bg-[#12121a] transition-colors group">
-      {/* # */}
-      <td className="py-3 pl-4 pr-2 w-10">
-        <span className="group-hover:hidden text-[#475569] text-sm tabular-nums">{index + 1}</span>
-        <button
-          onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
-          className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-          title="Play in Apple Music"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        </button>
-      </td>
+    <>
+      <tr className="border-b border-[#1e1e2e] hover:bg-[#12121a] transition-colors group">
+        {/* # */}
+        <td className="py-3 pl-4 pr-2 w-10">
+          <span className="group-hover:hidden text-[#475569] text-sm tabular-nums">{index + 1}</span>
+          <button
+            onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+            className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+            title="Play in Apple Music"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </button>
+        </td>
 
-      {/* Title / Artist */}
-      <td className="py-3 px-2 min-w-0">
-        <div className="flex items-center gap-2">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-[#e2e8f0] truncate">{title}</div>
-            <div className="text-xs text-[#64748b] truncate">{artist}</div>
-          </div>
-          {track.harmonicWarning && (
-            <div className="relative flex-shrink-0">
-              <span
-                className="text-[#f59e0b] cursor-help text-base"
-                onMouseEnter={() => setShowHarmonicTooltip(true)}
-                onMouseLeave={() => setShowHarmonicTooltip(false)}
-              >
-                ⚠
-              </span>
-              {showHarmonicTooltip && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-48 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none">
-                  Harmonic clash — this transition may sound dissonant. Consider
-                  pitch-shifting or adding an EQ breakdown.
-                </div>
-              )}
+        {/* Title / Artist */}
+        <td className="py-3 px-2 min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-[#e2e8f0] truncate">{track.title}</div>
+              <div className="text-xs text-[#64748b] truncate">{track.artist}</div>
             </div>
-          )}
-        </div>
-      </td>
-
-      {/* Duration */}
-      <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
-        {track.duration != null ? formatDuration(track.duration) : '—'}
-      </td>
-
-      {/* BPM */}
-      <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
-        {track.bpm > 0 ? track.bpm.toFixed(0) : '—'}
-      </td>
-
-      {/* Camelot key */}
-      <td className="py-3 px-2 whitespace-nowrap">
-        <span
-          className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold text-white"
-          style={{ backgroundColor: camelotBadgeColor(track.camelot) + '33', color: camelotBadgeColor(track.camelot), border: `1px solid ${camelotBadgeColor(track.camelot)}66` }}
-        >
-          {track.camelot}
-        </span>
-      </td>
-
-      {/* Key name */}
-      <td className="py-3 px-2 text-[#64748b] text-xs whitespace-nowrap hidden lg:table-cell">
-        {track.key}
-      </td>
-
-      {/* Energy bar */}
-      <td className="py-3 px-2 pr-4">
-        <div className="flex items-center gap-2">
-          <div className="w-16 h-2 rounded-full bg-[#1e1e2e] overflow-hidden flex-shrink-0">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${(track.energy * 100).toFixed(1)}%`,
-                backgroundColor: barColor,
-              }}
-            />
+            {track.harmonicWarning && (
+              <div className="relative flex-shrink-0">
+                <span
+                  className="text-[#f59e0b] cursor-help text-base"
+                  onMouseEnter={() => setShowHarmonicTooltip(true)}
+                  onMouseLeave={() => setShowHarmonicTooltip(false)}
+                >
+                  ⚠
+                </span>
+                {showHarmonicTooltip && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-48 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none">
+                    Harmonic clash — this transition may sound dissonant. Consider pitch-shifting or adding an EQ breakdown.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <span className="text-[10px] text-[#475569] tabular-nums w-8">
-            {(track.energy * 100).toFixed(0)}%
-          </span>
-        </div>
-      </td>
+        </td>
 
-      {/* Genre */}
-      <td className="py-3 px-2 hidden xl:table-cell">
-        {track.genres && track.genres.length > 0 ? (
+        {/* Duration */}
+        <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
+          {track.duration != null ? formatDuration(track.duration) : '—'}
+        </td>
+
+        {/* BPM */}
+        <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
+          {track.bpm > 0 ? track.bpm.toFixed(0) : '—'}
+        </td>
+
+        {/* Camelot key */}
+        <td className="py-3 px-2 whitespace-nowrap">
           <span
-            className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
-            title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
+            className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold text-white"
+            style={{ backgroundColor: camelotBadgeColor(track.camelot) + '33', color: camelotBadgeColor(track.camelot), border: `1px solid ${camelotBadgeColor(track.camelot)}66` }}
           >
-            {track.genres.slice(0, 2).join(' · ')}
-            {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
+            {track.camelot}
           </span>
-        ) : (
-          <span className="text-[10px] text-[#2a2a3a]">—</span>
-        )}
-      </td>
+        </td>
 
-      <td className="py-3 pl-2 pr-4 text-right">
-        <div className="flex items-center justify-end gap-1">
-          <button
-            onClick={onSwap}
-            title="Swap track"
-            aria-label="Swap track"
-            className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-          >
-            <RefreshCcw size={14} />
-          </button>
-          <button
-            onClick={onRemove}
-            title="Remove track"
-            aria-label="Remove track"
-            className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors cursor-pointer"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      </td>
-    </tr>
+        {/* Key name */}
+        <td className="py-3 px-2 text-[#64748b] text-xs whitespace-nowrap hidden lg:table-cell">
+          {track.key}
+        </td>
+
+        {/* Energy bar */}
+        <td className="py-3 px-2 pr-4">
+          <div className="flex items-center gap-2">
+            <div className="w-16 h-2 rounded-full bg-[#1e1e2e] overflow-hidden flex-shrink-0">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${(track.energy * 100).toFixed(1)}%`, backgroundColor: barColor }}
+              />
+            </div>
+            <span className="text-[10px] text-[#475569] tabular-nums w-8">
+              {(track.energy * 100).toFixed(0)}%
+            </span>
+          </div>
+        </td>
+
+        {/* Genre */}
+        <td className="py-3 px-2 hidden xl:table-cell">
+          {track.genres && track.genres.length > 0 ? (
+            <span
+              className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
+              title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
+            >
+              {track.genres.slice(0, 2).join(' · ')}
+              {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
+            </span>
+          ) : (
+            <span className="text-[10px] text-[#2a2a3a]">—</span>
+          )}
+        </td>
+
+        {/* Actions */}
+        <td className="py-3 pl-2 pr-4 text-right">
+          <div className="flex items-center justify-end gap-1">
+            {isLocal && isMp3 && (
+              <button
+                onClick={openEdit}
+                title="Edit tags"
+                aria-label="Edit tags"
+                className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+              >
+                <Pencil size={14} />
+              </button>
+            )}
+            <button
+              onClick={onSwap}
+              title="Swap track"
+              aria-label="Swap track"
+              className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+            >
+              <RefreshCcw size={14} />
+            </button>
+            <button
+              onClick={onRemove}
+              title="Remove track"
+              aria-label="Remove track"
+              className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors cursor-pointer"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </td>
+      </tr>
+
+      {/* Inline edit row */}
+      {editing && (
+        <tr className="border-b border-[#1e1e2e] bg-[#0d0d14]">
+          <td colSpan={9} className="px-4 py-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1 min-w-[160px]">
+                <label className="text-[10px] text-[#475569] uppercase tracking-wider">Title</label>
+                <input
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
+                />
+              </div>
+              <div className="flex flex-col gap-1 min-w-[140px]">
+                <label className="text-[10px] text-[#475569] uppercase tracking-wider">Artist</label>
+                <input
+                  value={editArtist}
+                  onChange={e => setEditArtist(e.target.value)}
+                  className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
+                />
+              </div>
+              <div className="flex flex-col gap-1 min-w-[160px]">
+                <label className="text-[10px] text-[#475569] uppercase tracking-wider">Genre <span className="normal-case text-[#2a2a3a]">(comma-separated)</span></label>
+                <input
+                  value={editGenre}
+                  onChange={e => setEditGenre(e.target.value)}
+                  placeholder="e.g. house, deep house"
+                  className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
+                />
+              </div>
+              <div className="flex flex-col gap-1 w-20">
+                <label className="text-[10px] text-[#475569] uppercase tracking-wider">BPM</label>
+                <input
+                  type="number"
+                  value={editBpm}
+                  onChange={e => setEditBpm(e.target.value)}
+                  className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
+                />
+              </div>
+              <div className="flex items-end gap-2 pb-0.5">
+                <button
+                  onClick={() => void saveEdit()}
+                  disabled={saving}
+                  className="flex items-center gap-1 px-3 py-1 rounded-md bg-[#7c3aed] text-white text-xs font-medium hover:bg-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  <Check size={12} />
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  onClick={cancelEdit}
+                  disabled={saving}
+                  className="flex items-center gap-1 px-3 py-1 rounded-md border border-[#2a2a3a] text-[#94a3b8] text-xs hover:text-[#e2e8f0] hover:border-[#475569] disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  <X size={12} />
+                  Cancel
+                </button>
+                {saveError && <span className="text-xs text-[#ef4444]">{saveError}</span>}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

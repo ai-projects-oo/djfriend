@@ -2,7 +2,12 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 
-const SETTINGS_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'djfriend')
+function getSettingsDir(): string {
+  if (process.platform === 'win32') return path.join(process.env.APPDATA ?? os.homedir(), 'djfriend')
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'djfriend')
+  return path.join(os.homedir(), '.config', 'djfriend')
+}
+const SETTINGS_DIR = getSettingsDir()
 const SETTINGS_PATH = path.join(SETTINGS_DIR, 'settings.json')
 
 export interface Settings {

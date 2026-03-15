@@ -15,14 +15,27 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "npm run build && tsx electron/main.ts",
-    "dist": "npm run build && tsc -p tsconfig.electron.json && electron-builder --mac"
+    "dist": "npm run build && tsc -p tsconfig.electron.json && electron-packager . DJFriend --platform=darwin --arch=universal --out=release --overwrite --ignore='^/release' --ignore='^/.git'"
   },
   "build": {
     "appId": "com.djfriend.app",
     "productName": "DJFriend",
     "mac": {
       "category": "public.app-category.music",
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }]
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
     },
     "files": [
       "dist/**",
@@ -59,6 +72,7 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@electron/packager": "^19.1.0",
     "@eslint/js": "^9.39.1",
     "@tailwindcss/vite": "^4.2.0",
     "@types/node": "^24.10.13",
@@ -67,7 +81,7 @@
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.24",
     "electron": "^41.0.2",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^24.13.3",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

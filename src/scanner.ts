@@ -2,20 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import * as mm from 'music-metadata';
 import type { ScannedTrack } from './types';
+import { parseFilename } from './parse-filename.js';
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus']);
-
-function parseFilename(filename: string): { artist: string | null; title: string } {
-  const name = path.basename(filename, path.extname(filename));
-  const dashIndex = name.indexOf(' - ');
-  if (dashIndex !== -1) {
-    return {
-      artist: name.slice(0, dashIndex).trim(),
-      title: name.slice(dashIndex + 3).trim(),
-    };
-  }
-  return { artist: null, title: name.trim() };
-}
 
 export async function scanFolder(folderPath: string): Promise<ScannedTrack[]> {
   const entries = fs.readdirSync(folderPath);

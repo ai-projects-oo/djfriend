@@ -1,7 +1,5 @@
 import type { SetTrack } from '../types';
 
-declare const __SPOTIFY_CLIENT_ID__: string;
-
 const STORAGE_PREFIX = 'djfriend-spotify';
 const TOKEN_KEY = `${STORAGE_PREFIX}-token`;
 const TOKEN_EXPIRY_KEY = `${STORAGE_PREFIX}-token-expiry`;
@@ -67,9 +65,16 @@ export function clearPendingExport(): void {
   sessionStorage.removeItem(PENDING_NAME_KEY);
 }
 
+async function fetchClientId(): Promise<string> {
+  const res = await fetch('/api/settings');
+  if (!res.ok) throw new Error('Could not read settings.');
+  const data = await res.json() as { spotifyClientId: string };
+  if (!data.spotifyClientId) throw new Error('Spotify Client ID is not configured. Open Settings to add it.');
+  return data.spotifyClientId;
+}
+
 export async function redirectToSpotifyLogin(): Promise<void> {
-  const clientId = __SPOTIFY_CLIENT_ID__;
-  if (!clientId) throw new Error('SPOTIFY_CLIENT_ID is not configured in .env');
+  const clientId = await fetchClientId();
 
   const verifier = generateRandomString(128);
   const challenge = await generateCodeChallenge(verifier);
@@ -92,8 +97,9 @@ export async function exchangeCodeForToken(code: string): Promise<{ access_token
   if (!verifier) throw new Error('No code verifier found. Please try again.');
   sessionStorage.removeItem(VERIFIER_KEY);
 
+  const clientId = await fetchClientId();
   const body = new URLSearchParams({
-    client_id: __SPOTIFY_CLIENT_ID__,
+    client_id: clientId,
     grant_type: 'authorization_code',
     code,
     redirect_uri: getRedirectUri(),

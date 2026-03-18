@@ -40,7 +40,6 @@ export default defineConfig({
   ],
   define: {
     __SONGS_FOLDER__: JSON.stringify(songsFolder ?? ''),
-    __SPOTIFY_CLIENT_ID__: JSON.stringify(''),
   },
   server: { port: 8888, host: '127.0.0.1' },
   preview: { port: 8888, host: '127.0.0.1' },

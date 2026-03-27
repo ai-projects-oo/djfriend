@@ -1,6 +1,9 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import { config } from 'dotenv'
+
+config() // load .env if present
 
 function getSettingsDir(): string {
   if (process.platform === 'win32') return path.join(process.env.APPDATA ?? os.homedir(), 'djfriend')
@@ -19,11 +22,19 @@ export interface Settings {
 }
 
 export function readSettings(): Partial<Settings> {
+  // Env vars are the baseline — settings.json values override them
+  const fromEnv: Partial<Settings> = {
+    ...(process.env.SPOTIFY_CLIENT_ID ? { spotifyClientId: process.env.SPOTIFY_CLIENT_ID } : {}),
+    ...(process.env.SPOTIFY_CLIENT_SECRET ? { spotifyClientSecret: process.env.SPOTIFY_CLIENT_SECRET } : {}),
+    ...(process.env.SONGS_FOLDER ? { musicFolder: process.env.SONGS_FOLDER } : {}),
+    ...(process.env.GROQ_API_KEY ? { groqApiKey: process.env.GROQ_API_KEY } : {}),
+  }
   try {
-    if (!fs.existsSync(SETTINGS_PATH)) return {}
-    return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')) as Partial<Settings>
+    if (!fs.existsSync(SETTINGS_PATH)) return fromEnv
+    const fromFile = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')) as Partial<Settings>
+    return { ...fromEnv, ...fromFile }
   } catch {
-    return {}
+    return fromEnv
   }
 }
 

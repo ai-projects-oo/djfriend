@@ -38,6 +38,11 @@ Get credentials at [developer.spotify.com](https://developer.spotify.com) — cr
 
 `results.json` is written to `SONGS_FOLDER`. Tracks not found on Spotify have `spotifyId: null` and null audio fields. Audio features (`bpm`, `key`, `camelot`, `energy`) will be `null` if the Spotify app doesn't have extended quota access to the audio features endpoint.
 
+## Documentation
+
+- `docs/FUTURE.md` — AI features roadmap and phased development plan
+- `docs/AGENTS.md` — AI agent team roles, authority, and conventions
+
 ## Notes
 
 - Requests are rate-limited with a 200ms delay between tracks to stay within Spotify's ~100 req/min limit

@@ -7,6 +7,7 @@ import type {
   HistoryEntry,
   ImportEntry,
   ImportTrack,
+  TagFilters,
 } from "./types";
 import { generateSet } from "./lib/setGenerator";
 import { camelotHarmonyScore, isHarmonicWarning } from "./lib/camelot";
@@ -52,13 +53,20 @@ type ImportStatus =
   | { phase: "loading"; loaded: number; total: number }
   | { phase: "error"; message: string };
 
+const TAG_GROUPS: { key: keyof TagFilters; label: string; color: { border: string; text: string; activeBg: string } }[] = [
+  { key: 'vibeTags',        label: 'Vibe',                color: { border: '#7c3aed66', text: '#a78bfa', activeBg: '#7c3aed33' } },
+  { key: 'moodTags',        label: 'Mood',                color: { border: '#1d4ed866', text: '#60a5fa', activeBg: '#1d4ed833' } },
+  { key: 'venueTags',       label: 'Venue',               color: { border: '#06522066', text: '#34d399', activeBg: '#06522033' } },
+  { key: 'timeOfNightTags', label: 'Time',                color: { border: '#92400e66', text: '#fbbf24', activeBg: '#92400e33' } },
+  { key: 'vocalTypes',      label: 'Vocal/Instrumental',  color: { border: '#4a044e66', text: '#e879f9', activeBg: '#4a044e33' } },
+];
+
 const DEFAULT_PREFS: DJPreferences = {
   setDuration: 60,
   venueType: "Club",
-  audienceAgeRange: "25–35",
-  audiencePurpose: "Dancing",
-  occasionType: "Peak time",
+  setPhase: "Peak time",
   genre: "Any",
+  tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] },
 };
 
 function isValidSong(obj: unknown): obj is Song {
@@ -872,6 +880,26 @@ export default function App() {
     new Set(library.flatMap((song) => song.genres).filter(Boolean)),
   ).sort((a, b) => a.localeCompare(b));
 
+  const availableTags = (() => {
+    const vibe = new Set<string>(), mood = new Set<string>(), vocal = new Set<string>();
+    const venue = new Set<string>(), time = new Set<string>();
+    for (const s of library) {
+      if (!s.semanticTags) continue;
+      s.semanticTags.vibeTags.forEach(t => vibe.add(t));
+      s.semanticTags.moodTags.forEach(t => mood.add(t));
+      vocal.add(s.semanticTags.vocalType);
+      s.semanticTags.venueTags.forEach(t => venue.add(t));
+      s.semanticTags.timeOfNightTags.forEach(t => time.add(t));
+    }
+    return {
+      vibeTags: [...vibe].sort(),
+      moodTags: [...mood].sort(),
+      vocalTypes: [...vocal].sort(),
+      venueTags: [...venue].sort(),
+      timeOfNightTags: [...time].sort(),
+    };
+  })();
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
       {/* Header */}
@@ -1004,7 +1032,7 @@ export default function App() {
             {/* Preferences panel */}
             <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
               <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
-                DJ Preferences
+                Set Preferences
               </h2>
               <PreferencesForm
                 prefs={prefs}
@@ -1028,6 +1056,56 @@ export default function App() {
                 )}
               </div>
               <EnergyCurveEditor points={curve} onChange={handleCurveChange} />
+
+              {/* AI Tag Filters */}
+              {(availableTags.vibeTags.length + availableTags.moodTags.length + availableTags.venueTags.length + availableTags.timeOfNightTags.length + availableTags.vocalTypes.length) > 0 && (
+                <div className="mt-4 pt-4 border-t border-[#1e1e2e] flex flex-col gap-3">
+                  {TAG_GROUPS.map(({ key, label, color }) => {
+                    const tags = availableTags[key] as string[];
+                    if (tags.length === 0) return null;
+                    const selectedTags = prefs.tagFilters[key] as string[];
+                    return (
+                      <div key={key}>
+                        <span className="text-[9px] uppercase tracking-widest text-[#334155] block mb-1.5">{label}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {tags.map(tag => {
+                            const active = selectedTags.includes(tag);
+                            return (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() => {
+                                  const current = prefs.tagFilters[key] as string[];
+                                  const next = current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag];
+                                  setPrefs(p => ({ ...p, tagFilters: { ...p.tagFilters, [key]: next } }));
+                                }}
+                                className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors cursor-pointer"
+                                style={{
+                                  backgroundColor: active ? color.activeBg : 'transparent',
+                                  color: color.text,
+                                  border: `1px solid ${active ? color.border : '#2a2a3a'}`,
+                                  opacity: active ? 1 : 0.6,
+                                }}
+                              >
+                                {tag}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {(prefs.tagFilters.vibeTags.length + prefs.tagFilters.moodTags.length + prefs.tagFilters.vocalTypes.length + prefs.tagFilters.venueTags.length + prefs.tagFilters.timeOfNightTags.length) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPrefs(p => ({ ...p, tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] } }))}
+                      className="text-[10px] text-[#475569] hover:text-[#94a3b8] transition-colors text-left cursor-pointer"
+                    >
+                      Clear all tags
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1104,9 +1182,7 @@ export default function App() {
                 const prefTags = [
                   `${entry.prefs.setDuration} min`,
                   entry.prefs.venueType,
-                  entry.prefs.audienceAgeRange,
-                  entry.prefs.audiencePurpose,
-                  entry.prefs.occasionType,
+                  entry.prefs.setPhase,
                   ...(entry.prefs.genre !== "Any" ? [entry.prefs.genre] : []),
                 ];
 

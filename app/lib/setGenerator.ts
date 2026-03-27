@@ -1,4 +1,4 @@
-import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, OccasionType, AudiencePurpose } from '../types';
+import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, SetPhase, TagFilters } from '../types';
 import { camelotHarmonyScore, isHarmonicWarning } from './camelot';
 import { sampleCurve } from './curveInterpolation';
 
@@ -7,35 +7,23 @@ const GAP_SECONDS = 10;
 // ─── Genre affinity map ────────────────────────────────────────────────────────
 
 type AffinityKey =
-  | 'club-dancing-peak'
+  | 'club-peak'
   | 'bar-background'
   | 'wedding-birthday'
   | 'festival';
 
 const GENRE_AFFINITY: Record<AffinityKey, string[]> = {
-  'club-dancing-peak': ['techno', 'house', 'electronic', 'dance', 'edm', 'trance', 'disco'],
+  'club-peak': ['techno', 'house', 'electronic', 'dance', 'edm', 'trance', 'disco'],
   'bar-background': ['soul', 'jazz', 'indie', 'chill', 'lounge', 'r&b', 'neo-soul'],
   'wedding-birthday': ['pop', 'classic soul', 'funk', 'motown', 'disco', 'r&b', 'soul'],
   festival: ['electronic', 'rock', 'indie', 'alternative', 'edm', 'dance'],
 };
 
-function getAffinityKey(
-  venue: VenueType,
-  purpose: AudiencePurpose,
-  occasion: OccasionType,
-): AffinityKey | null {
-  if (venue === 'Club' && purpose === 'Dancing' && occasion === 'Peak time') {
-    return 'club-dancing-peak';
-  }
-  if (venue === 'Bar' && purpose === 'Background') {
-    return 'bar-background';
-  }
-  if (venue === 'Wedding' || occasion === 'Birthday') {
-    return 'wedding-birthday';
-  }
-  if (venue === 'Festival') {
-    return 'festival';
-  }
+function getAffinityKey(venue: VenueType, setPhase: SetPhase): AffinityKey | null {
+  if (venue === 'Club' && setPhase === 'Peak time') return 'club-peak';
+  if (venue === 'Bar') return 'bar-background';
+  if (venue === 'Wedding') return 'wedding-birthday';
+  if (venue === 'Festival') return 'festival';
   return null;
 }
 
@@ -56,21 +44,37 @@ const VENUE_TAG_MAP: Partial<Record<VenueType, string[]>> = {
   'Private event': ['intimate'],
 }
 
-const TIME_TAG_MAP: Partial<Record<OccasionType, string[]>> = {
+const TIME_TAG_MAP: Partial<Record<SetPhase, string[]>> = {
   'Warm-up': ['opening', 'warm-up'],
   'Peak time': ['peak-time'],
   'Cool-down': ['closing', 'after-hours'],
   'After-party': ['after-hours'],
 }
 
-function semanticAffinityBonus(song: Song, venue: VenueType, occasion: OccasionType): number {
+function semanticAffinityBonus(song: Song, venue: VenueType, setPhase: SetPhase): number {
   if (!song.semanticTags) return 0
   const { venueTags, timeOfNightTags } = song.semanticTags
   const expectedVenueTags = VENUE_TAG_MAP[venue] ?? []
-  const expectedTimeTags = TIME_TAG_MAP[occasion] ?? []
+  const expectedTimeTags = TIME_TAG_MAP[setPhase] ?? []
   const venueMatch = expectedVenueTags.length > 0 && venueTags.some(t => expectedVenueTags.includes(t))
   const timeMatch = expectedTimeTags.length > 0 && timeOfNightTags.some(t => expectedTimeTags.includes(t))
   return (venueMatch ? 0.05 : 0) + (timeMatch ? 0.05 : 0)
+}
+
+function tagFilterBonus(song: Song, filters: TagFilters): number {
+  const { vibeTags, moodTags, vocalTypes, venueTags, timeOfNightTags } = filters;
+  const hasAny = vibeTags.length + moodTags.length + vocalTypes.length + venueTags.length + timeOfNightTags.length > 0;
+  if (!hasAny) return 0;
+  if (!song.semanticTags) return 0;
+  const t = song.semanticTags;
+  let matches = 0;
+  let categories = 0;
+  if (vibeTags.length > 0) { categories++; if (t.vibeTags.some(v => vibeTags.includes(v))) matches++; }
+  if (moodTags.length > 0) { categories++; if (t.moodTags.some(v => moodTags.includes(v))) matches++; }
+  if (vocalTypes.length > 0) { categories++; if (vocalTypes.includes(t.vocalType)) matches++; }
+  if (venueTags.length > 0) { categories++; if (t.venueTags.some(v => venueTags.includes(v))) matches++; }
+  if (timeOfNightTags.length > 0) { categories++; if (t.timeOfNightTags.some(v => timeOfNightTags.includes(v))) matches++; }
+  return (matches / categories) * 0.2;
 }
 
 function matchesGenre(song: Song, genre: string): boolean {
@@ -107,11 +111,7 @@ export function generateSet(
   const trackCount = Math.max(1, Math.floor(setDurationSeconds / trackSlotDuration));
   const actualCount = Math.min(trackCount, candidatePool.length);
 
-  const affinityKey = getAffinityKey(
-    prefs.venueType,
-    prefs.audiencePurpose,
-    prefs.occasionType,
-  );
+  const affinityKey = getAffinityKey(prefs.venueType, prefs.setPhase);
 
   const result: SetTrack[] = [];
   const used = new Set<string>();
@@ -131,8 +131,6 @@ export function generateSet(
     // 3. Energy-first selection:
     //    Sort all available songs by energy proximity, take the closest K as the
     //    energy neighbourhood, then pick the best harmonic/BPM fit among them.
-    //    This makes energy the primary structural constraint rather than just
-    //    one term in a blended score.
     available.sort(
       (a, b) => Math.abs(a.energy - targetEnergy) - Math.abs(b.energy - targetEnergy),
     );
@@ -149,9 +147,9 @@ export function generateSet(
       const bpmScore =
         prevBpm !== null ? 1 - clamp(Math.abs(song.bpm - prevBpm) / 20, 0, 1) : 1.0;
       const affinityBonus = genreAffinityBonus(song, affinityKey);
-
-      const semBonus = semanticAffinityBonus(song, prefs.venueType, prefs.occasionType);
-      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus + semBonus;
+      const semBonus = semanticAffinityBonus(song, prefs.venueType, prefs.setPhase);
+      const tagBonus = tagFilterBonus(song, prefs.tagFilters);
+      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus + semBonus + tagBonus;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;

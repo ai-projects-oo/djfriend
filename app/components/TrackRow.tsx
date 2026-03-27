@@ -175,11 +175,6 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
           </span>
         </td>
 
-        {/* Key name */}
-        <td className="py-3 px-2 text-[#64748b] text-xs whitespace-nowrap hidden lg:table-cell">
-          {track.key}
-        </td>
-
         {/* Energy bar */}
         <td className="py-3 px-2 pr-4">
           <div className="flex items-center gap-2">
@@ -256,7 +251,7 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
       {/* AI tags row */}
       {showTags && track.semanticTags && (
         <tr className="border-b border-[#1e1e2e] bg-[#0a0a12]">
-          <td colSpan={9} className="px-4 py-2.5">
+          <td colSpan={8} className="px-4 py-2.5">
             <div className="flex flex-wrap gap-x-4 gap-y-2">
               {track.semanticTags.vibeTags.length > 0 && (
                 <div className="flex items-center gap-1.5">
@@ -294,7 +289,7 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
       {/* Inline edit row */}
       {editing && (
         <tr className="border-b border-[#1e1e2e] bg-[#0d0d14]">
-          <td colSpan={9} className="px-4 py-3">
+          <td colSpan={8} className="px-4 py-3">
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex flex-col gap-1 min-w-[160px]">
                 <label className="text-[10px] text-[#475569] uppercase tracking-wider">Title</label>

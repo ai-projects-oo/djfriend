@@ -43,28 +43,24 @@ export type VenueType =
   | 'Corporate'
   | 'Wedding';
 
-export type AudienceAgeRange = '18–25' | '25–35' | '35–50' | 'Mixed';
-
-export type AudiencePurpose = 'Dancing' | 'Background' | 'Celebration' | 'Mixed';
-
-export type OccasionType =
-  | 'Birthday'
-  | 'Weekend night'
-  | 'Midweek'
-  | 'After-party'
-  | 'Warm-up'
-  | 'Peak time'
-  | 'Cool-down';
+export type SetPhase = 'Warm-up' | 'Peak time' | 'Cool-down' | 'After-party';
 
 export type ArcPreset = 'Build-up' | 'Peak' | 'Valley' | 'Steady' | 'W-shape';
+
+export interface TagFilters {
+  vibeTags: string[];
+  moodTags: string[];
+  vocalTypes: string[];
+  venueTags: string[];
+  timeOfNightTags: string[];
+}
 
 export interface DJPreferences {
   setDuration: number; // minutes
   venueType: VenueType;
-  audienceAgeRange: AudienceAgeRange;
-  audiencePurpose: AudiencePurpose;
-  occasionType: OccasionType;
+  setPhase: SetPhase;
   genre: string;
+  tagFilters: TagFilters;
 }
 
 export interface HistoryEntry {

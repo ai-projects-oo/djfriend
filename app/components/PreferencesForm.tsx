@@ -1,4 +1,4 @@
-import type { DJPreferences, VenueType, AudienceAgeRange, AudiencePurpose, OccasionType } from '../types';
+import type { DJPreferences, VenueType, SetPhase } from '../types';
 
 interface Props {
   prefs: DJPreferences;
@@ -9,11 +9,7 @@ interface Props {
 }
 
 const VENUE_TYPES: VenueType[] = ['Club', 'Bar', 'Festival', 'Private event', 'Corporate', 'Wedding'];
-const AGE_RANGES: AudienceAgeRange[] = ['18–25', '25–35', '35–50', 'Mixed'];
-const PURPOSES: AudiencePurpose[] = ['Dancing', 'Background', 'Celebration', 'Mixed'];
-const OCCASIONS: OccasionType[] = [
-  'Birthday', 'Weekend night', 'Midweek', 'After-party', 'Warm-up', 'Peak time', 'Cool-down',
-];
+const SET_PHASES: SetPhase[] = ['Warm-up', 'Peak time', 'Cool-down', 'After-party'];
 
 const labelClass = 'block text-xs font-medium text-[#94a3b8] mb-1 uppercase tracking-wide';
 const inputClass =
@@ -39,7 +35,7 @@ export default function PreferencesForm({ prefs, availableGenres, onChange, onGe
       </div>
 
       <div>
-        <label className={labelClass}>Venue Type</label>
+        <label className={labelClass}>Venue</label>
         <select
           value={prefs.venueType}
           onChange={(e) => set('venueType', e.target.value as VenueType)}
@@ -52,39 +48,13 @@ export default function PreferencesForm({ prefs, availableGenres, onChange, onGe
       </div>
 
       <div>
-        <label className={labelClass}>Audience Age Range</label>
+        <label className={labelClass}>Set Phase</label>
         <select
-          value={prefs.audienceAgeRange}
-          onChange={(e) => set('audienceAgeRange', e.target.value as AudienceAgeRange)}
+          value={prefs.setPhase}
+          onChange={(e) => set('setPhase', e.target.value as SetPhase)}
           className={inputClass}
         >
-          {AGE_RANGES.map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={labelClass}>Audience Purpose</label>
-        <select
-          value={prefs.audiencePurpose}
-          onChange={(e) => set('audiencePurpose', e.target.value as AudiencePurpose)}
-          className={inputClass}
-        >
-          {PURPOSES.map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={labelClass}>Occasion Type</label>
-        <select
-          value={prefs.occasionType}
-          onChange={(e) => set('occasionType', e.target.value as OccasionType)}
-          className={inputClass}
-        >
-          {OCCASIONS.map((v) => (
+          {SET_PHASES.map((v) => (
             <option key={v} value={v}>{v}</option>
           ))}
         </select>

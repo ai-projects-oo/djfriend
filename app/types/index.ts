@@ -1,3 +1,11 @@
+export interface SemanticTags {
+  vibeTags: string[];        // e.g. ["euphoric", "driving"]
+  moodTags: string[];        // e.g. ["dark", "uplifting"]
+  vocalType: 'vocal' | 'instrumental' | 'mostly-vocal';
+  venueTags: string[];       // e.g. ["club", "festival"]
+  timeOfNightTags: string[]; // e.g. ["peak-time", "closing"]
+}
+
 export interface Song {
   file: string;
   filePath?: string;
@@ -13,6 +21,7 @@ export interface Song {
   energy: number; // 0.0 – 1.0
   genres: string[];
   genresFromSpotify?: boolean; // true = genres from Spotify API (not final), absent/false = from ID3 tags
+  semanticTags?: SemanticTags;
 }
 
 export interface SetTrack extends Song {

@@ -48,6 +48,31 @@ function genreAffinityBonus(song: Song, affinityKey: AffinityKey | null): number
   return hasMatch ? 0.15 : 0;
 }
 
+const VENUE_TAG_MAP: Partial<Record<VenueType, string[]>> = {
+  Club: ['club', 'warehouse'],
+  Festival: ['festival', 'outdoor'],
+  Bar: ['bar', 'lounge', 'intimate'],
+  Wedding: ['intimate'],
+  'Private event': ['intimate'],
+}
+
+const TIME_TAG_MAP: Partial<Record<OccasionType, string[]>> = {
+  'Warm-up': ['opening', 'warm-up'],
+  'Peak time': ['peak-time'],
+  'Cool-down': ['closing', 'after-hours'],
+  'After-party': ['after-hours'],
+}
+
+function semanticAffinityBonus(song: Song, venue: VenueType, occasion: OccasionType): number {
+  if (!song.semanticTags) return 0
+  const { venueTags, timeOfNightTags } = song.semanticTags
+  const expectedVenueTags = VENUE_TAG_MAP[venue] ?? []
+  const expectedTimeTags = TIME_TAG_MAP[occasion] ?? []
+  const venueMatch = expectedVenueTags.length > 0 && venueTags.some(t => expectedVenueTags.includes(t))
+  const timeMatch = expectedTimeTags.length > 0 && timeOfNightTags.some(t => expectedTimeTags.includes(t))
+  return (venueMatch ? 0.05 : 0) + (timeMatch ? 0.05 : 0)
+}
+
 function matchesGenre(song: Song, genre: string): boolean {
   if (genre === 'Any') return true;
   const needle = genre.toLowerCase();
@@ -125,7 +150,8 @@ export function generateSet(
         prevBpm !== null ? 1 - clamp(Math.abs(song.bpm - prevBpm) / 20, 0, 1) : 1.0;
       const affinityBonus = genreAffinityBonus(song, affinityKey);
 
-      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus;
+      const semBonus = semanticAffinityBonus(song, prefs.venueType, prefs.occasionType);
+      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus + semBonus;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;

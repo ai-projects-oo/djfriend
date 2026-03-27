@@ -32,8 +32,29 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+const TAG_COLORS: Record<string, { bg: string; text: string }> = {
+  vibe:  { bg: '#7c3aed22', text: '#a78bfa' },
+  mood:  { bg: '#1d4ed822', text: '#60a5fa' },
+  venue: { bg: '#06522022', text: '#34d399' },
+  time:  { bg: '#92400e22', text: '#fbbf24' },
+  vocal: { bg: '#4a044e22', text: '#e879f9' },
+};
+
+function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS }) {
+  const c = TAG_COLORS[type];
+  return (
+    <span
+      className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap"
+      style={{ backgroundColor: c.bg, color: c.text }}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack }: Props) {
   const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
+  const [showTags, setShowTags] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -192,6 +213,16 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
         {/* Actions */}
         <td className="py-3 pl-2 pr-4 text-right">
           <div className="flex items-center justify-end gap-1">
+            {track.semanticTags && (
+              <button
+                onClick={() => setShowTags(s => !s)}
+                title="AI tags"
+                aria-label="Toggle AI tags"
+                className={`px-2 py-1 text-[11px] rounded-md border transition-colors cursor-pointer ${showTags ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#7c3aed] hover:text-[#a78bfa]'}`}
+              >
+                ✦
+              </button>
+            )}
             {isLocal && isMp3 && (
               <button
                 onClick={openEdit}
@@ -221,6 +252,44 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
           </div>
         </td>
       </tr>
+
+      {/* AI tags row */}
+      {showTags && track.semanticTags && (
+        <tr className="border-b border-[#1e1e2e] bg-[#0a0a12]">
+          <td colSpan={9} className="px-4 py-2.5">
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {track.semanticTags.vibeTags.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] uppercase tracking-widest text-[#334155]">Vibe</span>
+                  <div className="flex gap-1 flex-wrap">{track.semanticTags.vibeTags.map(t => <TagPill key={t} label={t} type="vibe" />)}</div>
+                </div>
+              )}
+              {track.semanticTags.moodTags.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] uppercase tracking-widest text-[#334155]">Mood</span>
+                  <div className="flex gap-1 flex-wrap">{track.semanticTags.moodTags.map(t => <TagPill key={t} label={t} type="mood" />)}</div>
+                </div>
+              )}
+              {track.semanticTags.venueTags.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] uppercase tracking-widest text-[#334155]">Venue</span>
+                  <div className="flex gap-1 flex-wrap">{track.semanticTags.venueTags.map(t => <TagPill key={t} label={t} type="venue" />)}</div>
+                </div>
+              )}
+              {track.semanticTags.timeOfNightTags.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] uppercase tracking-widest text-[#334155]">Time</span>
+                  <div className="flex gap-1 flex-wrap">{track.semanticTags.timeOfNightTags.map(t => <TagPill key={t} label={t} type="time" />)}</div>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] uppercase tracking-widest text-[#334155]">Vocal</span>
+                <TagPill label={track.semanticTags.vocalType} type="vocal" />
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
 
       {/* Inline edit row */}
       {editing && (

@@ -13,6 +13,8 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
   const [hasSecret, setHasSecret] = useState(false)
   const [musicFolder, setMusicFolder] = useState('')
   const [playlistsFolder, setPlaylistsFolder] = useState('')
+  const [groqKey, setGroqKey] = useState('')
+  const [hasGroqKey, setHasGroqKey] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -20,11 +22,12 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     if (!open) return
     fetch('/api/settings')
       .then(r => r.json())
-      .then((d: { spotifyClientId: string; hasSecret: boolean; musicFolder: string; playlistsFolder: string }) => {
+      .then((d: { spotifyClientId: string; hasSecret: boolean; musicFolder: string; playlistsFolder: string; hasGroqKey: boolean }) => {
         setClientId(d.spotifyClientId ?? '')
         setHasSecret(d.hasSecret)
         setMusicFolder(d.musicFolder ?? '')
         setPlaylistsFolder(d.playlistsFolder ?? '')
+        setHasGroqKey(d.hasGroqKey ?? false)
       })
       .catch(() => {})
   }, [open])
@@ -37,6 +40,7 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     try {
       const body: Record<string, string> = { spotifyClientId: clientId.trim(), musicFolder: musicFolder.trim(), playlistsFolder: playlistsFolder.trim() }
       if (clientSecret.trim()) body.spotifyClientSecret = clientSecret.trim()
+      if (groqKey.trim()) body.groqApiKey = groqKey.trim()
       const r = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -45,6 +49,8 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
       if (!r.ok) throw new Error('Save failed')
       setClientSecret('')
       setHasSecret(true)
+      setGroqKey('')
+      if (groqKey.trim()) setHasGroqKey(true)
       onSaved()
       onClose()
     } catch {
@@ -122,6 +128,30 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
               onChange={e => setClientSecret(e.target.value)}
               placeholder={hasSecret ? 'Enter new secret to replace' : '32-character hex string'}
               className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">AI</h3>
+          <p className="text-xs text-[#64748b] leading-relaxed">
+            Get a free API key at{' '}
+            <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-[#7c3aed] hover:underline">
+              console.groq.com
+            </a>
+            {' '}— no credit card required.
+          </p>
+          <div>
+            <label className="block text-xs text-[#64748b] mb-1.5">
+              Groq API Key{hasGroqKey && !groqKey && <span className="ml-2 text-[#22c55e]">✓ saved</span>}
+            </label>
+            <input
+              type="password"
+              value={groqKey}
+              onChange={e => setGroqKey(e.target.value)}
+              placeholder={hasGroqKey ? 'Enter new key to replace' : 'gsk_…'}
+              className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+              aria-label="Groq API key"
             />
           </div>
         </div>

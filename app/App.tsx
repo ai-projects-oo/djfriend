@@ -17,7 +17,7 @@ import EnergyCurveEditor, {
 import PreferencesForm from "./components/PreferencesForm";
 import SetTracklist from "./components/SetTracklist";
 import SettingsModal from "./components/SettingsModal";
-import { downloadM3U } from "./lib/m3uExport";
+import { downloadM3U, generateM3U } from "./lib/m3uExport";
 import {
   getStoredToken,
   storeToken,
@@ -166,6 +166,9 @@ export default function App() {
   const [openStoreLinkKey, setOpenStoreLinkKey] = useState<string | null>(null);
   const storeLinkRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [folderPath, setFolderPath] = useState('');
+  const [playlistsFolder, setPlaylistsFolder] = useState('');
+  const [m3uSavedPath, setM3uSavedPath] = useState<string | null>(null);
 
   useEffect(() => {
     if (!openHistoryExportId) return;
@@ -232,6 +235,18 @@ export default function App() {
         // Silently ignore — user can load manually
       });
   }, []);
+
+  const loadSettings = useCallback(() => {
+    fetch('/api/settings')
+      .then(r => r.json() as Promise<{ musicFolder?: string; playlistsFolder?: string }>)
+      .then(d => {
+        if (d.musicFolder) setFolderPath(prev => prev || d.musicFolder!)
+        if (d.playlistsFolder !== undefined) setPlaylistsFolder(d.playlistsFolder)
+      })
+      .catch(() => {})
+  }, []);
+
+  useEffect(() => { loadSettings() }, [loadSettings]);
 
   // Handle Spotify OAuth callback
   useEffect(() => {
@@ -395,6 +410,55 @@ export default function App() {
     }
   }, []);
 
+  const runFolderAnalysis = useCallback(async (path: string) => {
+    if (!path.trim()) return;
+    setIsAnalyzing(true);
+    setAnalysisProgress({ completed: 0, total: 0 });
+    setError(null);
+    setGeneratedSet([]);
+    try {
+      const response = await fetch('/api/analyze-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderPath: path.trim() }),
+      });
+      if (!response.ok || !response.body) throw new Error('Could not start folder analysis.');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as
+            | { type: 'start'; total: number }
+            | { type: 'progress'; completed: number; total: number }
+            | { type: 'folder_done'; folder: string }
+            | { type: 'done'; songs: unknown; libraryName: string; resultsJson: Record<string, unknown> }
+            | { type: 'error'; message: string };
+          if (event.type === 'start') { setAnalysisProgress({ completed: 0, total: event.total }); continue; }
+          if (event.type === 'progress') { setAnalysisProgress({ completed: event.completed, total: event.total }); continue; }
+          if (event.type === 'error') { setError(event.message); continue; }
+          if (event.type === 'done') {
+            const songs = parseSongs(event.songs);
+            if (!songs) { setError('Analysis completed but returned invalid song data.'); continue; }
+            setLibrary(songs);
+            setLibraryName(`${event.libraryName} (analyzed)`);
+            setError(null);
+          }
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Folder analysis failed.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, []);
+
   const runGenerate = useCallback(
     (songs: Song[], p: DJPreferences, c: CurvePoint[]) => {
       if (songs.length === 0) return;
@@ -536,7 +600,25 @@ export default function App() {
     [swapModal],
   );
 
-  const handleExportM3U = useCallback(() => {
+  const exportM3UToServer = useCallback(async (tracks: SetTrack[], filename: string) => {
+    const content = generateM3U(tracks);
+    try {
+      const r = await fetch('/api/export-m3u', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, filename }),
+      });
+      const data = await r.json() as { ok?: boolean; path?: string; error?: string };
+      if (data.ok && data.path) {
+        setM3uSavedPath(data.path);
+        setTimeout(() => setM3uSavedPath(null), 4000);
+        return true;
+      }
+    } catch { /* fall through */ }
+    return false;
+  }, []);
+
+  const handleExportM3U = useCallback(async () => {
     if (generatedSet.length === 0) return;
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
@@ -550,8 +632,13 @@ export default function App() {
       curve: curve.map((p) => ({ ...p })),
     };
     setHistory((prev) => [entry, ...prev]);
-    downloadM3U(generatedSet, `${name}.m3u`);
-  }, [generatedSet, prefs, curve]);
+    if (playlistsFolder) {
+      const saved = await exportM3UToServer(generatedSet, `${name}.m3u`);
+      if (!saved) downloadM3U(generatedSet, `${name}.m3u`);
+    } else {
+      downloadM3U(generatedSet, `${name}.m3u`);
+    }
+  }, [generatedSet, prefs, curve, playlistsFolder, exportM3UToServer]);
 
   const handleRenameEntry = useCallback((id: string, newName: string) => {
     setHistory((prev) =>
@@ -880,14 +967,33 @@ export default function App() {
 
       {activeTab === "Generator" && library.length === 0 && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
-          <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4 text-sm text-[#94a3b8]">
-            No library loaded. Click{" "}
-            <button
-              onClick={openPlaylistPicker}
-              className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
-            >
-              Analyze Apple Music
-            </button>{" "}
+          <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={folderPath}
+                onChange={e => setFolderPath(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') void runFolderAnalysis(folderPath) }}
+                placeholder="/path/to/music folder"
+                className="flex-1 rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+              />
+              <button
+                onClick={() => void runFolderAnalysis(folderPath)}
+                disabled={isAnalyzing || !folderPath.trim()}
+                className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAnalyzing ? 'Analyzing…' : 'Analyze Folder'}
+              </button>
+            </div>
+            <p className="text-xs text-[#475569] mt-2">
+              Or{" "}
+              <button
+                onClick={openPlaylistPicker}
+                className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
+              >
+                Analyze Apple Music
+              </button>
+            </p>
           </div>
         </div>
       )}
@@ -1108,7 +1214,13 @@ export default function App() {
                           <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
                             <button
                               onClick={() => {
-                                downloadM3U(entry.tracks, `${entry.name}.m3u`);
+                                if (playlistsFolder) {
+                                  void exportM3UToServer(entry.tracks, `${entry.name}.m3u`).then(saved => {
+                                    if (!saved) downloadM3U(entry.tracks, `${entry.name}.m3u`);
+                                  });
+                                } else {
+                                  downloadM3U(entry.tracks, `${entry.name}.m3u`);
+                                }
                                 setOpenHistoryExportId(null);
                               }}
                               className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
@@ -1928,8 +2040,14 @@ export default function App() {
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onSaved={() => {}}
+        onSaved={() => { loadSettings() }}
       />
+
+      {m3uSavedPath && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-[#1a1a2e] border border-[#7c3aed] text-[#e2e8f0] text-xs rounded-lg px-4 py-2.5 shadow-lg max-w-sm truncate">
+          Saved to {m3uSavedPath}
+        </div>
+      )}
     </div>
   );
 }

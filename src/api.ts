@@ -11,6 +11,7 @@ import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
+import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
@@ -83,18 +84,6 @@ function isAppSong(value: unknown): value is AppSong {
     typeof v.camelot === 'string' && typeof v.energy === 'number' && Array.isArray(v.genres)
 }
 
-function normalizeBpm(bpm: number, energy: number, genres: string[]): number {
-  const gl = genres.map(g => g.toLowerCase())
-  const hasAny = (terms: string[]) => gl.some(g => terms.some(t => g.includes(t)))
-  const isFastGenre = hasAny(['house', 'techno', 'trance', 'drum and bass', 'dnb', 'jungle', 'hardstyle', 'hardcore', 'gabber', 'neurofunk', 'speed garage', 'edm', 'electronic dance', 'eurodance'])
-  if (isFastGenre) return bpm
-  const isSlowGenre = hasAny(['soul', 'r&b', 'rnb', 'neo soul', 'jazz', 'blues', 'gospel', 'ambient', 'downtempo', 'chill', 'lo-fi', 'lofi', 'classical', 'opera', 'orchestral', 'folk', 'acoustic', 'singer-songwriter', 'country', 'bluegrass', 'bossa nova', 'bolero', 'fado', 'adult contemporary', 'soft rock', 'easy listening', 'reggae', 'dub', 'ska', 'christmas', 'holiday', 'seasonal', 'christian', 'hymn', 'carol'])
-  if ((!isSlowGenre && energy >= 0.50) || bpm <= 100) return bpm
-  if (bpm > 150) { const third = Math.round((bpm / 3) * 10) / 10; if (third >= 50 && third <= 100) return third }
-  const half = Math.round((bpm / 2) * 10) / 10
-  if (half >= 45 && half <= 100) return half
-  return bpm
-}
 
 function readExistingResultsFile(filePath: string): Record<string, AppSong> {
   if (!fs.existsSync(filePath)) return {}
@@ -267,7 +256,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'GET') {
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ spotifyClientId: s.spotifyClientId ?? '', hasSecret: !!s.spotifyClientSecret }))
+      res.end(JSON.stringify({ spotifyClientId: s.spotifyClientId ?? '', hasSecret: !!s.spotifyClientSecret, musicFolder: s.musicFolder ?? '', playlistsFolder: s.playlistsFolder ?? '' }))
       return
     }
     if (req.method === 'POST') {
@@ -275,6 +264,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const updates: Partial<import('./settings.js').Settings> = {}
       if (typeof body.spotifyClientId === 'string') updates.spotifyClientId = body.spotifyClientId.trim()
       if (typeof body.spotifyClientSecret === 'string' && body.spotifyClientSecret.trim()) updates.spotifyClientSecret = body.spotifyClientSecret.trim()
+      if (typeof body.musicFolder === 'string') updates.musicFolder = body.musicFolder.trim()
+      if (typeof body.playlistsFolder === 'string') updates.playlistsFolder = body.playlistsFolder.trim()
       writeSettings(updates)
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))
@@ -290,13 +281,26 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
     try {
       const body = await readJsonBody(req)
-      const folderPath = typeof (body as Record<string, unknown>)?.folderPath === 'string' ? ((body as Record<string, unknown>).folderPath as string).trim() : ''
+      const folderPath = (typeof (body as Record<string, unknown>)?.folderPath === 'string' ? ((body as Record<string, unknown>).folderPath as string).trim() : (readSettings().musicFolder ?? '')).trim()
       if (!folderPath) { writeEvent({ type: 'error', message: 'Missing folderPath.' }); res.end(); return }
       if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) { writeEvent({ type: 'error', message: 'Folder not found.' }); res.end(); return }
       const analysis = await analyzeLibrary(folderPath, path.basename(folderPath), writeEvent)
       writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: path.basename(folderPath), songs: analysis.songs, resultsJson: analysis.resultsJson })
       res.end()
     } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Analysis failed.' }); res.end() }
+  })
+
+  middlewares.use('/api/export-m3u', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    const body = await readJsonBody(req) as { content?: string; filename?: string }
+    const { playlistsFolder } = readSettings()
+    if (!playlistsFolder) { res.statusCode = 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'playlistsFolder not set in settings.' })); return }
+    const filename = (body.filename ?? 'djfriend-set.m3u').replace(/[/\\?%*:|"<>]/g, '-')
+    const outPath = path.join(playlistsFolder, filename)
+    fs.mkdirSync(playlistsFolder, { recursive: true })
+    fs.writeFileSync(outPath, body.content ?? '', 'utf-8')
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: true, path: outPath }))
   })
 
   middlewares.use('/api/analyze-upload', async (req, res, next) => {

@@ -13,6 +13,8 @@ const SETTINGS_PATH = path.join(SETTINGS_DIR, 'settings.json')
 export interface Settings {
   spotifyClientId: string
   spotifyClientSecret: string
+  musicFolder: string
+  playlistsFolder: string
 }
 
 export function readSettings(): Partial<Settings> {

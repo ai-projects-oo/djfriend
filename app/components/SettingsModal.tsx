@@ -11,6 +11,8 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [hasSecret, setHasSecret] = useState(false)
+  const [musicFolder, setMusicFolder] = useState('')
+  const [playlistsFolder, setPlaylistsFolder] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -18,9 +20,11 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     if (!open) return
     fetch('/api/settings')
       .then(r => r.json())
-      .then((d: { spotifyClientId: string; hasSecret: boolean }) => {
+      .then((d: { spotifyClientId: string; hasSecret: boolean; musicFolder: string; playlistsFolder: string }) => {
         setClientId(d.spotifyClientId ?? '')
         setHasSecret(d.hasSecret)
+        setMusicFolder(d.musicFolder ?? '')
+        setPlaylistsFolder(d.playlistsFolder ?? '')
       })
       .catch(() => {})
   }, [open])
@@ -31,7 +35,7 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     setSaving(true)
     setError('')
     try {
-      const body: Record<string, string> = { spotifyClientId: clientId.trim() }
+      const body: Record<string, string> = { spotifyClientId: clientId.trim(), musicFolder: musicFolder.trim(), playlistsFolder: playlistsFolder.trim() }
       if (clientSecret.trim()) body.spotifyClientSecret = clientSecret.trim()
       const r = await fetch('/api/settings', {
         method: 'POST',
@@ -56,7 +60,7 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#0e0e16] shadow-2xl p-6">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-[#e2e8f0]">Spotify Settings</h2>
+          <h2 className="text-base font-semibold text-[#e2e8f0]">Settings</h2>
           <button onClick={onClose} className="text-[#475569] hover:text-[#94a3b8] transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -64,6 +68,31 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
           </button>
         </div>
 
+        <div className="space-y-4 mb-5">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">Folders</h3>
+          <div>
+            <label className="block text-xs text-[#64748b] mb-1.5">Music library folder</label>
+            <input
+              type="text"
+              value={musicFolder}
+              onChange={e => setMusicFolder(e.target.value)}
+              placeholder="/path/to/music"
+              className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-[#64748b] mb-1.5">Playlists folder</label>
+            <input
+              type="text"
+              value={playlistsFolder}
+              onChange={e => setPlaylistsFolder(e.target.value)}
+              placeholder="/path/to/playlists"
+              className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+            />
+          </div>
+        </div>
+
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">Spotify</h3>
         <p className="text-xs text-[#64748b] mb-5 leading-relaxed">
           Create a free app at{' '}
           <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-[#7c3aed] hover:underline">

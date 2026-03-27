@@ -120,61 +120,54 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const decodeAudio: (buf: Buffer) => Promise<AudioBuffer> = require('audio-decode').default;
 
-    let t = Date.now();
     const fileBuffer = fs.readFileSync(filePath);
-    console.error(`  [timing] read file: ${Date.now() - t}ms`);
-
-    t = Date.now();
     const audioBuffer = await decodeAudio(fileBuffer);
-    console.error(`  [timing] decode audio (${audioBuffer.sampleRate}Hz, ${audioBuffer.numberOfChannels}ch, ${(audioBuffer.length / audioBuffer.sampleRate).toFixed(1)}s): ${Date.now() - t}ms`);
 
-    t = Date.now();
     // Essentia algorithms require mono 44100 Hz PCM
     let channelData = audioBuffer.getChannelData(0);
     if (audioBuffer.sampleRate !== 44100) {
       channelData = resample(channelData, audioBuffer.sampleRate, 44100);
-      console.error(`  [timing] resample: ${Date.now() - t}ms`);
-      t = Date.now();
     }
 
-    // Skip the first 30 s (intro is usually minimal/silent) and analyse a 60 s
-    // window of the main groove. BPM and key are stable within 30–60 s, and
-    // skipping the intro gives more representative energy readings.
-    // For short tracks (< 45 s) fall back to analysing whatever is available.
+    // For BPM/energy: skip 30 s intro, analyse 60 s of main groove.
+    // For short tracks (< 45 s) fall back to full track.
     const SKIP_SAMPLES = 30 * 44100;
     const WINDOW_SAMPLES = 60 * 44100;
-    if (channelData.length > SKIP_SAMPLES) {
-      channelData = channelData.slice(SKIP_SAMPLES, SKIP_SAMPLES + WINDOW_SAMPLES);
-    } else {
-      // Track shorter than 30 s — analyse in full (no skip)
-      channelData = channelData.slice(0, WINDOW_SAMPLES);
-    }
+    const grooveData = channelData.length > SKIP_SAMPLES
+      ? channelData.slice(SKIP_SAMPLES, SKIP_SAMPLES + WINDOW_SAMPLES)
+      : channelData.slice(0, WINDOW_SAMPLES);
 
     const e = getEssentia();
 
     // BPM — pure-JS onset autocorrelation; ~20x faster than RhythmExtractor2013
-    t = Date.now();
-    const bpm = detectBpm(channelData.slice(0, 30 * 44100), 44100);
-    console.error(`  [timing] detectBpm: ${Date.now() - t}ms`);
+    const bpm = detectBpm(grooveData.slice(0, 30 * 44100), 44100);
 
-    // Key consensus — run KeyExtractor on 3 × 20 s segments, take majority vote.
-    // Three independent readings break ties caused by ambiguous intros/outros and
-    // reduce the mode-confusion (A↔B) error rate vs a single 60 s pass.
-    t = Date.now();
+    // Key consensus — 5 segments spread across the first 75 % of the track × 4 profiles.
+    // Proportional spacing means we hit the main drop, verse and chorus regardless of
+    // track length, rather than being confined to the first 100 s.  Four diverse
+    // profiles (edma, temperley, edmm, bgate) reduce both pitch-class and mode errors.
     const SEG_SAMPLES = 20 * 44100;
+    const NUM_SEGS = 5;
+    const KEY_PROFILES = ['edma', 'temperley', 'edmm', 'bgate', 'krumhansl', 'noland'] as const;
+    // Analyse the first 75 % of the track; clamp to the actual track length
+    const analysisEnd = Math.floor(channelData.length * 0.75);
     const keyVotes: Array<{ pitchClass: number; mode: number; strength: number }> = [];
-    for (let seg = 0; seg < 3; seg++) {
-      const slice = channelData.slice(seg * SEG_SAMPLES, (seg + 1) * SEG_SAMPLES);
-      if (slice.length < SEG_SAMPLES / 2) break; // skip if too short
+    for (let seg = 0; seg < NUM_SEGS; seg++) {
+      const start = Math.floor((analysisEnd / NUM_SEGS) * seg);
+      const slice = channelData.slice(start, start + SEG_SAMPLES);
+      if (slice.length < SEG_SAMPLES / 2) break; // segment too short, skip
       const vec = e.arrayToVector(slice);
-      const r = e.KeyExtractor(vec, true, 4096, 4096, 12, 3500, 60, 25, 0.2, 'edma');
+      for (const profile of KEY_PROFILES) {
+        const r = e.KeyExtractor(vec, true, 4096, 4096, 12, 3500, 60, 25, 0.2, profile);
+        keyVotes.push({
+          pitchClass: KEY_TO_PITCH[r.key] ?? -1,
+          mode: r.scale === 'major' ? 1 : 0,
+          strength: (r.strength as number) ?? 0,
+        });
+      }
       vec.delete();
-      keyVotes.push({
-        pitchClass: KEY_TO_PITCH[r.key] ?? -1,
-        mode: r.scale === 'major' ? 1 : 0,
-        strength: (r.strength as number) ?? 0,
-      });
     }
+
 
     // Tally votes — identify key by pitchClass+mode; tie-break by cumulative strength
     const tally = new Map<string, { pitchClass: number; mode: number; count: number; strength: number }>();
@@ -193,31 +186,33 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     }
     const pitchClass = best.pitchClass;
     const mode = best.mode;
-    console.error(`  [timing] KeyExtractor consensus (${keyVotes.length} segs, winner ${best.count}/${keyVotes.length}): ${Date.now() - t}ms`);
-
-    // RMS — stride-4 sampling is statistically equivalent (~0.01% error) but 4× faster.
-    let sumSq = 0;
-    for (let i = 0; i < channelData.length; i += 4) sumSq += channelData[i] * channelData[i];
-    const rms = Math.sqrt(sumSq / Math.ceil(channelData.length / 4));
-    const rmsDb = 20 * Math.log10(Math.max(rms, 1e-9));
-    const rmsScore = Math.max(0, Math.min(1, 1 + rmsDb / 60));
-
-    // OnsetRate — 30 s is enough for onset rate to converge; use first half of window.
-    const onsetVector = e.arrayToVector(channelData.slice(0, 30 * 44100));
-    let energy: number;
+    // Energy — MixedInKey-style: combines onset density (rhythmic content) with
+    // overall loudness.  Onset rate is sampled at 40 % of the track to hit the
+    // main section rather than a quiet intro.  RMS is measured over the first 75 %.
+    //
+    // Calibration (onset normalised to 9 events/sec ≈ peak dance energy; RMS
+    // mapped via 1 + rmsDb/55):
+    //   energy 4 ≈ sparse minimal track  (~3 onsets/s, −25 dBFS) → 0.40
+    //   energy 7 ≈ energetic dance track (~8 onsets/s, −33 dBFS) → 0.69
+    //   energy 8 ≈ busy pop/club track   (≥9 onsets/s, −28 dBFS) → 0.80
+    const mainStart = Math.floor(channelData.length * 0.40);
+    const onsetSlice = channelData.slice(mainStart, mainStart + 30 * 44100);
+    const onsetVec = e.arrayToVector(onsetSlice);
+    let onsetScore = 0;
     try {
-      t = Date.now();
-      const onsetResult = e.OnsetRate(onsetVector);
+      const onsetResult = e.OnsetRate(onsetVec);
       const onsetRate: number = onsetResult.onsetRate ?? 0;
-      const onsetScore = Math.min(1, onsetRate / 12); // 12 onsets/sec ≈ peak energy for electronic music
-      energy = Math.round((onsetScore * 0.7 + rmsScore * 0.3) * 1000) / 1000;
-      console.error(`  [timing] OnsetRate: ${Date.now() - t}ms`);
-    } catch {
-      // OnsetRate unavailable — fall back to RMS only
-      energy = Math.round(rmsScore * 1000) / 1000;
-    }
+      onsetScore = Math.min(1, onsetRate / 9);
+    } catch { /* fall back to 0 */ }
+    onsetVec.delete();
 
-    onsetVector.delete();
+    const energyData = channelData.slice(0, analysisEnd);
+    let sumSq = 0;
+    for (let i = 0; i < energyData.length; i += 4) sumSq += energyData[i] * energyData[i];
+    const rms = Math.sqrt(sumSq / Math.ceil(energyData.length / 4));
+    const rmsDb = 20 * Math.log10(Math.max(rms, 1e-9));
+    const rmsScore = Math.max(0, Math.min(1, 1 + rmsDb / 55));
+    const energy = Math.round((onsetScore * 0.6 + rmsScore * 0.4) * 1000) / 1000;
 
     // Return raw BPM — callers apply genre-aware double-time correction once
     // genre data is available (see normalizeBpm in vite.config.ts / index.ts).

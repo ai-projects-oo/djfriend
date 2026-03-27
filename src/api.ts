@@ -11,6 +11,8 @@ import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
+import { enrichTracks } from './ai.js'
+import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
 
@@ -32,6 +34,7 @@ export interface AppSong {
   energy: number
   genres: string[]
   genresFromSpotify?: boolean
+  semanticTags?: SemanticTags
 }
 
 type NextFn = (err?: unknown) => void
@@ -199,6 +202,15 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
     }
     writeEvent({ type: 'folder_done', folder: folderKey })
   }
+  const { groqApiKey } = readSettings()
+  if (groqApiKey) {
+    writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
+    try {
+      await enrichTracks(resultsJson, groqApiKey, (completed, total) => {
+        writeEvent({ type: 'enrich_progress', completed, total })
+      })
+    } catch { /* enrichment is optional — don't fail the whole analysis */ }
+  }
   fs.writeFileSync(path.join(rootPath, 'results.json'), JSON.stringify(resultsJson, null, 2), 'utf-8')
   const songs = Object.values(resultsJson)
   return { total, analyzed: songs.length, songs, resultsJson }
@@ -236,6 +248,15 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
       resultsJson[key] = { filePath: track.filePath, file: track.filePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}) }
     } catch { /* skip */ }
   }
+  const { groqApiKey } = readSettings()
+  if (groqApiKey) {
+    writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
+    try {
+      await enrichTracks(resultsJson, groqApiKey, (completed, total) => {
+        writeEvent({ type: 'enrich_progress', completed, total })
+      })
+    } catch { /* enrichment is optional — don't fail the whole analysis */ }
+  }
   fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
   fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
   const songs = Object.values(resultsJson)
@@ -256,7 +277,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'GET') {
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ spotifyClientId: s.spotifyClientId ?? '', hasSecret: !!s.spotifyClientSecret, musicFolder: s.musicFolder ?? '', playlistsFolder: s.playlistsFolder ?? '' }))
+      res.end(JSON.stringify({ spotifyClientId: s.spotifyClientId ?? '', hasSecret: !!s.spotifyClientSecret, musicFolder: s.musicFolder ?? '', playlistsFolder: s.playlistsFolder ?? '', hasGroqKey: !!s.groqApiKey }))
       return
     }
     if (req.method === 'POST') {
@@ -266,6 +287,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (typeof body.spotifyClientSecret === 'string' && body.spotifyClientSecret.trim()) updates.spotifyClientSecret = body.spotifyClientSecret.trim()
       if (typeof body.musicFolder === 'string') updates.musicFolder = body.musicFolder.trim()
       if (typeof body.playlistsFolder === 'string') updates.playlistsFolder = body.playlistsFolder.trim()
+      if (typeof body.groqApiKey === 'string' && body.groqApiKey.trim()) updates.groqApiKey = body.groqApiKey.trim()
       writeSettings(updates)
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))
@@ -403,5 +425,30 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       patchResults(APPLE_RESULTS_PATH, absolutePath)
       res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ ok: true }))
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to update tags' })) }
+  })
+
+  middlewares.use('/api/ai/enrich', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
+    try {
+      const { groqApiKey } = readSettings()
+      if (!groqApiKey) { writeEvent({ type: 'error', message: 'Groq API key not configured. Open Settings to add it.' }); res.end(); return }
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const resultsPath = typeof body.resultsPath === 'string' && body.resultsPath.trim()
+        ? body.resultsPath.trim()
+        : songsFolder ? path.join(songsFolder, 'results.json') : null
+      if (!resultsPath || !fs.existsSync(resultsPath)) { writeEvent({ type: 'error', message: 'results.json not found.' }); res.end(); return }
+      const resultsJson = readExistingResultsFile(resultsPath.replace(/\/results\.json$/, ''))
+      const toEnrich = Object.values(resultsJson).filter(s => !s.semanticTags).length
+      writeEvent({ type: 'start', total: toEnrich })
+      await enrichTracks(resultsJson, groqApiKey, (completed, total) => {
+        writeEvent({ type: 'progress', completed, total })
+      })
+      fs.writeFileSync(resultsPath, JSON.stringify(resultsJson, null, 2), 'utf-8')
+      writeEvent({ type: 'done', enriched: toEnrich })
+      res.end()
+    } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Enrichment failed.' }); res.end() }
   })
 }

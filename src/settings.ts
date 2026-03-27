@@ -15,6 +15,7 @@ export interface Settings {
   spotifyClientSecret: string
   musicFolder: string
   playlistsFolder: string
+  groqApiKey?: string
 }
 
 export function readSettings(): Partial<Settings> {

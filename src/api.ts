@@ -273,6 +273,17 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     })
   }
 
+  middlewares.use('/api/apple-library', (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    if (!fs.existsSync(APPLE_RESULTS_PATH)) {
+      res.setHeader('Content-Type', 'application/json')
+      res.end('null')
+      return
+    }
+    res.setHeader('Content-Type', 'application/json')
+    fs.createReadStream(APPLE_RESULTS_PATH).pipe(res)
+  })
+
   middlewares.use('/api/settings', async (req, res, next) => {
     if (req.method === 'GET') {
       const s = readSettings()
@@ -296,6 +307,44 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     next()
   })
 
+  middlewares.use('/api/check-path', (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    let body = ''
+    req.on('data', (chunk: Buffer) => { body += chunk.toString() })
+    req.on('end', () => {
+      try {
+        const { folderPath } = JSON.parse(body) as { folderPath: string }
+        const exists = typeof folderPath === 'string' && folderPath.trim().length > 0 && fs.existsSync(folderPath.trim())
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ exists }))
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ exists: false }))
+      }
+    })
+  })
+
+  middlewares.use('/api/clear-database', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    const deleted: string[] = []
+    // Clear Apple Music results
+    if (fs.existsSync(APPLE_RESULTS_PATH)) {
+      fs.unlinkSync(APPLE_RESULTS_PATH)
+      deleted.push(APPLE_RESULTS_PATH)
+    }
+    // Clear folder results.json if music folder is configured
+    const { musicFolder } = readSettings()
+    if (musicFolder) {
+      const folderResults = path.join(musicFolder, 'results.json')
+      if (fs.existsSync(folderResults)) {
+        fs.unlinkSync(folderResults)
+        deleted.push(folderResults)
+      }
+    }
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: true, deleted }))
+  })
+
   middlewares.use('/api/analyze-folder', async (req, res, next) => {
     if (req.method !== 'POST') { next(); return }
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
@@ -308,6 +357,131 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) { writeEvent({ type: 'error', message: 'Folder not found.' }); res.end(); return }
       const analysis = await analyzeLibrary(folderPath, path.basename(folderPath), writeEvent)
       writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: path.basename(folderPath), songs: analysis.songs, resultsJson: analysis.resultsJson })
+      res.end()
+    } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Analysis failed.' }); res.end() }
+  })
+
+  const RB_KEY_MAP: Record<string, { pitchClass: number; mode: number }> = {
+    Cmaj:{pitchClass:0,mode:1}, Dbmaj:{pitchClass:1,mode:1}, Dmaj:{pitchClass:2,mode:1}, Ebmaj:{pitchClass:3,mode:1},
+    Emaj:{pitchClass:4,mode:1}, Fmaj:{pitchClass:5,mode:1}, Gbmaj:{pitchClass:6,mode:1}, Gmaj:{pitchClass:7,mode:1},
+    Abmaj:{pitchClass:8,mode:1}, Amaj:{pitchClass:9,mode:1}, Bbmaj:{pitchClass:10,mode:1}, Bmaj:{pitchClass:11,mode:1},
+    'C#maj':{pitchClass:1,mode:1},'D#maj':{pitchClass:3,mode:1},'F#maj':{pitchClass:6,mode:1},'G#maj':{pitchClass:8,mode:1},'A#maj':{pitchClass:10,mode:1},
+    Cmin:{pitchClass:0,mode:0}, Dbmin:{pitchClass:1,mode:0}, Dmin:{pitchClass:2,mode:0}, Ebmin:{pitchClass:3,mode:0},
+    Emin:{pitchClass:4,mode:0}, Fmin:{pitchClass:5,mode:0}, Gbmin:{pitchClass:6,mode:0}, Gmin:{pitchClass:7,mode:0},
+    Abmin:{pitchClass:8,mode:0}, Amin:{pitchClass:9,mode:0}, Bbmin:{pitchClass:10,mode:0}, Bmin:{pitchClass:11,mode:0},
+    'C#min':{pitchClass:1,mode:0},'D#min':{pitchClass:3,mode:0},'F#min':{pitchClass:6,mode:0},'G#min':{pitchClass:8,mode:0},'A#min':{pitchClass:10,mode:0},
+  }
+
+  middlewares.use('/api/import-rekordbox', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
+    try {
+      interface RBTrack { path: string; title: string; artist: string; bpm: number; tonality: string; duration: number }
+      const body = await readJsonBody(req) as { tracks?: unknown }
+      const rbTracks = Array.isArray(body.tracks)
+        ? (body.tracks as unknown[]).filter((t): t is RBTrack =>
+            typeof t === 'object' && t !== null &&
+            typeof (t as RBTrack).path === 'string' &&
+            typeof (t as RBTrack).title === 'string')
+        : []
+      if (rbTracks.length === 0) { writeEvent({ type: 'error', message: 'No tracks in Rekordbox XML.' }); res.end(); return }
+      writeEvent({ type: 'start', total: rbTracks.length })
+      const existing = readExistingResultsFile(APPLE_RESULTS_PATH)
+      const resultsJson: Record<string, AppSong> = { ...existing }
+      let needsSpotify = false
+      try { const s = readSettings(); needsSpotify = !!(s.spotifyClientId && s.spotifyClientSecret) } catch { /* skip */ }
+      let token: string | null = null
+      if (needsSpotify) {
+        try { const s = readSettings(); token = await authenticate(s.spotifyClientId!, s.spotifyClientSecret!) } catch { needsSpotify = false }
+      }
+      let completed = 0
+      for (const track of rbTracks) {
+        completed++
+        writeEvent({ type: 'progress', completed, total: rbTracks.length, folder: 'Rekordbox', file: path.basename(track.path) })
+        const cached = existing[track.path]
+        if (cached) { resultsJson[track.path] = cached; continue }
+        const keyInfo_rb = RB_KEY_MAP[track.tonality] ? toCamelot(RB_KEY_MAP[track.tonality].pitchClass, RB_KEY_MAP[track.tonality].mode) : null
+        if (!keyInfo_rb) continue
+        let genres: string[] = []
+        let localGenres: string[] = []
+        try { const meta = await mm.parseFile(track.path, { duration: false }); localGenres = meta.common.genre ?? [] } catch { /* ignore */ }
+        if (localGenres.length > 0) { genres = localGenres }
+        else if (needsSpotify && token) {
+          try { const match = await searchTrack(track.artist, track.title, token); if (match?.artistId) genres = await getArtistGenres(match.artistId, token) } catch { /* ignore */ }
+        }
+        resultsJson[track.path] = { filePath: track.path, file: path.basename(track.path), artist: track.artist || 'Unknown artist', title: track.title, duration: track.duration || undefined, bpm: track.bpm, key: keyInfo_rb.keyName, camelot: keyInfo_rb.camelot, energy: 0.5, genres, ...(localGenres.length === 0 && genres.length > 0 ? { genresFromSpotify: true } : {}) }
+      }
+      const { groqApiKey } = readSettings()
+      if (groqApiKey) {
+        writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
+        try { await enrichTracks(resultsJson, groqApiKey, (c, t) => { writeEvent({ type: 'enrich_progress', completed: c, total: t }) }) } catch { /* optional */ }
+      }
+      fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
+      const songs = Object.values(resultsJson)
+      writeEvent({ type: 'done', total: rbTracks.length, analyzed: songs.length, libraryName: 'Rekordbox', songs, resultsJson })
+      res.end()
+    } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Import failed.' }); res.end() }
+  })
+
+  middlewares.use('/api/analyze-paths', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
+    try {
+      const { spotifyClientId: SPOTIFY_CLIENT_ID, spotifyClientSecret: SPOTIFY_CLIENT_SECRET } = readSettings()
+      if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) { writeEvent({ type: 'error', message: 'Spotify credentials not configured.' }); res.end(); return }
+      const body = await readJsonBody(req) as { paths?: unknown; label?: unknown }
+      const rawPaths = Array.isArray(body.paths) ? (body.paths as unknown[]).filter((p): p is string => typeof p === 'string' && p.trim().length > 0) : []
+      if (rawPaths.length === 0) { writeEvent({ type: 'error', message: 'No valid file paths provided.' }); res.end(); return }
+      const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim() : 'Imported playlist'
+      const validPaths = rawPaths.filter(p => AUDIO_EXTENSIONS.has(path.extname(p).toLowerCase()) && fs.existsSync(p))
+      if (validPaths.length === 0) { writeEvent({ type: 'error', message: 'No audio files found at the provided paths.' }); res.end(); return }
+      writeEvent({ type: 'start', total: validPaths.length })
+      const token = await authenticate(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
+      const existing = readExistingResultsFile(APPLE_RESULTS_PATH)
+      const resultsJson: Record<string, AppSong> = { ...existing }
+      let completed = 0
+      for (const filePath of validPaths) {
+        const file = path.basename(filePath)
+        completed++
+        writeEvent({ type: 'progress', completed, total: validPaths.length, folder: label, file })
+        const cached = existing[filePath]
+        if (cached) { resultsJson[filePath] = cached; continue }
+        try {
+          let localGenres: string[] = []
+          let localArtist: string | null = null
+          let localTitle: string = path.basename(filePath, path.extname(filePath))
+          let localDuration: number | null = null
+          try {
+            const meta = await mm.parseFile(filePath, { duration: true })
+            localGenres = meta.common.genre ?? []
+            localArtist = meta.common.artist ?? null
+            if (meta.common.title) localTitle = meta.common.title
+            if (meta.format.duration != null) localDuration = meta.format.duration
+          } catch { /* ignore */ }
+          const match = await searchTrack(localArtist, localTitle, token)
+          const [features, spotifyGenres] = await Promise.all([
+            analyzeAudio(filePath),
+            localGenres.length === 0 && match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([])
+          ])
+          if (!features) continue
+          const keyInfo = toCamelot(features.pitchClass, features.mode)
+          if (!keyInfo) continue
+          const genres = localGenres.length > 0 ? localGenres : spotifyGenres
+          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}) }
+        } catch { /* skip */ }
+      }
+      const { groqApiKey } = readSettings()
+      if (groqApiKey) {
+        writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
+        try { await enrichTracks(resultsJson, groqApiKey, (c, t) => { writeEvent({ type: 'enrich_progress', completed: c, total: t }) }) } catch { /* optional */ }
+      }
+      fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
+      const songs = Object.values(resultsJson)
+      writeEvent({ type: 'done', total: validPaths.length, analyzed: songs.length, libraryName: label, songs, resultsJson })
       res.end()
     } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Analysis failed.' }); res.end() }
   })

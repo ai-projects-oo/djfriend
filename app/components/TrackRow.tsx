@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RefreshCcw, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { SetTrack } from '../types';
+import { parseCamelot } from '../lib/camelot';
 
 interface Props {
   track: SetTrack;
@@ -8,6 +9,12 @@ interface Props {
   onSwap: () => void;
   onRemove: () => void;
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number }) => void;
+  // drag-to-reorder
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  isDragOver?: boolean;
 }
 
 const CAMELOT_COLORS: Record<string, string> = {
@@ -32,6 +39,16 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function getCompatibleKeys(camelot: string): string[] {
+  const parsed = parseCamelot(camelot);
+  if (!parsed) return [];
+  const { num, letter } = parsed;
+  const other = letter === 'A' ? 'B' : 'A';
+  const prev = num === 1 ? 12 : num - 1;
+  const next = num === 12 ? 1 : num + 1;
+  return [`${prev}${letter}`, `${next}${letter}`, `${num}${other}`];
+}
+
 const TAG_COLORS: Record<string, { bg: string; text: string }> = {
   vibe:  { bg: '#7c3aed22', text: '#a78bfa' },
   mood:  { bg: '#1d4ed822', text: '#60a5fa' },
@@ -52,12 +69,25 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack }: Props) {
+export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
   const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
+  const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showTags, setShowTags] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [swapFlash, setSwapFlash] = useState(false);
+
+  const prevFileRef = useRef(track.file);
+  useEffect(() => {
+    if (prevFileRef.current !== track.file) {
+      prevFileRef.current = track.file;
+      setSwapFlash(true);
+      const timer = setTimeout(() => setSwapFlash(false), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [track.file]);
 
   const [editTitle, setEditTitle] = useState('');
   const [editArtist, setEditArtist] = useState('');
@@ -67,6 +97,13 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
   const barColor = energyBarColor(track.energy);
   const isLocal = Boolean(track.filePath);
   const isMp3 = track.filePath?.toLowerCase().endsWith('.mp3') ?? false;
+
+  const energyDelta = track.energy - track.targetEnergy;
+  const absDelta = Math.abs(energyDelta);
+  const deltaColor = absDelta <= 0.05 ? '#22c55e' : absDelta <= 0.15 ? '#eab308' : '#f97316';
+  const deltaSign = energyDelta >= 0 ? '+' : '';
+
+  const compatibleKeys = getCompatibleKeys(track.camelot);
 
   function openEdit() {
     setEditTitle(track.title);
@@ -80,6 +117,11 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
   function cancelEdit() {
     setEditing(false);
     setSaveError(null);
+  }
+
+  function handleRemove() {
+    setRemoving(true);
+    setTimeout(onRemove, 150);
   }
 
   async function saveEdit() {
@@ -114,12 +156,31 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
     }
   }
 
+  const rowStyle: React.CSSProperties = {
+    opacity: removing ? 0 : 1,
+    transition: 'opacity 150ms, background-color 600ms',
+  };
+
   return (
     <>
-      <tr className="border-b border-[#1e1e2e] hover:bg-[#12121a] transition-colors group">
+      <tr
+        className={`border-b border-[#1e1e2e] group ${swapFlash ? 'bg-green-900/20' : 'hover:bg-[#12121a]'} ${isDragOver ? 'border-t-2 border-t-[#7c3aed]' : ''}`}
+        style={rowStyle}
+        data-warning={track.harmonicWarning ? 'true' : undefined}
+        draggable={!editing}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+      >
         {/* # */}
         <td className="py-3 pl-4 pr-2 w-10">
-          <span className="group-hover:hidden text-[#475569] text-sm tabular-nums">{index + 1}</span>
+          <span
+            className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
+            title="Drag to reorder"
+          >
+            {index + 1}
+          </span>
           <button
             onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
             className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
@@ -167,15 +228,26 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
 
         {/* Camelot key */}
         <td className="py-3 px-2 whitespace-nowrap">
-          <span
-            className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold text-white"
-            style={{ backgroundColor: camelotBadgeColor(track.camelot) + '33', color: camelotBadgeColor(track.camelot), border: `1px solid ${camelotBadgeColor(track.camelot)}66` }}
-          >
-            {track.camelot}
-          </span>
+          <div className="relative inline-block">
+            <span
+              className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold cursor-help"
+              style={{ backgroundColor: camelotBadgeColor(track.camelot) + '33', color: camelotBadgeColor(track.camelot), border: `1px solid ${camelotBadgeColor(track.camelot)}66` }}
+              onMouseEnter={() => setShowKeyTooltip(true)}
+              onMouseLeave={() => setShowKeyTooltip(false)}
+            >
+              {track.camelot}
+            </span>
+            {showKeyTooltip && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap">
+                {compatibleKeys.length > 0
+                  ? `Compatible: ${compatibleKeys.join(', ')}`
+                  : track.camelot}
+              </div>
+            )}
+          </div>
         </td>
 
-        {/* Energy bar */}
+        {/* Energy bar + delta */}
         <td className="py-3 px-2 pr-4">
           <div className="flex items-center gap-2">
             <div className="w-16 h-2 rounded-full bg-[#1e1e2e] overflow-hidden flex-shrink-0">
@@ -186,6 +258,13 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
             </div>
             <span className="text-[10px] text-[#475569] tabular-nums w-8">
               {(track.energy * 100).toFixed(0)}%
+            </span>
+            <span
+              className="text-[10px] tabular-nums w-9 hidden xl:inline"
+              style={{ color: deltaColor }}
+              title={`Target: ${(track.targetEnergy * 100).toFixed(0)}%`}
+            >
+              {deltaSign}{(energyDelta * 100).toFixed(0)}%
             </span>
           </div>
         </td>
@@ -237,7 +316,7 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
               <RefreshCcw size={14} />
             </button>
             <button
-              onClick={onRemove}
+              onClick={handleRemove}
               title="Remove track"
               aria-label="Remove track"
               className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors cursor-pointer"

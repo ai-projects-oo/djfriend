@@ -6,8 +6,10 @@ import { downloadM3U } from '../lib/m3uExport';
 interface Props {
   tracks: SetTrack[];
   prefs: DJPreferences;
+  libraryLoaded: boolean;
   onSwapTrack: (index: number) => void;
   onRemoveTrack: (index: number) => void;
+  onReorderTrack: (fromIdx: number, toIdx: number) => void;
   onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number }) => void;
   onExport?: () => void;
   onExportSpotify?: () => void;
@@ -18,9 +20,12 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
   return Math.round(totalSecs / 60);
 }
 
-export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -32,17 +37,27 @@ export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [exportOpen]);
+
   if (tracks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
         <span className="text-4xl">🎵</span>
-        <p className="text-sm">No set generated yet. Load a library and click Generate Set.</p>
+        {!libraryLoaded ? (
+          <p className="text-sm">Load a library above to get started.</p>
+        ) : (
+          <p className="text-sm">Hit ▶ to generate your set.</p>
+        )}
       </div>
     );
   }
 
   const duration = totalDurationMinutes(tracks);
   const warnings = tracks.filter((t) => t.harmonicWarning).length;
+
+  function scrollToFirstWarning() {
+    const el = tableContainerRef.current?.querySelector('[data-warning="true"]');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -59,9 +74,13 @@ export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack
             Target: <span className="text-[#e2e8f0] font-semibold">{prefs.setDuration}</span> min
           </span>
           {warnings > 0 && (
-            <span className="text-[#f59e0b]">
+            <button
+              onClick={scrollToFirstWarning}
+              className="text-[#f59e0b] hover:text-[#fbbf24] transition-colors cursor-pointer"
+              title="Jump to first harmonic warning"
+            >
               ⚠ {warnings} harmonic {warnings === 1 ? 'warning' : 'warnings'}
-            </span>
+            </button>
           )}
         </div>
 
@@ -94,7 +113,7 @@ export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[#1e1e2e] overflow-hidden">
+      <div className="rounded-lg border border-[#1e1e2e] overflow-hidden" ref={tableContainerRef}>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -118,6 +137,18 @@ export default function SetTracklist({ tracks, prefs, onSwapTrack, onRemoveTrack
                   onSwap={() => onSwapTrack(idx)}
                   onRemove={() => onRemoveTrack(idx)}
                   onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}
+                  onDragStart={() => setDraggingIdx(idx)}
+                  onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
+                  onDragOver={(e) => { e.preventDefault(); if (draggingIdx !== null && draggingIdx !== idx) setDragOverIdx(idx); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggingIdx !== null && draggingIdx !== idx) {
+                      onReorderTrack(draggingIdx, idx);
+                    }
+                    setDraggingIdx(null);
+                    setDragOverIdx(null);
+                  }}
+                  isDragOver={dragOverIdx === idx}
                 />
               ))}
             </tbody>

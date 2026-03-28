@@ -1,112 +1,28 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type {
-  Song,
-  SetTrack,
-  DJPreferences,
-  CurvePoint,
   HistoryEntry,
-  ImportEntry,
-  ImportTrack,
-  TagFilters,
 } from "./types";
-import { generateSet } from "./lib/setGenerator";
-import { camelotHarmonyScore, isHarmonicWarning } from "./lib/camelot";
-import { buildSvgPath } from "./lib/curveInterpolation";
-import EnergyCurveEditor, {
-  DEFAULT_CURVE,
-} from "./components/EnergyCurveEditor";
-import PreferencesForm from "./components/PreferencesForm";
+import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
 import SettingsModal from "./components/SettingsModal";
-import { downloadM3U, generateM3U } from "./lib/m3uExport";
+import HistoryTab from "./components/HistoryTab";
+import { genreMatchesUmbrella, TAG_GROUPS } from "./lib/genreUtils";
 import {
-  getStoredToken,
+  exchangeCodeForToken,
   storeToken,
-  storePendingExport,
   getPendingExport,
   clearPendingExport,
-  redirectToSpotifyLogin,
-  exchangeCodeForToken,
   searchTracksOnSpotify,
-  createPlaylistFromMatches,
 } from "./lib/spotifyExport";
-import type { SpotifyMatchResult } from "./lib/spotifyExport";
 import {
-  storePendingImport,
   getPendingImport,
   clearPendingImport,
-  parsePlaylistId,
-  fetchPlaylistTracks,
   fetchUserPlaylists,
-  matchInLibrary,
 } from "./lib/spotifyImport";
-import type { SpotifyUserPlaylist } from "./lib/spotifyImport";
-
-type SpotifyExportStatus =
-  | { phase: "searching"; completed: number; total: number }
-  | { phase: "review"; matches: SpotifyMatchResult[]; playlistName: string }
-  | { phase: "creating" }
-  | { phase: "done"; playlistUrl: string; matched: number; total: number }
-  | { phase: "error"; message: string };
-
-type ImportStatus =
-  | { phase: "loading"; loaded: number; total: number }
-  | { phase: "error"; message: string };
-
-const TAG_GROUPS: { key: keyof TagFilters; label: string; color: { border: string; text: string; activeBg: string } }[] = [
-  { key: 'vibeTags',        label: 'Vibe',                color: { border: '#7c3aed66', text: '#a78bfa', activeBg: '#7c3aed33' } },
-  { key: 'moodTags',        label: 'Mood',                color: { border: '#1d4ed866', text: '#60a5fa', activeBg: '#1d4ed833' } },
-  { key: 'venueTags',       label: 'Venue',               color: { border: '#06522066', text: '#34d399', activeBg: '#06522033' } },
-  { key: 'timeOfNightTags', label: 'Time',                color: { border: '#92400e66', text: '#fbbf24', activeBg: '#92400e33' } },
-  { key: 'vocalTypes',      label: 'Vocal/Instrumental',  color: { border: '#4a044e66', text: '#e879f9', activeBg: '#4a044e33' } },
-];
-
-const DEFAULT_PREFS: DJPreferences = {
-  setDuration: 60,
-  venueType: "Club",
-  setPhase: "Peak time",
-  genre: "Any",
-  tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] },
-};
-
-function isValidSong(obj: unknown): obj is Song {
-  if (typeof obj !== "object" || obj === null) return false;
-  const o = obj as Record<string, unknown>;
-  return (
-    typeof o["file"] === "string" &&
-    typeof o["artist"] === "string" &&
-    typeof o["title"] === "string" &&
-    typeof o["bpm"] === "number" &&
-    typeof o["key"] === "string" &&
-    typeof o["camelot"] === "string" &&
-    typeof o["energy"] === "number" &&
-    Array.isArray(o["genres"])
-  );
-}
-
-function parseSongs(raw: unknown): Song[] | null {
-  const source = Array.isArray(raw)
-    ? raw
-    : typeof raw === "object" && raw !== null
-      ? Object.values(raw as Record<string, unknown>)
-      : null;
-  if (!source) return null;
-  const valid = source.filter(isValidSong);
-  return valid.length > 0 ? valid : null;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function matchesGenrePref(song: Song, genre: string): boolean {
-  if (genre === "Any") return true;
-  const needle = genre.toLowerCase();
-  return song.genres.some((g) => {
-    const gl = g.toLowerCase();
-    return gl.includes(needle) || needle.includes(gl);
-  });
-}
+import { useLibrary } from "./hooks/useLibrary";
+import { useSetGenerator } from "./hooks/useSetGenerator";
+import { useSpotifyExport } from "./hooks/useSpotifyExport";
+import { useSpotifyImport } from "./hooks/useSpotifyImport";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
@@ -123,61 +39,34 @@ export default function App() {
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(
     null,
   );
-  const [library, setLibrary] = useState<Song[]>([]);
-  const [libraryName, setLibraryName] = useState<string>("");
-  const [prefs, setPrefs] = useState<DJPreferences>(DEFAULT_PREFS);
-  const [curve, setCurve] = useState<CurvePoint[]>(DEFAULT_CURVE);
-  const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [autoRegen, setAutoRegen] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState<{
-    completed: number;
-    total: number;
-  }>({
-    completed: 0,
-    total: 0,
-  });
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [swapModal, setSwapModal] = useState<{
-    index: number;
-    suggestions: Array<{ song: Song; score: number }>;
-  } | null>(null);
-  const [swapVisibleCount, setSwapVisibleCount] = useState(5);
-  const [playlistPicker, setPlaylistPicker] = useState<Array<{
-    name: string;
-    count: number;
-  }> | null>(null);
-  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
-  const [spotifyExportStatus, setSpotifyExportStatus] =
-    useState<SpotifyExportStatus | null>(null);
   const [openHistoryExportId, setOpenHistoryExportId] = useState<string | null>(
     null,
   );
   const historyExportRef = useRef<HTMLDivElement | null>(null);
-  const [importHistory, setImportHistory] = useState<ImportEntry[]>(() => {
-    try {
-      const raw = localStorage.getItem("djfriend-imports");
-      return raw ? (JSON.parse(raw) as ImportEntry[]) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [expandedImportId, setExpandedImportId] = useState<string | null>(null);
-  const [importUrl, setImportUrl] = useState("");
-  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
-  const [pendingImportUrl, setPendingImportUrl] = useState<string | null>(null);
-  const [spotifyPlaylistPicker, setSpotifyPlaylistPicker] = useState<
-    SpotifyUserPlaylist[] | null
-  >(null);
-  const [loadingSpotifyPlaylists, setLoadingSpotifyPlaylists] = useState(false);
-  const [openStoreLinkKey, setOpenStoreLinkKey] = useState<string | null>(null);
-  const storeLinkRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [folderPath, setFolderPath] = useState('');
   const [playlistsFolder, setPlaylistsFolder] = useState('');
-  const [m3uSavedPath, setM3uSavedPath] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [analyzeMenuOpen, setAnalyzeMenuOpen] = useState(false);
+  const analyzeMenuRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const rbFileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Persist history to localStorage
+  useEffect(() => {
+    localStorage.setItem("djfriend-history", JSON.stringify(history));
+  }, [history]);
+
+  // Click-outside for analyze menu
+  useEffect(() => {
+    if (!analyzeMenuOpen) return;
+    const handle = (e: MouseEvent) => {
+      if (analyzeMenuRef.current && !analyzeMenuRef.current.contains(e.target as Node)) setAnalyzeMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [analyzeMenuOpen]);
+
+  // Click-outside for history export dropdown
   useEffect(() => {
     if (!openHistoryExportId) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -192,57 +81,103 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openHistoryExportId]);
 
-  useEffect(() => {
-    localStorage.setItem("djfriend-history", JSON.stringify(history));
-  }, [history]);
+  // Stable ref used to bridge setGeneratedSet (from useSetGenerator) into useLibrary's onNewAnalysis callback
+  const onNewAnalysisRef = useRef<(() => void) | undefined>(undefined);
 
-  useEffect(() => {
-    localStorage.setItem("djfriend-imports", JSON.stringify(importHistory));
-  }, [importHistory]);
+  const {
+    library,
+    setLibrary,
+    libraryName,
+    isAnalyzing,
+    analysisProgress,
+    folderPath,
+    setFolderPath,
+    playlistPicker,
+    setPlaylistPicker,
+    loadingPlaylists,
+    analyzedApplePlaylists,
+    error,
+    openPlaylistPicker,
+    runAppleMusicAnalysis,
+    runFolderAnalysis,
+    runPathListAnalysis,
+    runRekordboxImport,
+  } = useLibrary({ onNewAnalysis: () => onNewAnalysisRef.current?.() });
 
-  // Auto-run import after OAuth redirect, once library is ready
-  useEffect(() => {
-    if (!pendingImportUrl) return;
-    if (library.length === 0) return; // wait for library to load
-    const url = pendingImportUrl;
-    setPendingImportUrl(null);
-    void runImport(url, library);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingImportUrl, library]);
+  const {
+    prefs,
+    setPrefs,
+    curve,
+    setCurve,
+    generatedSet,
+    setGeneratedSet,
+    autoRegen,
+    setAutoRegen,
+    swapModal,
+    setSwapModal,
+    swapVisibleCount,
+    setSwapVisibleCount,
+    availableGenres,
+    genreGroups,
+    availableTags,
+    filteredTrackCount,
+    canGenerateNew,
+    handleGenerate,
+    handleRegenerate,
+    handleGenerateNew,
+    selectGenre,
+    handleCurveChange,
+    handleSwapTrack,
+    applySwapSuggestion,
+    handleRemoveTrack,
+    handleReorderTrack,
+    handleUpdateTrack,
+  } = useSetGenerator(library, setLibrary);
 
-  useEffect(() => {
-    if (!openStoreLinkKey) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        storeLinkRef.current &&
-        !storeLinkRef.current.contains(e.target as Node)
-      ) {
-        setOpenStoreLinkKey(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [openStoreLinkKey]);
+  // Wire setGeneratedSet into the bridge ref so useLibrary can reset the set on new analysis
+  onNewAnalysisRef.current = () => setGeneratedSet([]);
 
-  // Auto-load /public/result.json on mount
-  useEffect(() => {
-    fetch("/results.json")
-      .then((r) => {
-        if (!r.ok) throw new Error("not found");
-        return r.json() as Promise<unknown>;
-      })
-      .then((data) => {
-        const songs = parseSongs(data);
-        if (songs) {
-          setLibrary(songs);
-          setLibraryName("results.json (auto-loaded)");
-          setError(null);
-        }
-      })
-      .catch(() => {
-        // Silently ignore — user can load manually
-      });
-  }, []);
+  const handleLoadHistoryEntry = useCallback((entry: HistoryEntry) => {
+    setPrefs(entry.prefs);
+    setCurve(entry.curve);
+    setGeneratedSet(entry.tracks);
+    setAutoRegen(true);
+    setActiveTab("Generator");
+  }, [setPrefs, setCurve, setGeneratedSet, setAutoRegen]);
+
+  const {
+    spotifyExportStatus,
+    setSpotifyExportStatus,
+    m3uSavedPath,
+    exportM3UToServer,
+    handleExportM3U,
+    startSpotifyExport,
+    handleExportSpotify,
+    handleToggleSpotifyMatch,
+    handleConfirmSpotifyExport,
+    handleRenameEntry,
+  } = useSpotifyExport({ generatedSet, prefs, curve, playlistsFolder, setHistory });
+
+  const {
+    importHistory,
+    setImportHistory,
+    expandedImportId,
+    setExpandedImportId,
+    importUrl,
+    setImportUrl,
+    importStatus,
+    setPendingImportUrl,
+    spotifyPlaylistPicker,
+    setSpotifyPlaylistPicker,
+    loadingSpotifyPlaylists,
+    setLoadingSpotifyPlaylists,
+    openStoreLinkKey,
+    setOpenStoreLinkKey,
+    storeLinkRef,
+    runImport,
+    handleImport,
+    handleBrowseSpotifyPlaylists,
+  } = useSpotifyImport({ library, setHistory });
 
   const loadSettings = useCallback(() => {
     fetch('/api/settings')
@@ -252,7 +187,7 @@ export default function App() {
         if (d.playlistsFolder !== undefined) setPlaylistsFolder(d.playlistsFolder)
       })
       .catch(() => {})
-  }, []);
+  }, [setFolderPath]);
 
   useEffect(() => { loadSettings() }, [loadSettings]);
 
@@ -317,556 +252,6 @@ export default function App() {
     })();
   }, []);
 
-  const openPlaylistPicker = useCallback(async () => {
-    setLoadingPlaylists(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/apple-music-playlists");
-      if (!res.ok) throw new Error("Could not load playlists.");
-      const data = (await res.json()) as Array<{ name: string; count: number }>;
-      setPlaylistPicker(data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load playlists.",
-      );
-    } finally {
-      setLoadingPlaylists(false);
-    }
-  }, []);
-
-  const runAppleMusicAnalysis = useCallback(async (playlistName: string) => {
-    setPlaylistPicker(null);
-    setIsAnalyzing(true);
-    setAnalysisProgress({ completed: 0, total: 0 });
-    setError(null);
-    setGeneratedSet([]);
-
-    try {
-      const response = await fetch("/api/analyze-apple-music", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playlistName }),
-      });
-
-      if (!response.ok || !response.body) {
-        throw new Error("Could not start folder analysis.");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const event = JSON.parse(line) as
-            | { type: "start"; total: number }
-            | { type: "progress"; completed: number; total: number }
-            | { type: "folder_done"; folder: string }
-            | {
-                type: "done";
-                songs: unknown;
-                libraryName: string;
-                resultsJson: Record<string, unknown>;
-              }
-            | { type: "error"; message: string };
-
-          if (event.type === "start") {
-            setAnalysisProgress({ completed: 0, total: event.total });
-            continue;
-          }
-
-          if (event.type === "progress") {
-            setAnalysisProgress({
-              completed: event.completed,
-              total: event.total,
-            });
-            continue;
-          }
-
-          if (event.type === "error") {
-            setError(event.message);
-            continue;
-          }
-
-          if (event.type === "done") {
-            const songs = parseSongs(event.songs);
-            if (!songs) {
-              setError("Analysis completed but returned invalid song data.");
-              continue;
-            }
-            setLibrary(songs);
-            setLibraryName(`${event.libraryName} (analyzed)`);
-            setError(null);
-            // downloadResultsJson(event.libraryName, event.resultsJson);
-          }
-        }
-      }
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Folder analysis failed.";
-      setError(message);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }, []);
-
-  const runFolderAnalysis = useCallback(async (path: string) => {
-    if (!path.trim()) return;
-    setIsAnalyzing(true);
-    setAnalysisProgress({ completed: 0, total: 0 });
-    setError(null);
-    setGeneratedSet([]);
-    try {
-      const response = await fetch('/api/analyze-folder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderPath: path.trim() }),
-      });
-      if (!response.ok || !response.body) throw new Error('Could not start folder analysis.');
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const event = JSON.parse(line) as
-            | { type: 'start'; total: number }
-            | { type: 'progress'; completed: number; total: number }
-            | { type: 'folder_done'; folder: string }
-            | { type: 'done'; songs: unknown; libraryName: string; resultsJson: Record<string, unknown> }
-            | { type: 'error'; message: string };
-          if (event.type === 'start') { setAnalysisProgress({ completed: 0, total: event.total }); continue; }
-          if (event.type === 'progress') { setAnalysisProgress({ completed: event.completed, total: event.total }); continue; }
-          if (event.type === 'error') { setError(event.message); continue; }
-          if (event.type === 'done') {
-            const songs = parseSongs(event.songs);
-            if (!songs) { setError('Analysis completed but returned invalid song data.'); continue; }
-            setLibrary(songs);
-            setLibraryName(`${event.libraryName} (analyzed)`);
-            setError(null);
-          }
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Folder analysis failed.');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }, []);
-
-  const runGenerate = useCallback(
-    (songs: Song[], p: DJPreferences, c: CurvePoint[]) => {
-      if (songs.length === 0) return;
-      const set = generateSet(songs, p, c);
-      setGeneratedSet(set);
-    },
-    [],
-  );
-
-  const handleGenerate = useCallback(() => {
-    runGenerate(library, prefs, curve);
-    setAutoRegen(true);
-  }, [library, prefs, curve, runGenerate]);
-
-  const handleCurveChange = useCallback(
-    (newCurve: CurvePoint[]) => {
-      setCurve(newCurve);
-      if (!autoRegen || library.length === 0) return;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        runGenerate(library, prefs, newCurve);
-      }, 150);
-    },
-    [autoRegen, library, prefs, runGenerate],
-  );
-
-  const buildSwapSuggestions = useCallback(
-    (index: number): Array<{ song: Song; score: number }> => {
-      if (index < 0 || index >= generatedSet.length) return [];
-      const currentSet = generatedSet;
-      const current = currentSet[index];
-      const usedFiles = new Set(
-        currentSet.filter((_, i) => i !== index).map((track) => track.file),
-      );
-      const previousTrack = index > 0 ? currentSet[index - 1] : null;
-      const nextTrack =
-        index < currentSet.length - 1 ? currentSet[index + 1] : null;
-
-      const candidates = library.filter(
-        (song) =>
-          !usedFiles.has(song.file) &&
-          song.file !== current.file &&
-          matchesGenrePref(song, prefs.genre),
-      );
-
-      const scored = candidates.map((candidate) => {
-        const energyDiff = Math.abs(candidate.energy - current.targetEnergy);
-        const fromPrevHarmony = previousTrack
-          ? camelotHarmonyScore(previousTrack.camelot, candidate.camelot)
-          : 1;
-        const toNextHarmony = nextTrack
-          ? camelotHarmonyScore(candidate.camelot, nextTrack.camelot)
-          : 1;
-        const fromPrevBpmDiff = previousTrack
-          ? Math.abs(candidate.bpm - previousTrack.bpm)
-          : 0;
-        const toNextBpmDiff = nextTrack
-          ? Math.abs(candidate.bpm - nextTrack.bpm)
-          : 0;
-        const fromPrevBpm = previousTrack
-          ? 1 - clamp(fromPrevBpmDiff / 20, 0, 1)
-          : 1;
-        const toNextBpm = nextTrack ? 1 - clamp(toNextBpmDiff / 20, 0, 1) : 1;
-        const energyScore = 1 - energyDiff;
-        const baseScore =
-          energyScore * 0.45 +
-          fromPrevHarmony * 0.2 +
-          toNextHarmony * 0.2 +
-          fromPrevBpm * 0.075 +
-          toNextBpm * 0.075;
-        const strictFit =
-          energyDiff <= 0.24 &&
-          fromPrevHarmony > 0 &&
-          toNextHarmony > 0 &&
-          fromPrevBpmDiff <= 12 &&
-          toNextBpmDiff <= 12;
-        const relaxedFit =
-          energyDiff <= 0.35 &&
-          fromPrevHarmony > 0 &&
-          toNextHarmony > 0 &&
-          fromPrevBpmDiff <= 20 &&
-          toNextBpmDiff <= 20;
-        return {
-          candidate,
-          strictFit,
-          relaxedFit,
-          score: baseScore + (strictFit ? 0.05 : 0),
-        };
-      });
-
-      const strict = scored.filter((s) => s.strictFit);
-      const relaxed = scored.filter((s) => !s.strictFit && s.relaxedFit);
-      const ranked = [...strict, ...relaxed].sort((a, b) => b.score - a.score);
-      return ranked.map((r) => ({ song: r.candidate, score: r.score }));
-    },
-    [generatedSet, library, prefs.genre],
-  );
-
-  const handleSwapTrack = useCallback(
-    (index: number) => {
-      const suggestions = buildSwapSuggestions(index);
-      setSwapVisibleCount(5);
-      setSwapModal({ index, suggestions });
-    },
-    [buildSwapSuggestions],
-  );
-
-  const applySwapSuggestion = useCallback(
-    (song: Song) => {
-      setGeneratedSet((prev) => {
-        if (!swapModal) return prev;
-        const index = swapModal.index;
-        if (index < 0 || index >= prev.length) return prev;
-        const previousTrack = index > 0 ? prev[index - 1] : null;
-        const next = [...prev];
-        next[index] = {
-          ...song,
-          slot: prev[index].slot,
-          targetEnergy: prev[index].targetEnergy,
-          harmonicWarning: previousTrack
-            ? isHarmonicWarning(previousTrack.camelot, song.camelot)
-            : false,
-        };
-        if (index + 1 < next.length) {
-          const after = next[index + 1];
-          next[index + 1] = {
-            ...after,
-            harmonicWarning: isHarmonicWarning(
-              next[index].camelot,
-              after.camelot,
-            ),
-          };
-        }
-        return next;
-      });
-      setSwapModal(null);
-      setSwapVisibleCount(5);
-    },
-    [swapModal],
-  );
-
-  const exportM3UToServer = useCallback(async (tracks: SetTrack[], filename: string) => {
-    const content = generateM3U(tracks);
-    try {
-      const r = await fetch('/api/export-m3u', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, filename }),
-      });
-      const data = await r.json() as { ok?: boolean; path?: string; error?: string };
-      if (data.ok && data.path) {
-        setM3uSavedPath(data.path);
-        setTimeout(() => setM3uSavedPath(null), 4000);
-        return true;
-      }
-    } catch { /* fall through */ }
-    return false;
-  }, []);
-
-  const handleExportM3U = useCallback(async () => {
-    if (generatedSet.length === 0) return;
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const name = `djfriend-set-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-    const entry: HistoryEntry = {
-      id: Date.now().toString(),
-      name,
-      timestamp: Date.now(),
-      tracks: [...generatedSet],
-      prefs: { ...prefs },
-      curve: curve.map((p) => ({ ...p })),
-    };
-    setHistory((prev) => [entry, ...prev]);
-    if (playlistsFolder) {
-      const saved = await exportM3UToServer(generatedSet, `${name}.m3u`);
-      if (!saved) downloadM3U(generatedSet, `${name}.m3u`);
-    } else {
-      downloadM3U(generatedSet, `${name}.m3u`);
-    }
-  }, [generatedSet, prefs, curve, playlistsFolder, exportM3UToServer]);
-
-  const handleRenameEntry = useCallback((id: string, newName: string) => {
-    setHistory((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, name: newName } : e)),
-    );
-  }, []);
-
-  const runImport = useCallback(async (url: string, lib: Song[]) => {
-    const playlistId = parsePlaylistId(url);
-    if (!playlistId) {
-      setImportStatus({
-        phase: "error",
-        message: "Invalid Spotify playlist URL or ID.",
-      });
-      return;
-    }
-
-    const token = getStoredToken();
-    if (!token) {
-      storePendingImport(url);
-      await redirectToSpotifyLogin();
-      return;
-    }
-
-    setImportStatus({ phase: "loading", loaded: 0, total: 0 });
-    try {
-      const { playlistName, tracks } = await fetchPlaylistTracks(
-        playlistId,
-        token,
-        (loaded, total) => setImportStatus({ phase: "loading", loaded, total }),
-      );
-
-      const importTracks: ImportTrack[] = tracks.map((t) => ({
-        ...t,
-        inLibrary:
-          !t.unavailable && matchInLibrary(t.spotifyId, t.title, t.artist, lib),
-      }));
-
-      const entry: ImportEntry = {
-        id: Date.now().toString(),
-        name: playlistName,
-        timestamp: Date.now(),
-        playlistId,
-        tracks: importTracks,
-      };
-
-      setImportHistory((prev) => [entry, ...prev]);
-      setImportUrl("");
-      setImportStatus(null);
-      setExpandedImportId(entry.id);
-    } catch (err) {
-      setImportStatus({
-        phase: "error",
-        message: err instanceof Error ? err.message : "Import failed.",
-      });
-    }
-  }, []);
-
-  const handleImport = useCallback(() => {
-    void runImport(importUrl, library);
-  }, [runImport, importUrl, library]);
-
-  const handleBrowseSpotifyPlaylists = useCallback(async () => {
-    const token = getStoredToken();
-    if (!token) {
-      storePendingImport("__browse__");
-      await redirectToSpotifyLogin();
-      return;
-    }
-    setLoadingSpotifyPlaylists(true);
-    try {
-      const playlists = await fetchUserPlaylists(token);
-      setSpotifyPlaylistPicker(playlists);
-    } catch (err) {
-      setImportStatus({
-        phase: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to load playlists.",
-      });
-    } finally {
-      setLoadingSpotifyPlaylists(false);
-    }
-  }, []);
-
-  const startSpotifyExport = useCallback(
-    async (tracks: SetTrack[], playlistName: string) => {
-      const token = getStoredToken();
-      if (!token) {
-        storePendingExport(tracks, playlistName);
-        try {
-          await redirectToSpotifyLogin();
-        } catch (err) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Could not start Spotify login.",
-          );
-        }
-        return;
-      }
-      setSpotifyExportStatus({
-        phase: "searching",
-        completed: 0,
-        total: tracks.length,
-      });
-      try {
-        const matches = await searchTracksOnSpotify(
-          tracks,
-          token,
-          (completed, total) =>
-            setSpotifyExportStatus({ phase: "searching", completed, total }),
-        );
-        setSpotifyExportStatus({ phase: "review", matches, playlistName });
-      } catch (err) {
-        setSpotifyExportStatus({
-          phase: "error",
-          message: err instanceof Error ? err.message : "Export failed.",
-        });
-      }
-    },
-    [],
-  );
-
-  const handleExportSpotify = useCallback(async () => {
-    if (generatedSet.length === 0) return;
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const name = `DJFriend Set ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    await startSpotifyExport(generatedSet, name);
-  }, [generatedSet, startSpotifyExport]);
-
-  const handleToggleSpotifyMatch = useCallback((index: number) => {
-    setSpotifyExportStatus((prev) => {
-      if (!prev || prev.phase !== "review") return prev;
-      const matches = [...prev.matches];
-      matches[index] = {
-        ...matches[index],
-        excluded: !matches[index].excluded,
-      };
-      return { ...prev, matches };
-    });
-  }, []);
-
-  const handleConfirmSpotifyExport = useCallback(
-    async (matches: SpotifyMatchResult[], playlistName: string) => {
-      const token = getStoredToken();
-      if (!token) {
-        setSpotifyExportStatus({
-          phase: "error",
-          message: "Spotify session expired. Please try again.",
-        });
-        return;
-      }
-      setSpotifyExportStatus({ phase: "creating" });
-      try {
-        const result = await createPlaylistFromMatches(
-          matches,
-          playlistName,
-          token,
-        );
-
-        // Save to history — all non-excluded tracks (found or not), using original local SetTrack data
-        const includedTracks = matches
-          .filter((m) => !m.excluded)
-          .map((m) => m.track);
-        const entry: HistoryEntry = {
-          id: Date.now().toString(),
-          name: playlistName,
-          timestamp: Date.now(),
-          tracks: includedTracks,
-          prefs: { ...prefs },
-          curve: curve.map((p) => ({ ...p })),
-        };
-        setHistory((prev) => [entry, ...prev]);
-
-        setSpotifyExportStatus({ phase: "done", ...result });
-      } catch (err) {
-        setSpotifyExportStatus({
-          phase: "error",
-          message: err instanceof Error ? err.message : "Export failed.",
-        });
-      }
-    },
-    [prefs, curve],
-  );
-
-  const handleRemoveTrack = useCallback((index: number) => {
-    setGeneratedSet((prev) => {
-      if (index < 0 || index >= prev.length) return prev;
-      const next = prev.filter((_, i) => i !== index);
-      const resequenced = next.map((track, i) => ({
-        ...track,
-        slot: i,
-        harmonicWarning:
-          i > 0 ? isHarmonicWarning(next[i - 1].camelot, track.camelot) : false,
-      }));
-      return resequenced;
-    });
-  }, []);
-
-  const handleUpdateTrack = useCallback((index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number }) => {
-    const patch = {
-      ...(tags.title !== undefined ? { title: tags.title } : {}),
-      ...(tags.artist !== undefined ? { artist: tags.artist } : {}),
-      ...(tags.genre !== undefined ? {
-        genres: tags.genre ? tags.genre.split(',').map(g => g.trim()).filter(Boolean) : [],
-        genresFromSpotify: false,
-      } : {}),
-      ...(tags.bpm !== undefined ? { bpm: tags.bpm } : {}),
-    };
-    setGeneratedSet(prev => {
-      if (index < 0 || index >= prev.length) return prev;
-      return prev.map((t, i) => i === index ? { ...t, ...patch } : t);
-    });
-    const fileKey = generatedSet[index]?.file;
-    if (fileKey) {
-      setLibrary(prev => prev.map(s => s.file === fileKey ? { ...s, ...patch } : s));
-    }
-  }, [generatedSet]);
-
   const progressPercent =
     analysisProgress.total > 0
       ? Math.min(
@@ -876,43 +261,23 @@ export default function App() {
           ),
         )
       : 0;
-  const availableGenres = Array.from(
-    new Set(library.flatMap((song) => song.genres).filter(Boolean)),
-  ).sort((a, b) => a.localeCompare(b));
-
-  const availableTags = (() => {
-    const vibe = new Set<string>(), mood = new Set<string>(), vocal = new Set<string>();
-    const venue = new Set<string>(), time = new Set<string>();
-    for (const s of library) {
-      if (!s.semanticTags) continue;
-      s.semanticTags.vibeTags.forEach(t => vibe.add(t));
-      s.semanticTags.moodTags.forEach(t => mood.add(t));
-      vocal.add(s.semanticTags.vocalType);
-      s.semanticTags.venueTags.forEach(t => venue.add(t));
-      s.semanticTags.timeOfNightTags.forEach(t => time.add(t));
-    }
-    return {
-      vibeTags: [...vibe].sort(),
-      moodTags: [...mood].sort(),
-      vocalTypes: [...vocal].sort(),
-      venueTags: [...venue].sort(),
-      timeOfNightTags: [...time].sort(),
-    };
-  })();
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
       {/* Header */}
       <header className="border-b border-[#1e1e2e] bg-[#0a0a0f] sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">🎧</span>
-            <span className="font-bold text-lg tracking-tight text-[#e2e8f0]">
+        <div className="px-2 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
+            <span className="text-xl flex-shrink-0">🎧</span>
+            <span className="font-bold text-lg tracking-tight text-[#e2e8f0] flex-shrink-0">
               DJFriend
             </span>
             {libraryName && (
-              <span className="hidden sm:inline text-xs text-[#475569] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded">
+              <span className="hidden sm:inline text-xs text-[#475569] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded truncate min-w-0">
                 {libraryName} · {library.length} tracks
+                {library.some(s => s.semanticTags) && (
+                  <span className="text-[#334155]"> · {library.filter(s => s.semanticTags).length} tagged</span>
+                )}
               </span>
             )}
           </div>
@@ -945,22 +310,85 @@ export default function App() {
                 <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
             </button>
-            <button
-              onClick={openPlaylistPicker}
-              disabled={isAnalyzing || loadingPlaylists}
-              className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isAnalyzing
-                ? "Analyzing…"
-                : loadingPlaylists
-                  ? "Loading…"
-                  : "Analyze Apple Music"}
-            </button>
+            {/* Hidden file input for M3U / TXT import */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".m3u,.m3u8,.txt"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                const text = await file.text();
+                const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
+                void runPathListAnalysis(lines, file.name.replace(/\.[^.]+$/, ''));
+              }}
+            />
+            {/* Hidden file input for Rekordbox XML */}
+            <input
+              ref={rbFileInputRef}
+              type="file"
+              accept=".xml"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                const text = await file.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/xml');
+                const trackEls = Array.from(doc.querySelectorAll('TRACK[Location]'));
+                const tracks = trackEls.flatMap(el => {
+                  const loc = el.getAttribute('Location') ?? '';
+                  // file://localhost/path/to/file.mp3 → /path/to/file.mp3
+                  const filePath = decodeURIComponent(loc.replace(/^file:\/\/localhost/, '').replace(/^file:\/\//, ''));
+                  const bpm = parseFloat(el.getAttribute('AverageBpm') ?? '0');
+                  const duration = parseFloat(el.getAttribute('TotalTime') ?? '0');
+                  const tonality = el.getAttribute('Tonality') ?? '';
+                  if (!filePath || !tonality || bpm <= 0) return [];
+                  return [{ path: filePath, title: el.getAttribute('Name') ?? '', artist: el.getAttribute('Artist') ?? '', bpm, tonality, duration }];
+                });
+                void runRekordboxImport(tracks);
+              }}
+            />
+            <div className="relative" ref={analyzeMenuRef}>
+              <button
+                onClick={() => setAnalyzeMenuOpen(o => !o)}
+                disabled={isAnalyzing || loadingPlaylists}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAnalyzing ? "Analyzing…" : loadingPlaylists ? "Loading…" : "Analyze"}
+                <span className="text-[10px]">▾</span>
+              </button>
+              {analyzeMenuOpen && !isAnalyzing && !loadingPlaylists && (
+                <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                  <button
+                    onClick={() => { setAnalyzeMenuOpen(false); void openPlaylistPicker(); }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    Apple Music
+                  </button>
+                  <button
+                    onClick={() => { setAnalyzeMenuOpen(false); fileInputRef.current?.click(); }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                  >
+                    Import M3U / TXT
+                  </button>
+                  <button
+                    onClick={() => { setAnalyzeMenuOpen(false); rbFileInputRef.current?.click(); }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                  >
+                    Import Rekordbox XML
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Tab nav */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1">
+        <div className="px-2 flex gap-1">
           {(["Generator", "History", "Import"] as const).map((tab) => (
             <button
               key={tab}
@@ -994,7 +422,7 @@ export default function App() {
       )}
 
       {activeTab === "Generator" && library.length === 0 && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+        <div className="px-2 pt-6">
           <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4">
             <div className="flex gap-2">
               <input
@@ -1027,408 +455,245 @@ export default function App() {
       )}
 
       {activeTab === "Generator" && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
-          <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
-            {/* Preferences panel */}
-            <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
-                Set Preferences
-              </h2>
-              <PreferencesForm
-                prefs={prefs}
-                availableGenres={availableGenres}
-                onChange={setPrefs}
-                onGenerate={handleGenerate}
-                disabled={library.length === 0}
-              />
-            </div>
+        <main className="px-2 py-6">
+          <div className="flex flex-col lg:flex-row lg:items-start gap-4">
 
-            {/* Energy Curve panel */}
-            <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
-                  Energy Curve
-                </h2>
-                {autoRegen && (
-                  <span className="text-[10px] text-[#475569] bg-[#0d0d14] border border-[#1e1e2e] px-2 py-0.5 rounded">
-                    Live — drag to regenerate
-                  </span>
-                )}
-              </div>
-              <EnergyCurveEditor points={curve} onChange={handleCurveChange} />
+            {/* ── LEFT SIDEBAR ── */}
+            <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4">
 
-              {/* AI Tag Filters */}
-              {(availableTags.vibeTags.length + availableTags.moodTags.length + availableTags.venueTags.length + availableTags.timeOfNightTags.length + availableTags.vocalTypes.length) > 0 && (
-                <div className="mt-4 pt-4 border-t border-[#1e1e2e] flex flex-col gap-3">
-                  {TAG_GROUPS.map(({ key, label, color }) => {
-                    const tags = availableTags[key] as string[];
-                    if (tags.length === 0) return null;
-                    const selectedTags = prefs.tagFilters[key] as string[];
-                    return (
-                      <div key={key}>
-                        <span className="text-[9px] uppercase tracking-widest text-[#334155] block mb-1.5">{label}</span>
-                        <div className="flex flex-wrap gap-1">
-                          {tags.map(tag => {
-                            const active = selectedTags.includes(tag);
-                            return (
-                              <button
-                                key={tag}
-                                type="button"
-                                onClick={() => {
-                                  const current = prefs.tagFilters[key] as string[];
-                                  const next = current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag];
-                                  setPrefs(p => ({ ...p, tagFilters: { ...p.tagFilters, [key]: next } }));
-                                }}
-                                className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors cursor-pointer"
-                                style={{
-                                  backgroundColor: active ? color.activeBg : 'transparent',
-                                  color: color.text,
-                                  border: `1px solid ${active ? color.border : '#2a2a3a'}`,
-                                  opacity: active ? 1 : 0.6,
-                                }}
-                              >
-                                {tag}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {(prefs.tagFilters.vibeTags.length + prefs.tagFilters.moodTags.length + prefs.tagFilters.vocalTypes.length + prefs.tagFilters.venueTags.length + prefs.tagFilters.timeOfNightTags.length) > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setPrefs(p => ({ ...p, tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] } }))}
-                      className="text-[10px] text-[#475569] hover:text-[#94a3b8] transition-colors text-left cursor-pointer"
-                    >
-                      Clear all tags
-                    </button>
+              {/* Card 1: Energy Curve */}
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+                    Energy Curve
+                  </h2>
+                  {autoRegen && (
+                    <span className="text-[10px] text-[#475569] bg-[#0d0d14] border border-[#1e1e2e] px-2 py-0.5 rounded">
+                      Live
+                    </span>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
+                <EnergyCurveEditor points={curve} onChange={handleCurveChange} />
+              </div>
 
-          {/* Generated Set panel */}
-          <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
-              Generated Set
-            </h2>
-            <SetTracklist
-              tracks={generatedSet}
-              prefs={prefs}
-              onSwapTrack={handleSwapTrack}
-              onRemoveTrack={handleRemoveTrack}
-              onUpdateTrack={handleUpdateTrack}
-              onExport={handleExportM3U}
-              onExportSpotify={() => {
-                void handleExportSpotify();
-              }}
-            />
+              {/* Card 2: Filters (only when tag data exists) */}
+              {(availableTags.vibeTags.length + availableTags.moodTags.length + availableTags.venueTags.length + availableTags.timeOfNightTags.length + availableTags.vocalTypes.length + genreGroups.length + availableGenres.length) > 0 && (() => {
+                const activeFilterCount = prefs.tagFilters.vibeTags.length + prefs.tagFilters.moodTags.length + prefs.tagFilters.vocalTypes.length + prefs.tagFilters.venueTags.length + prefs.tagFilters.timeOfNightTags.length;
+                const activeList = [...prefs.tagFilters.vibeTags, ...prefs.tagFilters.moodTags, ...prefs.tagFilters.vocalTypes, ...prefs.tagFilters.venueTags, ...prefs.tagFilters.timeOfNightTags];
+                return (
+                  <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
+                    {/* Toggle header */}
+                    <button
+                      type="button"
+                      onClick={() => setFiltersOpen(o => !o)}
+                      className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">Filters</span>
+                        {activeFilterCount > 0 && (
+                          <span className="text-[10px] font-medium bg-[#7c3aed33] text-[#a78bfa] border border-[#7c3aed66] px-1.5 py-0.5 rounded-full tabular-nums">
+                            {activeFilterCount}
+                          </span>
+                        )}
+                      </div>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                        className={`text-[#475569] transition-transform duration-150 ${filtersOpen ? 'rotate-180' : ''}`}>
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </button>
+
+                    {/* Active filter summary — always visible when filters active */}
+                    {activeFilterCount > 0 && (
+                      <div className="px-5 pb-3 border-t border-[#1e1e2e] pt-3">
+                        <div className="flex items-center gap-2 text-[11px] bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-3 py-1.5">
+                          <span className="text-[#475569] flex-shrink-0">{activeFilterCount} active:</span>
+                          <span className="text-[#94a3b8] truncate">{activeList.join(' · ')}</span>
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); setPrefs(p => ({ ...p, tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] } })); }}
+                            className="ml-auto text-[#475569] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
+                            title="Clear all filters"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expanded filter pills */}
+                    {filtersOpen && (
+                      <div className={`px-4 pb-4 flex flex-col gap-4 ${activeFilterCount === 0 ? 'border-t border-[#1e1e2e] pt-4' : 'pt-2'}`}>
+                        {genreGroups.length > 0 && (
+                          <div>
+                            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">Genre</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {genreGroups.map(label => {
+                                const value = `~${label}`;
+                                const active = prefs.genre === value;
+                                return (
+                                  <button key={value} type="button" onClick={() => selectGenre(active ? 'Any' : value)}
+                                    className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                    style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#a78bfa', borderColor: active ? '#7c3aed' : '#4c1d95' }}>
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {availableGenres.length > 0 && (
+                          <div>
+                            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">User Genre</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {['Any', ...availableGenres].map(genre => {
+                                const umbrellaActive = prefs.genre.startsWith('~') && genre !== 'Any' && genreMatchesUmbrella(genre, prefs.genre);
+                                const active = prefs.genre === genre || umbrellaActive;
+                                return (
+                                  <button key={genre} type="button"
+                                    onClick={() => selectGenre(active && !umbrellaActive && genre !== 'Any' ? 'Any' : genre)}
+                                    className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                    style={{
+                                      backgroundColor: umbrellaActive ? '#0c3a45' : active ? '#164e63' : 'transparent',
+                                      color: umbrellaActive ? '#67e8f9' : active ? '#e2e8f0' : '#22d3ee',
+                                      borderColor: umbrellaActive ? '#0e7490' : active ? '#06b6d4' : '#164e63',
+                                    }}>
+                                    {genre}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {TAG_GROUPS.map(({ key, label, color }) => {
+                          const tags = availableTags[key] as string[];
+                          if (tags.length === 0) return null;
+                          const selectedTags = prefs.tagFilters[key] as string[];
+                          return (
+                            <div key={key}>
+                              <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">{label}</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {tags.map(tag => {
+                                  const active = selectedTags.includes(tag);
+                                  return (
+                                    <button key={tag} type="button"
+                                      onClick={() => {
+                                        const current = prefs.tagFilters[key] as string[];
+                                        const next = current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag];
+                                        setPrefs(p => ({ ...p, tagFilters: { ...p.tagFilters, [key]: next } }));
+                                      }}
+                                      className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                      style={{
+                                        backgroundColor: active ? color.activeBg : 'transparent',
+                                        color: active ? '#fff' : color.inactiveText,
+                                        borderColor: active ? color.activeBorder : color.inactiveBorder,
+                                      }}
+                                    >
+                                      {tag}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Card 3: Duration + Actions */}
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">Duration</span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[30, 45, 60, 90, 120, 180].map(min => (
+                      <button key={min} type="button"
+                        onClick={() => setPrefs(p => ({ ...p, setDuration: min }))}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                        style={{ backgroundColor: prefs.setDuration === min ? '#7c3aed' : 'transparent', color: prefs.setDuration === min ? '#fff' : '#64748b', borderColor: prefs.setDuration === min ? '#7c3aed' : '#2a2a3a' }}
+                      >
+                        {min}m
+                      </button>
+                    ))}
+                  </div>
+                  {filteredTrackCount > 0 && (
+                    <span className="text-[10px] text-[#475569]">≈ {filteredTrackCount} tracks</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={handleGenerate} disabled={library.length === 0} title="Generate a new set"
+                    className="flex items-center justify-center gap-2 bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-md transition-colors cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                    Generate
+                  </button>
+                  <button onClick={handleRegenerate} disabled={library.length === 0} title="Different mix from the same tracks"
+                    className="flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#e2e8f0] text-sm font-medium py-2.5 rounded-md transition-colors cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                    Shuffle
+                  </button>
+                  <button onClick={handleGenerateNew} disabled={!canGenerateNew}
+                    title={canGenerateNew ? 'Generate from tracks not in the current set' : 'Not enough tracks outside the current set'}
+                    className="flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#e2e8f0] text-sm font-medium py-2.5 rounded-md transition-colors cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
+                      <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+                    </svg>
+                    New tracks
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ── RIGHT: Generated Set ── */}
+            <div className="flex-1 min-w-0">
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
+                  Generated Set
+                </h2>
+                <SetTracklist
+                  tracks={generatedSet}
+                  prefs={prefs}
+                  libraryLoaded={library.length > 0}
+                  onSwapTrack={handleSwapTrack}
+                  onRemoveTrack={handleRemoveTrack}
+                  onReorderTrack={handleReorderTrack}
+                  onUpdateTrack={handleUpdateTrack}
+                  onExport={handleExportM3U}
+                  onExportSpotify={() => { void handleExportSpotify(); }}
+                />
+              </div>
+            </div>
+
           </div>
         </main>
       )}
 
       {activeTab === "History" && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-          {history.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-[#475569] gap-3">
-              <span className="text-4xl">📋</span>
-              <p className="text-sm">
-                No playlists exported yet. Generate a set and click Export as
-                M3U.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex justify-end mb-2">
-                <button
-                  onClick={() => {
-                    if (confirm("Clear all history? This cannot be undone.")) {
-                      setHistory([]);
-                      setImportHistory([]);
-                      localStorage.removeItem("djfriend-history");
-                      localStorage.removeItem("djfriend-imports");
-                    }
-                  }}
-                  className="text-xs text-[#475569] hover:text-[#ef4444] transition-colors cursor-pointer"
-                >
-                  Clear all history
-                </button>
-              </div>
-              {history.map((entry) => {
-                const isExpanded = expandedHistoryId === entry.id;
-                const date = new Date(entry.timestamp);
-                const label =
-                  date.toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  }) +
-                  " · " +
-                  date.toLocaleTimeString(undefined, {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  });
-
-                // Mini curve: 300×56 viewBox, no padding
-                const miniW = 300;
-                const miniH = 56;
-                const miniPath = buildSvgPath(entry.curve, miniW, miniH, 120);
-                const miniFill = miniPath
-                  ? `${miniPath} L ${miniW} ${miniH} L 0 ${miniH} Z`
-                  : "";
-
-                const prefTags = [
-                  `${entry.prefs.setDuration} min`,
-                  entry.prefs.venueType,
-                  entry.prefs.setPhase,
-                  ...(entry.prefs.genre !== "Any" ? [entry.prefs.genre] : []),
-                ];
-
-                return (
-                  <div
-                    key={entry.id}
-                    className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden"
-                  >
-                    {/* Editable name */}
-                    <div className="px-5 pt-4 pb-2">
-                      <input
-                        value={entry.name}
-                        onChange={(e) =>
-                          handleRenameEntry(entry.id, e.target.value)
-                        }
-                        className="w-full bg-transparent text-sm font-semibold text-[#e2e8f0] border-b border-transparent hover:border-[#2a2a3a] focus:border-[#7c3aed] focus:outline-none pb-0.5 transition-colors"
-                      />
-                    </div>
-                    {/* Tags + mini curve (always visible) */}
-                    <div className="px-5 pt-1 pb-3 flex items-start gap-4">
-                      <div className="flex flex-wrap gap-1.5 flex-1">
-                        {prefTags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="text-[11px] px-2 py-0.5 rounded-full bg-[#1a1a2e] border border-[#2a2a3a] text-[#94a3b8]"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="w-44 shrink-0 rounded-md overflow-hidden border border-[#1e1e2e] bg-[#0d0d14]">
-                        <svg
-                          viewBox={`0 0 ${miniW} ${miniH}`}
-                          width="100%"
-                          height={miniH}
-                          preserveAspectRatio="none"
-                          style={{ display: "block" }}
-                        >
-                          {miniFill && (
-                            <path
-                              d={miniFill}
-                              fill="#7c3aed"
-                              fillOpacity="0.15"
-                            />
-                          )}
-                          {miniPath && (
-                            <path
-                              d={miniPath}
-                              fill="none"
-                              stroke="#7c3aed"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          )}
-                          {entry.curve.map((pt, i) => (
-                            <circle
-                              key={i}
-                              cx={pt.x * miniW}
-                              cy={(1 - pt.y) * miniH}
-                              r="3"
-                              fill="#7c3aed"
-                            />
-                          ))}
-                        </svg>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center border-t border-[#1e1e2e]">
-                      <button
-                        onClick={() =>
-                          setExpandedHistoryId(isExpanded ? null : entry.id)
-                        }
-                        className="flex-1 flex items-center gap-3 px-5 py-3 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
-                      >
-                        <span className="text-[#7c3aed] text-sm font-medium">
-                          {entry.tracks.length} tracks
-                        </span>
-                        <span className="text-xs text-[#475569]">{label}</span>
-                        <span className="text-[#475569] text-xs ml-auto">
-                          {isExpanded ? "▲" : "▼"}
-                        </span>
-                      </button>
-                      <div
-                        ref={
-                          openHistoryExportId === entry.id
-                            ? historyExportRef
-                            : null
-                        }
-                        className="relative border-l border-[#1e1e2e] shrink-0"
-                      >
-                        <button
-                          onClick={() =>
-                            setOpenHistoryExportId(
-                              openHistoryExportId === entry.id
-                                ? null
-                                : entry.id,
-                            )
-                          }
-                          className="flex items-center gap-1.5 px-4 py-3 text-xs text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#0d0d14] transition-colors cursor-pointer"
-                        >
-                          Export <span className="text-[9px]">▾</span>
-                        </button>
-                        {openHistoryExportId === entry.id && (
-                          <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
-                            <button
-                              onClick={() => {
-                                if (playlistsFolder) {
-                                  void exportM3UToServer(entry.tracks, `${entry.name}.m3u`).then(saved => {
-                                    if (!saved) downloadM3U(entry.tracks, `${entry.name}.m3u`);
-                                  });
-                                } else {
-                                  downloadM3U(entry.tracks, `${entry.name}.m3u`);
-                                }
-                                setOpenHistoryExportId(null);
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                            >
-                              Export as M3U
-                            </button>
-                            <button
-                              onClick={() => {
-                                void startSpotifyExport(
-                                  entry.tracks,
-                                  entry.name,
-                                );
-                                setOpenHistoryExportId(null);
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
-                            >
-                              Export to Spotify
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="border-t border-[#1e1e2e]">
-                        <table className="w-full border-collapse">
-                          <thead>
-                            <tr className="bg-[#0d0d14]">
-                              <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">
-                                #
-                              </th>
-                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
-                                Track
-                              </th>
-                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
-                                BPM
-                              </th>
-                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
-                                Key
-                              </th>
-                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
-                                Energy
-                              </th>
-                              <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider hidden xl:table-cell">
-                                Genre
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {entry.tracks.map((track, idx) => (
-                              <tr
-                                key={track.file}
-                                className="group border-t border-[#1e1e2e] hover:bg-[#0d0d14]"
-                              >
-                                <td className="py-2.5 pl-5 pr-2 w-10">
-                                  <span className="group-hover:hidden text-xs text-[#475569] tabular-nums">
-                                    {idx + 1}
-                                  </span>
-                                  <button
-                                    onClick={() =>
-                                      void fetch("/api/play-in-music", {
-                                        method: "POST",
-                                        headers: {
-                                          "Content-Type": "application/json",
-                                        },
-                                        body: JSON.stringify({
-                                          filePath: track.filePath,
-                                          artist: track.artist,
-                                          title: track.title,
-                                        }),
-                                      })
-                                    }
-                                    className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-                                    title="Play in Apple Music"
-                                  >
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      width="13"
-                                      height="13"
-                                      viewBox="0 0 24 24"
-                                      fill="currentColor"
-                                    >
-                                      <polygon points="5 3 19 12 5 21 5 3" />
-                                    </svg>
-                                  </button>
-                                </td>
-                                <td className="py-2.5 px-2">
-                                  <div className="text-sm text-[#e2e8f0] truncate max-w-xs">
-                                    {track.title}
-                                  </div>
-                                  <div className="text-[11px] text-[#475569] truncate">
-                                    {track.artist}
-                                  </div>
-                                </td>
-                                <td className="py-2.5 px-2 text-sm text-[#94a3b8] tabular-nums">
-                                  {Math.round(track.bpm)}
-                                </td>
-                                <td className="py-2.5 px-2 text-sm text-[#94a3b8]">
-                                  {track.camelot}
-                                </td>
-                                <td className="py-2.5 px-2 text-sm text-[#94a3b8] tabular-nums">
-                                  {Math.round(track.energy * 100)}%
-                                </td>
-                                <td className="py-2.5 px-2 pr-5 hidden xl:table-cell">
-                                  {track.genres && track.genres.length > 0 ? (
-                                    <span
-                                      className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
-                                      title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
-                                    >
-                                      {track.genres.slice(0, 2).join(' · ')}
-                                      {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] text-[#2a2a3a]">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        <main className="px-2 py-6">
+          <HistoryTab
+            history={history}
+            setHistory={setHistory}
+            setImportHistory={setImportHistory}
+            expandedHistoryId={expandedHistoryId}
+            setExpandedHistoryId={setExpandedHistoryId}
+            openHistoryExportId={openHistoryExportId}
+            setOpenHistoryExportId={setOpenHistoryExportId}
+            historyExportRef={historyExportRef}
+            playlistsFolder={playlistsFolder}
+            exportM3UToServer={exportM3UToServer}
+            startSpotifyExport={startSpotifyExport}
+            handleRenameEntry={handleRenameEntry}
+            onLoadEntry={handleLoadHistoryEntry}
+          />
         </main>
       )}
 
       {activeTab === "Import" && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <main className="px-2 py-6">
           {/* Import input */}
           <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-5">
             <h2 className="text-sm font-semibold text-[#e2e8f0] mb-3">
@@ -1835,20 +1100,26 @@ export default function App() {
               </p>
             ) : (
               <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto">
-                {playlistPicker.map((playlist) => (
-                  <button
-                    key={playlist.name}
-                    onClick={() => runAppleMusicAnalysis(playlist.name)}
-                    className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2.5 hover:border-[#7c3aed] transition-colors cursor-pointer"
-                  >
-                    <div className="text-sm text-[#e2e8f0]">
-                      {playlist.name}
-                    </div>
-                    <div className="text-[11px] text-[#475569] mt-0.5">
-                      {playlist.count} track{playlist.count === 1 ? "" : "s"}
-                    </div>
-                  </button>
-                ))}
+                {playlistPicker.map((playlist) => {
+                  const imported = analyzedApplePlaylists.has(playlist.name);
+                  return (
+                    <button
+                      key={playlist.name}
+                      onClick={() => runAppleMusicAnalysis(playlist.name)}
+                      className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2.5 hover:border-[#7c3aed] transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-[#e2e8f0]">{playlist.name}</span>
+                        {imported && (
+                          <span className="text-[11px] font-semibold text-[#22c55e] flex-shrink-0">✓</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-[#475569] mt-0.5">
+                        {playlist.count} track{playlist.count === 1 ? "" : "s"}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1903,8 +1174,9 @@ export default function App() {
                         </div>
                         <div className="text-[11px] text-[#94a3b8] mt-1">
                           {song.camelot} • {Math.round(song.bpm)} BPM •{" "}
-                          {Math.round(song.energy * 100)}% energy • relevance{" "}
-                          {Math.round(score * 100)}%
+                          {Math.round(song.energy * 100)}% energy •{" "}
+                          {song.duration != null ? `${Math.floor(song.duration / 60)}:${String(Math.round(song.duration % 60)).padStart(2, '0')}` : '—'}{" "}
+                          • relevance {Math.round(score * 100)}%
                         </div>
                       </button>
                     ))}
@@ -2116,7 +1388,7 @@ export default function App() {
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onSaved={() => { loadSettings() }}
+        onSaved={() => { loadSettings(); setLibrary([]); setGeneratedSet([]); }}
       />
 
       {m3uSavedPath && (

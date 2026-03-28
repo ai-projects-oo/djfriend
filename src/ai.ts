@@ -23,12 +23,19 @@ export const ENRICHMENT_BATCH_SIZE = 20
 
 export const ENRICHMENT_SYSTEM_PROMPT = `You are a music taxonomy expert. Given a list of tracks with audio features, return semantic tags for each track.
 
+Each category has a STRICTLY separate vocabulary — never use a word from one category in another.
+
 For each track, analyze artist, title, BPM, musical key, energy (0-1 scale), and genres to determine:
-- vibeTags: 1-3 vibes from: euphoric, driving, melancholic, dreamy, aggressive, groovy, dark, uplifting, hypnotic, trippy, emotional, intense
-- moodTags: 1-3 moods from: dark, uplifting, funky, melancholic, euphoric, mysterious, romantic, tense, peaceful, rebellious
+- vibeTags: 1-3 sonic/energy character tags — ONLY from: driving, hypnotic, dreamy, groovy, aggressive, trippy, ethereal, intense, raw, bouncy
+- moodTags: 1-3 emotional quality tags — ONLY from: dark, uplifting, melancholic, euphoric, romantic, tense, peaceful, rebellious, mysterious, funky, emotional
 - vocalType: exactly one of "vocal", "instrumental", "mostly-vocal"
-- venueTags: 1-2 venues from: club, festival, bar, lounge, warehouse, outdoor, intimate
-- timeOfNightTags: 1-2 slots from: opening, warm-up, peak-time, after-hours, closing
+- venueTags: 1-2 venue tags — ONLY from: club, festival, bar, lounge, warehouse, outdoor, intimate, rooftop
+- timeOfNightTags: 1-2 time-of-night tags — ONLY from: opening, warm-up, peak-time, after-hours, closing
+
+Rules:
+- Use ONLY the exact words listed above for each category — no synonyms, no additions
+- A word from one category must NEVER appear in another category
+- venueTags must NOT include time-of-night concepts like "peak-time"
 
 Return a JSON object with a "tracks" array. Each item must include the original "file" key unchanged.`
 
@@ -141,9 +148,7 @@ export async function enrichTracks(
         onProgress?.(completed, toEnrich.length)
       }
     } catch {
-      // skip failed batch — don't break the whole enrichment run
-      completed += batch.length
-      onProgress?.(completed, toEnrich.length)
+      // skip failed batch — progress does not advance so the user can see something stalled
     }
   }
 }

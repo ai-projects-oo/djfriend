@@ -7,18 +7,42 @@ interface Props {
   onSaved: () => void
 }
 
+type PathStatus = 'idle' | 'checking' | 'ok' | 'missing'
+
 export default function SettingsModal({ open, onClose, onSaved }: Props) {
   const [musicFolder, setMusicFolder] = useState('')
   const [playlistsFolder, setPlaylistsFolder] = useState('')
+  const [musicFolderStatus, setMusicFolderStatus] = useState<PathStatus>('idle')
+  const [playlistsFolderStatus, setPlaylistsFolderStatus] = useState<PathStatus>('idle')
   const [groqKey, setGroqKey] = useState('')
   const [hasGroqKey, setHasGroqKey] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savingGroq, setSavingGroq] = useState(false)
   const [groqSaved, setGroqSaved] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [clearConfirm, setClearConfirm] = useState(false)
   const [error, setError] = useState('')
+
+  async function checkPath(folderPath: string, setStatus: (s: PathStatus) => void) {
+    if (!folderPath.trim()) { setStatus('idle'); return }
+    setStatus('checking')
+    try {
+      const r = await fetch('/api/check-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderPath: folderPath.trim() }),
+      })
+      const { exists } = await r.json() as { exists: boolean }
+      setStatus(exists ? 'ok' : 'missing')
+    } catch {
+      setStatus('idle')
+    }
+  }
 
   useEffect(() => {
     if (!open) return
+    setMusicFolderStatus('idle')
+    setPlaylistsFolderStatus('idle')
     fetch('/api/settings')
       .then(r => r.json())
       .then((d: { musicFolder: string; playlistsFolder: string; hasGroqKey: boolean }) => {
@@ -70,6 +94,22 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     }
   }
 
+  async function clearDatabase() {
+    setClearing(true)
+    setError('')
+    try {
+      const r = await fetch('/api/clear-database', { method: 'POST' })
+      if (!r.ok) throw new Error('Clear failed')
+      setClearConfirm(false)
+      onSaved()
+      onClose()
+    } catch {
+      setError('Failed to clear database.')
+    } finally {
+      setClearing(false)
+    }
+  }
+
   if (!open) return null
 
   return (
@@ -87,23 +127,43 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
         <div className="space-y-4 mb-5">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">Folders</h3>
           <div>
-            <label className="block text-xs text-[#64748b] mb-1.5">Music library folder</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-[#64748b]">Music library folder</label>
+              {musicFolderStatus === 'checking' && <span className="text-[10px] text-[#475569]">Checking…</span>}
+              {musicFolderStatus === 'ok' && <span className="text-[10px] text-[#22c55e]">✓ Found</span>}
+              {musicFolderStatus === 'missing' && <span className="text-[10px] text-[#ef4444]">Folder not found</span>}
+            </div>
             <input
               type="text"
               value={musicFolder}
-              onChange={e => setMusicFolder(e.target.value)}
+              onChange={e => { setMusicFolder(e.target.value); setMusicFolderStatus('idle') }}
+              onBlur={() => void checkPath(musicFolder, setMusicFolderStatus)}
               placeholder="/path/to/music"
-              className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+              className={`w-full rounded-md border bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none transition-colors ${
+                musicFolderStatus === 'ok' ? 'border-[#22c55e]' :
+                musicFolderStatus === 'missing' ? 'border-[#ef4444]' :
+                'border-[#2a2a3a] focus:border-[#7c3aed]'
+              }`}
             />
           </div>
           <div>
-            <label className="block text-xs text-[#64748b] mb-1.5">Playlists folder</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-[#64748b]">Playlists folder</label>
+              {playlistsFolderStatus === 'checking' && <span className="text-[10px] text-[#475569]">Checking…</span>}
+              {playlistsFolderStatus === 'ok' && <span className="text-[10px] text-[#22c55e]">✓ Found</span>}
+              {playlistsFolderStatus === 'missing' && <span className="text-[10px] text-[#ef4444]">Folder not found</span>}
+            </div>
             <input
               type="text"
               value={playlistsFolder}
-              onChange={e => setPlaylistsFolder(e.target.value)}
+              onChange={e => { setPlaylistsFolder(e.target.value); setPlaylistsFolderStatus('idle') }}
+              onBlur={() => void checkPath(playlistsFolder, setPlaylistsFolderStatus)}
               placeholder="/path/to/playlists"
-              className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+              className={`w-full rounded-md border bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none transition-colors ${
+                playlistsFolderStatus === 'ok' ? 'border-[#22c55e]' :
+                playlistsFolderStatus === 'missing' ? 'border-[#ef4444]' :
+                'border-[#2a2a3a] focus:border-[#7c3aed]'
+              }`}
             />
           </div>
         </div>
@@ -141,6 +201,35 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
               </button>
             </div>
           </div>
+        </div>
+
+        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Danger Zone</h3>
+          {!clearConfirm ? (
+            <button
+              onClick={() => setClearConfirm(true)}
+              className="px-3 py-2 text-sm rounded-md border border-[#3f1a1a] text-[#f87171] hover:bg-[#1a0a0a] transition-colors cursor-pointer"
+            >
+              Clear database
+            </button>
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-[#f87171]">Delete all analyzed tracks?</span>
+              <button
+                onClick={clearDatabase}
+                disabled={clearing}
+                className="px-3 py-1.5 text-xs font-medium rounded-md bg-[#7f1d1d] text-white hover:bg-[#991b1b] disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                {clearing ? 'Clearing…' : 'Yes, clear'}
+              </button>
+              <button
+                onClick={() => setClearConfirm(false)}
+                className="text-xs text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
 
         {error && <p className="mt-3 text-xs text-red-400">{error}</p>}

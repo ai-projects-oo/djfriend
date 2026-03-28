@@ -46,11 +46,25 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [playlistsFolder, setPlaylistsFolder] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [analyzeMenuOpen, setAnalyzeMenuOpen] = useState(false);
+  const analyzeMenuRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const rbFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Persist history to localStorage
   useEffect(() => {
     localStorage.setItem("djfriend-history", JSON.stringify(history));
   }, [history]);
+
+  // Click-outside for analyze menu
+  useEffect(() => {
+    if (!analyzeMenuOpen) return;
+    const handle = (e: MouseEvent) => {
+      if (analyzeMenuRef.current && !analyzeMenuRef.current.contains(e.target as Node)) setAnalyzeMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [analyzeMenuOpen]);
 
   // Click-outside for history export dropdown
   useEffect(() => {
@@ -86,6 +100,8 @@ export default function App() {
     openPlaylistPicker,
     runAppleMusicAnalysis,
     runFolderAnalysis,
+    runPathListAnalysis,
+    runRekordboxImport,
   } = useLibrary({ onNewAnalysis: () => onNewAnalysisRef.current?.() });
 
   const {
@@ -250,14 +266,14 @@ export default function App() {
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
       {/* Header */}
       <header className="border-b border-[#1e1e2e] bg-[#0a0a0f] sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">🎧</span>
-            <span className="font-bold text-lg tracking-tight text-[#e2e8f0]">
+        <div className="px-2 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
+            <span className="text-xl flex-shrink-0">🎧</span>
+            <span className="font-bold text-lg tracking-tight text-[#e2e8f0] flex-shrink-0">
               DJFriend
             </span>
             {libraryName && (
-              <span className="hidden sm:inline text-xs text-[#475569] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded">
+              <span className="hidden sm:inline text-xs text-[#475569] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded truncate min-w-0">
                 {libraryName} · {library.length} tracks
                 {library.some(s => s.semanticTags) && (
                   <span className="text-[#334155]"> · {library.filter(s => s.semanticTags).length} tagged</span>
@@ -294,22 +310,85 @@ export default function App() {
                 <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
             </button>
-            <button
-              onClick={openPlaylistPicker}
-              disabled={isAnalyzing || loadingPlaylists}
-              className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isAnalyzing
-                ? "Analyzing…"
-                : loadingPlaylists
-                  ? "Loading…"
-                  : "Analyze Apple Music"}
-            </button>
+            {/* Hidden file input for M3U / TXT import */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".m3u,.m3u8,.txt"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                const text = await file.text();
+                const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
+                void runPathListAnalysis(lines, file.name.replace(/\.[^.]+$/, ''));
+              }}
+            />
+            {/* Hidden file input for Rekordbox XML */}
+            <input
+              ref={rbFileInputRef}
+              type="file"
+              accept=".xml"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                const text = await file.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/xml');
+                const trackEls = Array.from(doc.querySelectorAll('TRACK[Location]'));
+                const tracks = trackEls.flatMap(el => {
+                  const loc = el.getAttribute('Location') ?? '';
+                  // file://localhost/path/to/file.mp3 → /path/to/file.mp3
+                  const filePath = decodeURIComponent(loc.replace(/^file:\/\/localhost/, '').replace(/^file:\/\//, ''));
+                  const bpm = parseFloat(el.getAttribute('AverageBpm') ?? '0');
+                  const duration = parseFloat(el.getAttribute('TotalTime') ?? '0');
+                  const tonality = el.getAttribute('Tonality') ?? '';
+                  if (!filePath || !tonality || bpm <= 0) return [];
+                  return [{ path: filePath, title: el.getAttribute('Name') ?? '', artist: el.getAttribute('Artist') ?? '', bpm, tonality, duration }];
+                });
+                void runRekordboxImport(tracks);
+              }}
+            />
+            <div className="relative" ref={analyzeMenuRef}>
+              <button
+                onClick={() => setAnalyzeMenuOpen(o => !o)}
+                disabled={isAnalyzing || loadingPlaylists}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAnalyzing ? "Analyzing…" : loadingPlaylists ? "Loading…" : "Analyze"}
+                <span className="text-[10px]">▾</span>
+              </button>
+              {analyzeMenuOpen && !isAnalyzing && !loadingPlaylists && (
+                <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                  <button
+                    onClick={() => { setAnalyzeMenuOpen(false); void openPlaylistPicker(); }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    Apple Music
+                  </button>
+                  <button
+                    onClick={() => { setAnalyzeMenuOpen(false); fileInputRef.current?.click(); }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                  >
+                    Import M3U / TXT
+                  </button>
+                  <button
+                    onClick={() => { setAnalyzeMenuOpen(false); rbFileInputRef.current?.click(); }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                  >
+                    Import Rekordbox XML
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Tab nav */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1">
+        <div className="px-2 flex gap-1">
           {(["Generator", "History", "Import"] as const).map((tab) => (
             <button
               key={tab}
@@ -343,7 +422,7 @@ export default function App() {
       )}
 
       {activeTab === "Generator" && library.length === 0 && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+        <div className="px-2 pt-6">
           <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4">
             <div className="flex gap-2">
               <input
@@ -376,16 +455,16 @@ export default function App() {
       )}
 
       {activeTab === "Generator" && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <main className="px-2 py-6">
           <div className="flex flex-col lg:flex-row lg:items-start gap-4">
 
             {/* ── LEFT SIDEBAR ── */}
-            <div className="lg:w-80 xl:w-96 flex-shrink-0 flex flex-col gap-4">
+            <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4">
 
               {/* Card 1: Energy Curve */}
               <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
                     Energy Curve
                   </h2>
                   {autoRegen && (
@@ -410,7 +489,7 @@ export default function App() {
                       className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-[#0d0d14] transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold uppercase tracking-widest text-[#475569]">Filters</span>
+                        <span className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">Filters</span>
                         {activeFilterCount > 0 && (
                           <span className="text-[10px] font-medium bg-[#7c3aed33] text-[#a78bfa] border border-[#7c3aed66] px-1.5 py-0.5 rounded-full tabular-nums">
                             {activeFilterCount}
@@ -443,18 +522,18 @@ export default function App() {
 
                     {/* Expanded filter pills */}
                     {filtersOpen && (
-                      <div className={`px-5 pb-5 flex flex-col gap-3 ${activeFilterCount === 0 ? 'border-t border-[#1e1e2e] pt-4' : 'pt-1'}`}>
+                      <div className={`px-4 pb-4 flex flex-col gap-4 ${activeFilterCount === 0 ? 'border-t border-[#1e1e2e] pt-4' : 'pt-2'}`}>
                         {genreGroups.length > 0 && (
                           <div>
-                            <span className="text-[9px] uppercase tracking-widest text-[#334155] block mb-1.5">Genre</span>
-                            <div className="flex flex-wrap gap-1">
+                            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">Genre</span>
+                            <div className="flex flex-wrap gap-1.5">
                               {genreGroups.map(label => {
                                 const value = `~${label}`;
                                 const active = prefs.genre === value;
                                 return (
                                   <button key={value} type="button" onClick={() => selectGenre(active ? 'Any' : value)}
-                                    className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors cursor-pointer"
-                                    style={{ backgroundColor: active ? '#1e1030' : 'transparent', color: active ? '#c084fc' : '#6d28d9', border: `1px solid ${active ? '#7c3aed' : '#3b1a6e'}`, opacity: active ? 1 : 0.75 }}>
+                                    className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                    style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#a78bfa', borderColor: active ? '#7c3aed' : '#4c1d95' }}>
                                     {label}
                                   </button>
                                 );
@@ -464,16 +543,20 @@ export default function App() {
                         )}
                         {availableGenres.length > 0 && (
                           <div>
-                            <span className="text-[9px] uppercase tracking-widest text-[#334155] block mb-1.5">User Genre</span>
-                            <div className="flex flex-wrap gap-1">
+                            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">User Genre</span>
+                            <div className="flex flex-wrap gap-1.5">
                               {['Any', ...availableGenres].map(genre => {
                                 const umbrellaActive = prefs.genre.startsWith('~') && genre !== 'Any' && genreMatchesUmbrella(genre, prefs.genre);
                                 const active = prefs.genre === genre || umbrellaActive;
                                 return (
                                   <button key={genre} type="button"
                                     onClick={() => selectGenre(active && !umbrellaActive && genre !== 'Any' ? 'Any' : genre)}
-                                    className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors cursor-pointer"
-                                    style={{ backgroundColor: active ? '#0f172a' : 'transparent', color: active ? '#94a3b8' : '#475569', border: `1px solid ${active ? '#334155' : '#2a2a3a'}`, opacity: active ? 1 : 0.6 }}>
+                                    className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                    style={{
+                                      backgroundColor: umbrellaActive ? '#0c3a45' : active ? '#164e63' : 'transparent',
+                                      color: umbrellaActive ? '#67e8f9' : active ? '#e2e8f0' : '#22d3ee',
+                                      borderColor: umbrellaActive ? '#0e7490' : active ? '#06b6d4' : '#164e63',
+                                    }}>
                                     {genre}
                                   </button>
                                 );
@@ -487,8 +570,8 @@ export default function App() {
                           const selectedTags = prefs.tagFilters[key] as string[];
                           return (
                             <div key={key}>
-                              <span className="text-[9px] uppercase tracking-widest text-[#334155] block mb-1.5">{label}</span>
-                              <div className="flex flex-wrap gap-1">
+                              <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">{label}</span>
+                              <div className="flex flex-wrap gap-1.5">
                                 {tags.map(tag => {
                                   const active = selectedTags.includes(tag);
                                   return (
@@ -498,8 +581,12 @@ export default function App() {
                                         const next = current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag];
                                         setPrefs(p => ({ ...p, tagFilters: { ...p.tagFilters, [key]: next } }));
                                       }}
-                                      className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors cursor-pointer"
-                                      style={{ backgroundColor: active ? color.activeBg : 'transparent', color: color.text, border: `1px solid ${active ? color.border : '#2a2a3a'}`, opacity: active ? 1 : 0.6 }}
+                                      className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                      style={{
+                                        backgroundColor: active ? color.activeBg : 'transparent',
+                                        color: active ? '#fff' : color.inactiveText,
+                                        borderColor: active ? color.activeBorder : color.inactiveBorder,
+                                      }}
                                     >
                                       {tag}
                                     </button>
@@ -516,22 +603,22 @@ export default function App() {
               })()}
 
               {/* Card 3: Duration + Actions */}
-              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex flex-col gap-3">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[9px] uppercase tracking-widest text-[#334155] whitespace-nowrap">Duration</span>
-                  <div className="flex gap-1 flex-wrap">
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">Duration</span>
+                  <div className="flex gap-1.5 flex-wrap">
                     {[30, 45, 60, 90, 120, 180].map(min => (
                       <button key={min} type="button"
                         onClick={() => setPrefs(p => ({ ...p, setDuration: min }))}
-                        className="px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer"
-                        style={{ backgroundColor: prefs.setDuration === min ? '#7c3aed33' : 'transparent', color: prefs.setDuration === min ? '#a78bfa' : '#475569', border: `1px solid ${prefs.setDuration === min ? '#7c3aed66' : '#2a2a3a'}` }}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                        style={{ backgroundColor: prefs.setDuration === min ? '#7c3aed' : 'transparent', color: prefs.setDuration === min ? '#fff' : '#64748b', borderColor: prefs.setDuration === min ? '#7c3aed' : '#2a2a3a' }}
                       >
                         {min}m
                       </button>
                     ))}
                   </div>
                   {filteredTrackCount > 0 && (
-                    <span className="text-[10px] text-[#334155]">≈ {filteredTrackCount} tracks</span>
+                    <span className="text-[10px] text-[#475569]">≈ {filteredTrackCount} tracks</span>
                   )}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
@@ -586,7 +673,7 @@ export default function App() {
       )}
 
       {activeTab === "History" && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <main className="px-2 py-6">
           <HistoryTab
             history={history}
             setHistory={setHistory}
@@ -606,7 +693,7 @@ export default function App() {
       )}
 
       {activeTab === "Import" && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <main className="px-2 py-6">
           {/* Import input */}
           <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-5">
             <h2 className="text-sm font-semibold text-[#e2e8f0] mb-3">

@@ -72,12 +72,12 @@ export function genreMatchesUmbrella(genreStr: string, selectedGenre: string): b
   return matchesUmbrella(genreStr, selectedGenre, ALL_BEATPORT_PHRASES);
 }
 
-export const TAG_GROUPS: { key: keyof TagFilters; label: string; color: { border: string; text: string; activeBg: string } }[] = [
-  { key: 'vibeTags',        label: 'Vibe',                color: { border: '#7c3aed66', text: '#a78bfa', activeBg: '#7c3aed33' } },
-  { key: 'moodTags',        label: 'Mood',                color: { border: '#1d4ed866', text: '#60a5fa', activeBg: '#1d4ed833' } },
-  { key: 'venueTags',       label: 'Venue',               color: { border: '#06522066', text: '#34d399', activeBg: '#06522033' } },
-  { key: 'timeOfNightTags', label: 'Time',                color: { border: '#92400e66', text: '#fbbf24', activeBg: '#92400e33' } },
-  { key: 'vocalTypes',      label: 'Vocal/Instrumental',  color: { border: '#4a044e66', text: '#e879f9', activeBg: '#4a044e33' } },
+export const TAG_GROUPS: { key: keyof TagFilters; label: string; color: { inactiveBorder: string; inactiveText: string; activeBg: string; activeBorder: string } }[] = [
+  { key: 'vibeTags',        label: 'Vibe',   color: { inactiveBorder: '#7c2d12', inactiveText: '#fb923c', activeBg: '#c2410c', activeBorder: '#f97316' } },
+  { key: 'moodTags',        label: 'Mood',   color: { inactiveBorder: '#1e3a8a', inactiveText: '#60a5fa', activeBg: '#1d4ed8', activeBorder: '#3b82f6' } },
+  { key: 'venueTags',       label: 'Venue',  color: { inactiveBorder: '#064e3b', inactiveText: '#34d399', activeBg: '#065f46', activeBorder: '#10b981' } },
+  { key: 'timeOfNightTags', label: 'Time',   color: { inactiveBorder: '#78350f', inactiveText: '#fbbf24', activeBg: '#92400e', activeBorder: '#f59e0b' } },
+  { key: 'vocalTypes',      label: 'Vocal',  color: { inactiveBorder: '#881337', inactiveText: '#fb7185', activeBg: '#9f1239', activeBorder: '#f43f5e' } },
 ];
 
 export const DEFAULT_PREFS: DJPreferences = {

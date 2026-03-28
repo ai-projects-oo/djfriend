@@ -126,12 +126,12 @@ export default function EnergyCurveEditor({ points, onChange }: Props) {
   return (
     <div className="flex flex-col gap-3">
       {/* Preset buttons */}
-      <div className="flex flex-wrap gap-2 items-center">
+      <div className="flex gap-1.5 items-center overflow-x-auto scrollbar-none">
         {(Object.keys(ARC_PRESETS) as ArcPreset[]).map((preset) => (
           <button
             key={preset}
             onClick={() => applyPreset(preset)}
-            className={`px-3 py-1 text-xs rounded border transition-colors cursor-pointer ${
+            className={`px-2.5 py-1 text-xs rounded border transition-colors cursor-pointer whitespace-nowrap flex-shrink-0 ${
               activePreset === preset
                 ? 'border-[#7c3aed] bg-[#7c3aed]/10 text-[#e2e8f0]'
                 : 'border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0]'
@@ -143,7 +143,7 @@ export default function EnergyCurveEditor({ points, onChange }: Props) {
         <button
           onClick={() => { setActivePreset(null); onChange(DEFAULT_CURVE); }}
           title="Reset curve to default"
-          className="px-2 py-1 text-xs rounded border border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+          className="px-2 py-1 text-xs rounded border border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer flex-shrink-0"
         >
           ↺
         </button>

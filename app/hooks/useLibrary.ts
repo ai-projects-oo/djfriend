@@ -156,6 +156,70 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     }
   }, []);
 
+  const runRekordboxImport = useCallback(async (tracks: Array<{ path: string; title: string; artist: string; bpm: number; tonality: string; duration: number }>) => {
+    if (tracks.length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisProgress({ completed: 0, total: 0 });
+    setError(null);
+    onNewAnalysisRef.current?.();
+    try {
+      const response = await fetch('/api/import-rekordbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracks }),
+      });
+      if (!response.ok) throw new Error('Could not start Rekordbox import.');
+      await streamAnalysis(response, (event) => {
+        if (event.type === 'start') { setAnalysisProgress({ completed: 0, total: event.total }); return; }
+        if (event.type === 'progress') { setAnalysisProgress({ completed: event.completed, total: event.total }); return; }
+        if (event.type === 'error') { setError(event.message); return; }
+        if (event.type === 'done') {
+          const songs = parseSongs(event.songs);
+          if (!songs) { setError('Import completed but returned invalid data.'); return; }
+          setLibrary(songs);
+          setLibraryName('Rekordbox collection (imported)');
+          setError(null);
+        }
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Rekordbox import failed.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, []);
+
+  const runPathListAnalysis = useCallback(async (paths: string[], label: string) => {
+    if (paths.length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisProgress({ completed: 0, total: 0 });
+    setError(null);
+    onNewAnalysisRef.current?.();
+    try {
+      const response = await fetch('/api/analyze-paths', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths, label }),
+      });
+      if (!response.ok) throw new Error('Could not start analysis.');
+      await streamAnalysis(response, (event) => {
+        if (event.type === 'start') { setAnalysisProgress({ completed: 0, total: event.total }); return; }
+        if (event.type === 'progress') { setAnalysisProgress({ completed: event.completed, total: event.total }); return; }
+        if (event.type === 'error') { setError(event.message); return; }
+        if (event.type === 'done') {
+          const songs = parseSongs(event.songs);
+          if (!songs) { setError('Analysis completed but returned invalid song data.'); return; }
+          setLibrary(songs);
+          setLibraryName(`${event.libraryName} (analyzed)`);
+          setError(null);
+        }
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Analysis failed.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, []);
+
   const runFolderAnalysis = useCallback(async (path: string) => {
     if (!path.trim()) return;
     setIsAnalyzing(true);
@@ -206,5 +270,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     openPlaylistPicker,
     runAppleMusicAnalysis,
     runFolderAnalysis,
+    runPathListAnalysis,
+    runRekordboxImport,
   };
 }

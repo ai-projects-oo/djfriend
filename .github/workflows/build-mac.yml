@@ -1,4 +1,4 @@
-name: Build Windows Installer
+name: Build macOS App
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build-mac:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -26,7 +26,7 @@ jobs:
       - name: Bundle Electron main
         run: npm run build:electron
 
-      - name: Build & publish Windows installer
-        run: npx electron-builder --win --x64 --publish always
+      - name: Build & publish macOS DMG
+        run: npx electron-builder --mac --arm64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

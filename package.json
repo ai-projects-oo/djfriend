@@ -69,6 +69,11 @@
     "directories": {
       "output": "dist_electron"
     },
+    "publish": {
+      "provider": "github",
+      "owner": "ai-projects-oo",
+      "repo": "djfriend"
+    },
     "asar": false,
     "extraMetadata": {
       "main": "electron-compiled/main.js"

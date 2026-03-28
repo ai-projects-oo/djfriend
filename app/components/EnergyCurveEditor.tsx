@@ -6,7 +6,7 @@ const SVG_HEIGHT = 180;
 const HANDLE_RADIUS = 8;
 const PADDING = { top: 16, bottom: 24, left: 8, right: 8 };
 
-const ARC_PRESETS: Record<ArcPreset, number[]> = {
+export const ARC_PRESETS: Record<ArcPreset, number[]> = {
   'Build-up': [0.1, 0.25, 0.45, 0.7, 0.95],
   Peak: [0.4, 0.7, 0.95, 0.7, 0.4],
   Valley: [0.8, 0.5, 0.2, 0.5, 0.8],
@@ -126,7 +126,7 @@ export default function EnergyCurveEditor({ points, onChange }: Props) {
   return (
     <div className="flex flex-col gap-3">
       {/* Preset buttons */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         {(Object.keys(ARC_PRESETS) as ArcPreset[]).map((preset) => (
           <button
             key={preset}
@@ -140,6 +140,13 @@ export default function EnergyCurveEditor({ points, onChange }: Props) {
             {preset}
           </button>
         ))}
+        <button
+          onClick={() => { setActivePreset(null); onChange(DEFAULT_CURVE); }}
+          title="Reset curve to default"
+          className="px-2 py-1 text-xs rounded border border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+        >
+          ↺
+        </button>
       </div>
 
       {/* SVG canvas */}

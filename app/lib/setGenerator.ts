@@ -1,6 +1,7 @@
 import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, SetPhase, TagFilters } from '../types';
 import { camelotHarmonyScore, isHarmonicWarning } from './camelot';
 import { sampleCurve } from './curveInterpolation';
+import { matchesGenrePref } from './genreUtils';
 
 const GAP_SECONDS = 10;
 
@@ -61,6 +62,11 @@ function semanticAffinityBonus(song: Song, venue: VenueType, setPhase: SetPhase)
   return (venueMatch ? 0.05 : 0) + (timeMatch ? 0.05 : 0)
 }
 
+// Expand merged tags like "dark / intense" into ["dark", "intense"]
+function expandTags(tags: string[]): string[] {
+  return tags.flatMap(t => t.includes(' / ') ? t.split(' / ').map(p => p.trim()) : [t]);
+}
+
 function tagFilterBonus(song: Song, filters: TagFilters): number {
   const { vibeTags, moodTags, vocalTypes, venueTags, timeOfNightTags } = filters;
   const hasAny = vibeTags.length + moodTags.length + vocalTypes.length + venueTags.length + timeOfNightTags.length > 0;
@@ -69,19 +75,14 @@ function tagFilterBonus(song: Song, filters: TagFilters): number {
   const t = song.semanticTags;
   let matches = 0;
   let categories = 0;
-  if (vibeTags.length > 0) { categories++; if (t.vibeTags.some(v => vibeTags.includes(v))) matches++; }
-  if (moodTags.length > 0) { categories++; if (t.moodTags.some(v => moodTags.includes(v))) matches++; }
-  if (vocalTypes.length > 0) { categories++; if (vocalTypes.includes(t.vocalType)) matches++; }
-  if (venueTags.length > 0) { categories++; if (t.venueTags.some(v => venueTags.includes(v))) matches++; }
-  if (timeOfNightTags.length > 0) { categories++; if (t.timeOfNightTags.some(v => timeOfNightTags.includes(v))) matches++; }
+  if (vibeTags.length > 0) { categories++; if (t.vibeTags.some(v => expandTags(vibeTags).includes(v))) matches++; }
+  if (moodTags.length > 0) { categories++; if (t.moodTags.some(v => expandTags(moodTags).includes(v))) matches++; }
+  if (vocalTypes.length > 0) { categories++; if (expandTags(vocalTypes).includes(t.vocalType)) matches++; }
+  if (venueTags.length > 0) { categories++; if (t.venueTags.some(v => expandTags(venueTags).includes(v))) matches++; }
+  if (timeOfNightTags.length > 0) { categories++; if (t.timeOfNightTags.some(v => expandTags(timeOfNightTags).includes(v))) matches++; }
   return (matches / categories) * 0.2;
 }
 
-function matchesGenre(song: Song, genre: string): boolean {
-  if (genre === 'Any') return true;
-  const needle = genre.toLowerCase();
-  return song.genres.some((g) => g.toLowerCase().includes(needle));
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,15 +92,27 @@ function clamp(val: number, min: number, max: number): number {
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
+export interface GenerateOptions {
+  /** 0–1 random bonus added to each song's score — produces a different result each call */
+  jitter?: number;
+  /** songs to exclude from the candidate pool (for "generate new" from remaining tracks) */
+  excludeFiles?: Set<string>;
+}
+
 export function generateSet(
   songs: Song[],
   prefs: DJPreferences,
   curve: CurvePoint[],
+  options?: GenerateOptions,
 ): SetTrack[] {
   if (songs.length === 0) return [];
 
-  const genreFilteredSongs = songs.filter((song) => matchesGenre(song, prefs.genre));
-  const candidatePool = genreFilteredSongs.length > 0 ? genreFilteredSongs : songs;
+  const genreFilteredSongs = songs.filter((song) => matchesGenrePref(song, prefs.genre));
+  let candidatePool = genreFilteredSongs.length > 0 ? genreFilteredSongs : songs;
+  if (options?.excludeFiles?.size) {
+    const remaining = candidatePool.filter(s => !options.excludeFiles!.has(s.file));
+    if (remaining.length > 0) candidatePool = remaining;
+  }
 
   const setDurationSeconds = prefs.setDuration * 60;
 
@@ -149,7 +162,8 @@ export function generateSet(
       const affinityBonus = genreAffinityBonus(song, affinityKey);
       const semBonus = semanticAffinityBonus(song, prefs.venueType, prefs.setPhase);
       const tagBonus = tagFilterBonus(song, prefs.tagFilters);
-      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus + semBonus + tagBonus;
+      const jitter = options?.jitter ? Math.random() * options.jitter : 0;
+      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus + semBonus + tagBonus + jitter;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;

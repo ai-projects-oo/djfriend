@@ -273,6 +273,17 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     })
   }
 
+  middlewares.use('/api/apple-library', (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    if (!fs.existsSync(APPLE_RESULTS_PATH)) {
+      res.setHeader('Content-Type', 'application/json')
+      res.end('null')
+      return
+    }
+    res.setHeader('Content-Type', 'application/json')
+    fs.createReadStream(APPLE_RESULTS_PATH).pipe(res)
+  })
+
   middlewares.use('/api/settings', async (req, res, next) => {
     if (req.method === 'GET') {
       const s = readSettings()
@@ -294,6 +305,44 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       return
     }
     next()
+  })
+
+  middlewares.use('/api/check-path', (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    let body = ''
+    req.on('data', (chunk: Buffer) => { body += chunk.toString() })
+    req.on('end', () => {
+      try {
+        const { folderPath } = JSON.parse(body) as { folderPath: string }
+        const exists = typeof folderPath === 'string' && folderPath.trim().length > 0 && fs.existsSync(folderPath.trim())
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ exists }))
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ exists: false }))
+      }
+    })
+  })
+
+  middlewares.use('/api/clear-database', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    const deleted: string[] = []
+    // Clear Apple Music results
+    if (fs.existsSync(APPLE_RESULTS_PATH)) {
+      fs.unlinkSync(APPLE_RESULTS_PATH)
+      deleted.push(APPLE_RESULTS_PATH)
+    }
+    // Clear folder results.json if music folder is configured
+    const { musicFolder } = readSettings()
+    if (musicFolder) {
+      const folderResults = path.join(musicFolder, 'results.json')
+      if (fs.existsSync(folderResults)) {
+        fs.unlinkSync(folderResults)
+        deleted.push(folderResults)
+      }
+    }
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: true, deleted }))
   })
 
   middlewares.use('/api/analyze-folder', async (req, res, next) => {

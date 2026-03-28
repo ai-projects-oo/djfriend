@@ -26,15 +26,10 @@
     "productName": "DJFriend",
     "mac": {
       "category": "public.app-category.music",
+      "artifactName": "DJFriend.dmg",
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
           "arch": [
             "arm64"
           ]
@@ -57,7 +52,8 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "public/icon.ico"
+      "icon": "public/icon.ico",
+      "artifactName": "DJFriend-Setup.exe"
     },
     "nsis": {
       "oneClick": true,

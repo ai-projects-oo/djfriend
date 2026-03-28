@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DJFriend — Smart DJ Set Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0f;
+      --surface:   #12121a;
+      --surface2:  #1a1a2e;
+      --border:    #1e1e2e;
+      --border2:   #2a2a3a;
+      --purple:    #7c3aed;
+      --purple-lt: #a78bfa;
+      --purple-dk: #4c1d95;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --dim:       #475569;
+      --dimmer:    #334155;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -.02em;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: .875rem;
+      transition: color .15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    /* ── LAYOUT ── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 6rem 0 4rem;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-block;
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--purple-lt);
+      background: rgba(124,58,237,.12);
+      border: 1px solid rgba(124,58,237,.3);
+      padding: .3rem .9rem;
+      border-radius: 99px;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 {
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 800;
+      letter-spacing: -.04em;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #e2e8f0 30%, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 1.25rem;
+    }
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 560px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.65;
+    }
+    .hero-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      background: var(--purple);
+      color: #fff;
+      font-weight: 600;
+      font-size: .95rem;
+      padding: .75rem 1.75rem;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: background .15s, transform .1s;
+    }
+    .hero-cta:hover { background: #6d28d9; transform: translateY(-1px); }
+
+    /* ── HOW IT WORKS ── */
+    .how-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .how-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .how-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(124,58,237,.15);
+      border: 1px solid rgba(124,58,237,.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+    }
+    .how-card h3 {
+      font-size: .95rem;
+      font-weight: 700;
+      margin-bottom: .4rem;
+      color: var(--text);
+    }
+    .how-card p {
+      font-size: .875rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* ── SECTIONS ── */
+    section { padding: 4rem 0; }
+    section + section { border-top: 1px solid var(--border); }
+
+    .section-label {
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--purple-lt);
+      margin-bottom: .75rem;
+    }
+    h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -.03em;
+      margin-bottom: .75rem;
+      color: var(--text);
+    }
+    .section-intro {
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 580px;
+      margin-bottom: 2rem;
+    }
+
+    /* ── STEPS ── */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .step {
+      background: var(--surface);
+      padding: 1.5rem;
+      display: flex;
+      gap: 1.25rem;
+      align-items: flex-start;
+      transition: background .15s;
+    }
+    .step:hover { background: var(--surface2); }
+    .step-num {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(124,58,237,.15);
+      border: 1px solid rgba(124,58,237,.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .75rem;
+      font-weight: 700;
+      color: var(--purple-lt);
+      margin-top: 2px;
+    }
+    .step-body h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: .35rem;
+      color: var(--text);
+    }
+    .step-body p {
+      font-size: .9rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .step-body p + p { margin-top: .4rem; }
+
+    /* ── SOURCES GRID ── */
+    .sources {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: .75rem;
+      margin-top: 1.5rem;
+    }
+    .source-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      transition: border-color .15s;
+    }
+    .source-card:hover { border-color: var(--purple); }
+    .source-card .src-icon { font-size: 1.5rem; margin-bottom: .6rem; }
+    .source-card h4 { font-size: .9rem; font-weight: 600; margin-bottom: .4rem; }
+    .source-card p  { font-size: .8rem; color: var(--muted); line-height: 1.5; }
+    .source-card .tag {
+      display: inline-block;
+      font-size: .65rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      padding: .15rem .5rem;
+      border-radius: 99px;
+      margin-top: .6rem;
+    }
+    .tag-mac  { background: rgba(34,211,238,.1); color: #22d3ee; border: 1px solid rgba(34,211,238,.25); }
+    .tag-win  { background: rgba(99,102,241,.1);  color: #818cf8; border: 1px solid rgba(99,102,241,.25); }
+    .tag-both { background: rgba(52,211,153,.1);  color: #34d399; border: 1px solid rgba(52,211,153,.25); }
+
+    /* ── FEATURE LIST ── */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: .5rem;
+    }
+    .feat {
+      display: flex;
+      align-items: flex-start;
+      gap: .75rem;
+      padding: .85rem 1rem;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: .875rem;
+      color: var(--muted);
+    }
+    .feat-dot {
+      flex-shrink: 0;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--purple);
+      margin-top: 7px;
+    }
+
+    /* ── EXPORT CARDS ── */
+    .export-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 520px) { .export-grid { grid-template-columns: 1fr; } }
+    .export-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .export-card h4 { font-size: 1rem; font-weight: 600; margin-bottom: .5rem; }
+    .export-card p  { font-size: .875rem; color: var(--muted); line-height: 1.55; }
+    .export-icon { font-size: 1.75rem; margin-bottom: .75rem; }
+
+    /* ── SETTINGS TABLE ── */
+    .settings-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+      margin-top: 1.5rem;
+    }
+    .settings-table th {
+      text-align: left;
+      padding: .75rem 1rem;
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--dim);
+      border-bottom: 1px solid var(--border);
+    }
+    .settings-table td {
+      padding: .9rem 1rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .settings-table tr:last-child td { border-bottom: none; }
+    .settings-table td:first-child { color: var(--text); font-weight: 500; white-space: nowrap; }
+    .settings-table td:last-child  { color: var(--muted); }
+    .settings-table { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .settings-table a { color: var(--purple-lt); }
+
+    /* ── INLINE CODE ── */
+    kbd {
+      display: inline-block;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      padding: .1em .45em;
+      font-size: .8em;
+      font-family: ui-monospace, 'SF Mono', monospace;
+      color: var(--purple-lt);
+    }
+
+    /* ── CALLOUT ── */
+    .callout {
+      background: rgba(124,58,237,.08);
+      border: 1px solid rgba(124,58,237,.22);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      font-size: .875rem;
+      color: var(--muted);
+      margin-top: 1rem;
+    }
+    .callout strong { color: var(--purple-lt); }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 0;
+      text-align: center;
+      color: var(--dimmer);
+      font-size: .85rem;
+    }
+
+    /* ── MISC ── */
+    strong { color: var(--text); }
+    @media (max-width: 600px) {
+      nav { padding: 0 1rem; }
+      .nav-links { display: none; }
+      .hero { padding: 4rem 0 3rem; }
+      section { padding: 2.5rem 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">🎧 DJFriend</a>
+  <ul class="nav-links">
+    <li><a href="#load">Load Music</a></li>
+    <li><a href="#generate">Generate</a></li>
+    <li><a href="#export">Export</a></li>
+    <li><a href="#settings">Settings</a></li>
+    <li><a href="https://github.com/ai-projects-oo/djfriend/releases">Download</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<div class="container">
+  <div class="hero">
+    <div class="hero-badge">Free Desktop App</div>
+    <h1>Build smarter DJ sets</h1>
+    <p>Harmonic mixing, energy curves, and AI-powered track selection — all from your existing music library.</p>
+    <a class="hero-cta" href="https://github.com/ai-projects-oo/djfriend/releases">
+      ↓ &nbsp;Download DJFriend
+    </a>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="how-grid">
+    <div class="how-card">
+      <div class="how-icon">🎵</div>
+      <h3>Harmonic mixing</h3>
+      <p>Tracks in compatible keys sound smooth together. DJFriend scores every transition and picks the best fit automatically.</p>
+    </div>
+    <div class="how-card">
+      <div class="how-icon">📈</div>
+      <h3>Energy arc</h3>
+      <p>Draw a curve showing how energy should build and drop. DJFriend matches the right track to each moment.</p>
+    </div>
+    <div class="how-card">
+      <div class="how-icon">🎛️</div>
+      <h3>You stay in control</h3>
+      <p>Every track can be swapped, reordered, or removed. The generator is a starting point, not a final answer.</p>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">Features</div>
+    <h2>Everything you need to plan a set</h2>
+    <div class="features">
+      <div class="feat"><span class="feat-dot"></span>Energy curve editor with 5 presets (Build-up, Peak, Valley, Steady, W-shape)</div>
+      <div class="feat"><span class="feat-dot"></span>Automatic harmonic compatibility scoring</div>
+      <div class="feat"><span class="feat-dot"></span>BPM continuity scoring</div>
+      <div class="feat"><span class="feat-dot"></span>Genre + semantic tag filters (Vibe, Mood, Venue, Time, Vocal)</div>
+      <div class="feat"><span class="feat-dot"></span>Set duration control — 30 to 180 minutes</div>
+      <div class="feat"><span class="feat-dot"></span>Load from folder, Apple Music, M3U, or Rekordbox XML</div>
+      <div class="feat"><span class="feat-dot"></span>Drag-to-reorder tracklist with harmonic warning badges</div>
+      <div class="feat"><span class="feat-dot"></span>One-click swap suggestions for any track</div>
+      <div class="feat"><span class="feat-dot"></span>Export to M3U playlist or Spotify</div>
+      <div class="feat"><span class="feat-dot"></span>Full set history — save, rename, reload, re-export</div>
+      <div class="feat"><span class="feat-dot"></span>Spotify playlist checker — see which tracks you already own</div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALLATION -->
+<section id="install">
+  <div class="container">
+    <div class="section-label">Installation</div>
+    <h2>Download and run</h2>
+    <p class="section-intro">No account required. No subscription. Just download and open.</p>
+    <div class="sources">
+      <div class="source-card">
+        <div class="src-icon">🪟</div>
+        <h4>Windows</h4>
+        <p>Download <strong>DJFriend Setup.exe</strong>, run it. The app installs silently and launches automatically.</p>
+        <span class="tag tag-win">Windows 10 / 11</span>
+      </div>
+      <div class="source-card">
+        <div class="src-icon">🍎</div>
+        <h4>macOS</h4>
+        <p>Download <strong>DJFriend.dmg</strong>, open it, drag to Applications.</p>
+        <span class="tag tag-mac">macOS 12+</span>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:1.25rem">
+      <strong>Downloads</strong> are on the <a href="https://github.com/ai-projects-oo/djfriend/releases" style="color:var(--purple-lt)">Releases page</a>.
+    </div>
+  </div>
+</section>
+
+<!-- LOAD MUSIC -->
+<section id="load">
+  <div class="container">
+    <div class="section-label">Step 1</div>
+    <h2>Load your music</h2>
+    <p class="section-intro">Click <kbd>Analyze</kbd> in the top-right corner. Four ways to bring in your library:</p>
+
+    <div class="sources">
+      <div class="source-card">
+        <div class="src-icon">📁</div>
+        <h4>Scan a folder</h4>
+        <p>Open Settings (⚙), set your <strong>Music Folder</strong>, then click <kbd>Analyze → Folder</kbd>. DJFriend reads BPM, key, and energy from every track.</p>
+        <span class="tag tag-both">Mac + Windows</span>
+      </div>
+      <div class="source-card">
+        <div class="src-icon">🎵</div>
+        <h4>Apple Music</h4>
+        <p>Click <kbd>Analyze → Apple Music</kbd> and pick a playlist. Uses your existing Apple Music library — no export needed.</p>
+        <span class="tag tag-mac">Mac only</span>
+      </div>
+      <div class="source-card">
+        <div class="src-icon">📄</div>
+        <h4>M3U / TXT file</h4>
+        <p>Click <kbd>Analyze → Import M3U / TXT</kbd> and pick any <strong>.m3u</strong>, <strong>.m3u8</strong>, or <strong>.txt</strong> file with track paths. Works with exports from Rekordbox, Serato, and others.</p>
+        <span class="tag tag-both">Mac + Windows</span>
+      </div>
+      <div class="source-card">
+        <div class="src-icon">🎚️</div>
+        <h4>Rekordbox XML</h4>
+        <p>In Rekordbox: <strong>File → Export Collection in xml format</strong>. Then <kbd>Analyze → Import Rekordbox XML</kbd>. Your BPM and key data from Rekordbox are used directly — no re-analysis needed.</p>
+        <span class="tag tag-both">Mac + Windows</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Cached results:</strong> Loading takes a moment the first time. On future opens DJFriend loads your library instantly from the local cache.
+    </div>
+  </div>
+</section>
+
+<!-- GENERATE -->
+<section id="generate">
+  <div class="container">
+    <div class="section-label">Steps 2 – 4</div>
+    <h2>Build your set</h2>
+    <p class="section-intro">Three quick setup steps, then hit Generate.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Shape your energy arc</h3>
+          <p>The <strong>Energy Curve</strong> editor shows 5 draggable handles across your set timeline — from the first track to the last. Drag handles up for high-energy moments, down for low.</p>
+          <p>Use a preset to start: <strong>Build-up</strong>, <strong>Peak</strong>, <strong>Steady</strong>, <strong>Valley</strong>, or <strong>W-shape</strong>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Set duration and filters</h3>
+          <p>Choose how many minutes your set should run (30 – 180 min). Optionally open <strong>Filters</strong> to narrow by genre, vibe, mood, venue type, time of night, or vocal style. Only tags found in your library appear.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Generate and refine</h3>
+          <p>Click <strong>Generate</strong>. DJFriend builds a tracklist optimized for harmonic flow, BPM continuity, and your energy curve.</p>
+          <p>From here: <strong>drag rows</strong> to reorder · click <strong>⚠</strong> to fix a key clash · click the swap icon to browse alternatives · hit <strong>Regenerate</strong> for a different shuffle · hit <strong>Generate New</strong> to extend the set with unused tracks.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- EXPORT -->
+<section id="export">
+  <div class="container">
+    <div class="section-label">Step 5</div>
+    <h2>Export your set</h2>
+    <p class="section-intro">Get your set into your DJ software or onto Spotify.</p>
+    <div class="export-grid">
+      <div class="export-card">
+        <div class="export-icon">💾</div>
+        <h4>Save as M3U</h4>
+        <p>Click <kbd>Export → Save M3U</kbd>. The playlist file is saved to your Playlists folder (set in Settings). Load it directly in Rekordbox, Serato, or any other DJ software.</p>
+      </div>
+      <div class="export-card">
+        <div class="export-icon">🎧</div>
+        <h4>Create Spotify playlist</h4>
+        <p>Click <kbd>Export → Create Spotify Playlist</kbd>. Authorize with your Spotify account — DJFriend creates a new playlist there automatically.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HISTORY & IMPORT -->
+<section id="history">
+  <div class="container">
+    <div class="section-label">More features</div>
+    <h2>History &amp; Import</h2>
+    <div class="how-grid" style="margin-top:1.5rem">
+      <div class="how-card">
+        <div class="how-icon">🕐</div>
+        <h3>History tab</h3>
+        <p>Every set you generate is saved automatically. Load any past set back into the generator, rename it, or export it again as M3U or Spotify.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon">🔍</div>
+        <h3>Import tab</h3>
+        <p>Paste any Spotify playlist URL to see which tracks you already own in your library — and which ones you're still missing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<section id="settings">
+  <div class="container">
+    <div class="section-label">Settings</div>
+    <h2>Configure DJFriend</h2>
+    <p class="section-intro">Open Settings with the ⚙ icon in the top-right corner.</p>
+    <table class="settings-table">
+      <thead>
+        <tr>
+          <th>Setting</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Music Folder</td>
+          <td>The folder DJFriend scans for audio files when using Analyze → Folder.</td>
+        </tr>
+        <tr>
+          <td>Playlists Folder</td>
+          <td>Where exported M3U files are saved.</td>
+        </tr>
+        <tr>
+          <td>Groq API Key</td>
+          <td>Optional. Enables AI-generated tags — vibe, mood, and venue labels on each track. Free to get at <a href="https://console.groq.com" target="_blank">console.groq.com</a> (no credit card required).</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <p>DJFriend &nbsp;·&nbsp; <a href="https://github.com/ai-projects-oo/djfriend" style="color:var(--dim)">GitHub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

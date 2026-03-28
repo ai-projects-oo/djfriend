@@ -56,10 +56,13 @@
           "target": "nsis",
           "arch": ["x64"]
         }
-      ]
+      ],
+      "icon": "public/icon.ico"
     },
     "nsis": {
       "oneClick": true,
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
       "shortcutName": "DJFriend",
       "runAfterFinish": true
     },

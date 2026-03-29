@@ -26,6 +26,7 @@
     "productName": "DJFriend",
     "mac": {
       "category": "public.app-category.music",
+      "icon": "public/icon.icns",
       "artifactName": "DJFriend-${arch}.dmg",
       "target": [
         {

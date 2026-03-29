@@ -24,14 +24,22 @@
   "build": {
     "appId": "com.djfriend.app",
     "productName": "DJFriend",
+    "afterSign": "afterSign.cjs",
     "mac": {
       "category": "public.app-category.music",
       "icon": "public/icon.icns",
       "artifactName": "DJFriend-${arch}.dmg",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
       "target": [
         {
           "target": "dmg",
-          "arch": ["arm64", "x64"]
+          "arch": [
+            "arm64",
+            "x64"
+          ]
         }
       ]
     },
@@ -48,7 +56,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "public/icon.ico",
@@ -69,7 +79,7 @@
       "owner": "ai-projects-oo",
       "repo": "djfriend"
     },
-    "asar": false,
+    "asar": true,
     "extraMetadata": {
       "main": "electron-compiled/main.js"
     }
@@ -98,6 +108,7 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@electron/packager": "^19.1.0",
     "@eslint/js": "^9.39.1",
     "@tailwindcss/vite": "^4.2.0",

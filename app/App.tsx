@@ -268,7 +268,7 @@ export default function App() {
       <header className="border-b border-[#1e1e2e] bg-[#0a0a0f] sticky top-0 z-40">
         <div className="px-2 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
-            <span className="text-xl flex-shrink-0">🎧</span>
+            <img src="/icon.png" alt="DJFriend" className="flex-shrink-0" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover' }} />
             <span className="font-bold text-lg tracking-tight text-[#e2e8f0] flex-shrink-0">
               DJFriend
             </span>

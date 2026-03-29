@@ -26,13 +26,11 @@
     "productName": "DJFriend",
     "mac": {
       "category": "public.app-category.music",
-      "artifactName": "DJFriend.dmg",
+      "artifactName": "DJFriend-${arch}.dmg",
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
+          "arch": ["arm64", "x64"]
         }
       ]
     },

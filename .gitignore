@@ -16,6 +16,7 @@ dist.backend
 node_modules.backend_backup
 djfriend/node_modules
 electron-compiled
+server-compiled
 release
 src/*.js
 .claude

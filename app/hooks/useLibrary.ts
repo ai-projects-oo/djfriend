@@ -253,6 +253,42 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     }
   }, []);
 
+  const runUploadAnalysis = useCallback(async (files: FileList) => {
+    if (files.length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisProgress({ completed: 0, total: 0 });
+    setError(null);
+    onNewAnalysisRef.current?.();
+    try {
+      const formData = new FormData();
+      for (const file of Array.from(files)) {
+        const relPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+        formData.append('files', file, relPath);
+      }
+      const response = await fetch('/api/analyze-upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) throw new Error('Could not start upload analysis.');
+      await streamAnalysis(response, (event) => {
+        if (event.type === 'start') { setAnalysisProgress({ completed: 0, total: event.total }); return; }
+        if (event.type === 'progress') { setAnalysisProgress({ completed: event.completed, total: event.total }); return; }
+        if (event.type === 'error') { setError(event.message); return; }
+        if (event.type === 'done') {
+          const songs = parseSongs(event.songs);
+          if (!songs) { setError('Analysis completed but returned invalid data.'); return; }
+          setLibrary(songs);
+          setLibraryName(`${event.libraryName} (uploaded)`);
+          setError(null);
+        }
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload analysis failed.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, []);
+
   return {
     library,
     setLibrary,
@@ -272,5 +308,6 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     runFolderAnalysis,
     runPathListAnalysis,
     runRekordboxImport,
+    runUploadAnalysis,
   };
 }

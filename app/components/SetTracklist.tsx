@@ -105,7 +105,8 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
                 onClick={() => { onExportSpotify?.(); setExportOpen(false); }}
                 className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
               >
-                Export to Spotify
+                <span className="flex-1">Export to Spotify</span>
+                <span className="text-[10px] font-semibold bg-[#7c3aed22] text-[#a78bfa] border border-[#7c3aed44] px-1.5 py-0.5 rounded uppercase tracking-wide">Pro</span>
               </button>
             </div>
           )}

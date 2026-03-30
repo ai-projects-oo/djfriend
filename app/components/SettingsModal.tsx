@@ -124,6 +124,14 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
           </button>
         </div>
 
+        {!musicFolder && !playlistsFolder && (
+          <div className="mb-5 rounded-lg border border-[#7c3aed44] bg-[#1a1030] px-4 py-3">
+            <p className="text-xs text-[#a78bfa] leading-relaxed">
+              Welcome to DJFriend. Set your <strong className="text-[#c4b5fd]">music folder</strong> and <strong className="text-[#c4b5fd]">playlists folder</strong> below to get started.
+            </p>
+          </div>
+        )}
+
         <div className="space-y-4 mb-5">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">Folders</h3>
           <div>

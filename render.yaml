@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: djfriend
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build && npm run build:server
+    startCommand: node server-compiled/standalone-server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false

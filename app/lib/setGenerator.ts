@@ -67,7 +67,8 @@ function expandTags(tags: string[]): string[] {
   return tags.flatMap(t => t.includes(' / ') ? t.split(' / ').map(p => p.trim()) : [t]);
 }
 
-function tagFilterBonus(song: Song, filters: TagFilters): number {
+function tagFilterBonus(song: Song, filters: TagFilters | undefined): number {
+  if (!filters) return 0;
   const { vibeTags, moodTags, vocalTypes, venueTags, timeOfNightTags } = filters;
   const hasAny = vibeTags.length + moodTags.length + vocalTypes.length + venueTags.length + timeOfNightTags.length > 0;
   if (!hasAny) return 0;

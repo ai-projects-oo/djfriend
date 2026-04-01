@@ -176,6 +176,7 @@ function AppInner() {
     runPathListAnalysis,
     runRekordboxImport,
     runUploadAnalysis,
+    runM3uWebImport,
   } = useLibrary({ onNewAnalysis: () => onNewAnalysisRef.current?.() });
 
   const {
@@ -410,8 +411,35 @@ function AppInner() {
                 e.target.value = '';
                 if (!file) return;
                 const text = await file.text();
-                const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
-                void runPathListAnalysis(lines, file.name.replace(/\.[^.]+$/, ''));
+                const label = file.name.replace(/\.[^.]+$/, '');
+                if (navigator.userAgent.toLowerCase().includes("electron")) {
+                  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
+                  void runPathListAnalysis(lines, label);
+                } else {
+                  // Web: parse #EXTINF lines for artist + title, enrich via Spotify
+                  const rawLines = text.split(/\r?\n/);
+                  const tracks: Array<{ artist: string; title: string }> = [];
+                  for (let i = 0; i < rawLines.length; i++) {
+                    const line = rawLines[i].trim();
+                    if (line.startsWith('#EXTINF:')) {
+                      const meta = line.replace(/^#EXTINF:[^,]*,/, '').trim();
+                      const dashIdx = meta.indexOf(' - ');
+                      if (dashIdx !== -1) {
+                        tracks.push({ artist: meta.slice(0, dashIdx).trim(), title: meta.slice(dashIdx + 3).trim() });
+                      } else {
+                        tracks.push({ artist: '', title: meta });
+                      }
+                    }
+                  }
+                  if (tracks.length > 0) {
+                    void runM3uWebImport(tracks, label);
+                  } else {
+                    // Fallback: treat non-# lines as plain titles
+                    const lines = rawLines.map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
+                    const plainTracks = lines.map(l => ({ artist: '', title: l }));
+                    void runM3uWebImport(plainTracks, label);
+                  }
+                }
               }}
             />
             {/* Hidden file input for Rekordbox XML */}

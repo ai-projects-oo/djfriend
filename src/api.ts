@@ -9,7 +9,7 @@ import NodeID3 from 'node-id3'
 import { scanFolder } from './scanner.js'
 import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
-import { authenticate, getArtistGenres, searchTrack } from './spotify.js'
+import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
 import { enrichTracks } from './ai.js'
 import type { SemanticTags } from './ai.js'
@@ -444,6 +444,64 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
       const songs = Object.values(resultsJson)
       writeEvent({ type: 'done', total: rbTracks.length, analyzed: songs.length, libraryName: 'Rekordbox', songs, resultsJson })
+      res.end()
+    } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Import failed.' }); res.end() }
+  })
+
+  // Web-friendly M3U import: takes artist+title metadata, enriches via Spotify audio features
+  middlewares.use('/api/import-m3u-web', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
+    try {
+      const { spotifyClientId, spotifyClientSecret } = readSettings()
+      if (!spotifyClientId || !spotifyClientSecret) { writeEvent({ type: 'error', message: 'Spotify credentials not configured.' }); res.end(); return }
+      const body = await readJsonBody(req) as { tracks?: unknown; label?: unknown }
+      interface M3UTrack { artist: string; title: string }
+      const tracks = Array.isArray(body.tracks)
+        ? (body.tracks as unknown[]).filter((t): t is M3UTrack =>
+            typeof t === 'object' && t !== null &&
+            typeof (t as M3UTrack).title === 'string')
+        : []
+      if (tracks.length === 0) { writeEvent({ type: 'error', message: 'No tracks found in playlist.' }); res.end(); return }
+      const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim() : 'M3U Playlist'
+      writeEvent({ type: 'start', total: tracks.length })
+      const token = await authenticate(spotifyClientId, spotifyClientSecret)
+      const existing = readExistingResultsFile(APPLE_RESULTS_PATH)
+      const resultsJson: Record<string, AppSong> = { ...existing }
+      let completed = 0
+      for (const track of tracks) {
+        completed++
+        writeEvent({ type: 'progress', completed, total: tracks.length, folder: label, file: track.title })
+        const cacheKey = `m3u:${track.artist}:${track.title}`
+        if (existing[cacheKey]) { resultsJson[cacheKey] = existing[cacheKey]; continue }
+        try {
+          const match = await searchTrack(track.artist || null, track.title, token)
+          if (!match) continue
+          const [features, genres] = await Promise.all([
+            getAudioFeatures(match.spotifyId, token),
+            match.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([]),
+          ])
+          const camelotInfo = features ? toCamelot(features.key, features.mode) : null
+          resultsJson[cacheKey] = {
+            filePath: cacheKey,
+            file: `${track.artist ? track.artist + ' - ' : ''}${track.title}`,
+            artist: match.spotifyArtist || track.artist || 'Unknown artist',
+            title: match.spotifyTitle || track.title,
+            bpm: features?.bpm ?? 0,
+            key: camelotInfo?.keyName ?? '',
+            camelot: camelotInfo?.camelot ?? '',
+            energy: features?.energy ?? 0.5,
+            genres,
+            spotifyArtist: match.spotifyArtist,
+            spotifyTitle: match.spotifyTitle,
+          }
+        } catch { /* skip unresolvable tracks */ }
+      }
+      fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
+      const songs = Object.values(resultsJson)
+      writeEvent({ type: 'done', total: tracks.length, analyzed: songs.length, libraryName: label, songs, resultsJson })
       res.end()
     } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Import failed.' }); res.end() }
   })

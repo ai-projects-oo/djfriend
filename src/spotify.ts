@@ -82,3 +82,23 @@ export async function getArtistGenres(artistId: string, token: string): Promise<
   return response.data.genres ?? [];
 }
 
+export interface AudioFeatures {
+  bpm: number;
+  key: number;
+  mode: number;
+  energy: number;
+}
+
+export async function getAudioFeatures(spotifyId: string, token: string): Promise<AudioFeatures | null> {
+  try {
+    const response = await axios.get(`https://api.spotify.com/v1/audio-features/${spotifyId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const d = response.data;
+    if (!d || d.tempo == null) return null;
+    return { bpm: Math.round(d.tempo), key: d.key as number, mode: d.mode as number, energy: d.energy as number };
+  } catch {
+    return null;
+  }
+}
+

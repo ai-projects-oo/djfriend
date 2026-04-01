@@ -290,6 +290,38 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     }
   }, []);
 
+  const runM3uWebImport = useCallback(async (tracks: Array<{ artist: string; title: string }>, label: string) => {
+    if (tracks.length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisProgress({ completed: 0, total: 0 });
+    setError(null);
+    onNewAnalysisRef.current?.();
+    try {
+      const response = await apiFetch('/api/import-m3u-web', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracks, label }),
+      });
+      if (!response.ok) throw new Error('Could not start import.');
+      await streamAnalysis(response, (event) => {
+        if (event.type === 'start') { setAnalysisProgress({ completed: 0, total: event.total }); return; }
+        if (event.type === 'progress') { setAnalysisProgress({ completed: event.completed, total: event.total }); return; }
+        if (event.type === 'error') { setError(event.message); return; }
+        if (event.type === 'done') {
+          const songs = parseSongs(event.songs);
+          if (!songs) { setError('Import completed but returned invalid song data.'); return; }
+          setLibrary(songs);
+          setLibraryName(`${event.libraryName} (imported)`);
+          setError(null);
+        }
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'M3U import failed.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, []);
+
   return {
     library,
     setLibrary,
@@ -310,5 +342,6 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     runPathListAnalysis,
     runRekordboxImport,
     runUploadAnalysis,
+    runM3uWebImport,
   };
 }

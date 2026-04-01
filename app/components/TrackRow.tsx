@@ -8,7 +8,7 @@ interface Props {
   index: number;
   onSwap: () => void;
   onRemove: () => void;
-  onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number }) => void;
+  onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
   // drag-to-reorder
   onDragStart?: () => void;
   onDragEnd?: () => void;
@@ -21,6 +21,15 @@ const CAMELOT_COLORS: Record<string, string> = {
   A: '#06b6d4',
   B: '#7c3aed',
 };
+
+const KEY_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B']
+const CAMELOT_MAJOR = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B']
+const CAMELOT_MINOR = ['5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A']
+const CAMELOT_TO_KEY: Record<string, string> = {}
+for (let i = 0; i < 12; i++) {
+  CAMELOT_TO_KEY[CAMELOT_MAJOR[i].toLowerCase()] = `${KEY_NAMES[i]} Major`
+  CAMELOT_TO_KEY[CAMELOT_MINOR[i].toLowerCase()] = `${KEY_NAMES[i]} Minor`
+}
 
 function camelotBadgeColor(camelot: string): string {
   const letter = camelot.slice(-1).toUpperCase();
@@ -93,6 +102,7 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
   const [editArtist, setEditArtist] = useState('');
   const [editGenre, setEditGenre] = useState('');
   const [editBpm, setEditBpm] = useState('');
+  const [editCamelot, setEditCamelot] = useState('');
 
   const barColor = energyBarColor(track.energy);
   const isLocal = Boolean(track.filePath);
@@ -110,6 +120,7 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
     setEditArtist(track.artist);
     setEditGenre(track.genres.join(', '));
     setEditBpm(track.bpm > 0 ? String(Math.round(track.bpm)) : '');
+    setEditCamelot(track.camelot ?? '');
     setSaveError(null);
     setEditing(true);
   }
@@ -128,23 +139,35 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
     setSaving(true);
     setSaveError(null);
     try {
-      const tags: { title?: string; artist?: string; genre?: string; bpm?: number } = {};
+      const tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string } = {};
       if (editTitle.trim() !== track.title) tags.title = editTitle.trim();
       if (editArtist.trim() !== track.artist) tags.artist = editArtist.trim();
       const currentGenre = track.genres.join(', ');
       if (editGenre.trim() !== currentGenre) tags.genre = editGenre.trim();
       const newBpm = parseFloat(editBpm);
       if (!isNaN(newBpm) && newBpm !== track.bpm) tags.bpm = newBpm;
+      const normalizedCamelot = editCamelot.trim().toUpperCase();
+      if (normalizedCamelot !== (track.camelot ?? '').toUpperCase()) {
+        const parsed = parseCamelot(normalizedCamelot);
+        if (parsed || normalizedCamelot === '') {
+          tags.camelot = parsed ? normalizedCamelot : '';
+          tags.key = parsed ? (CAMELOT_TO_KEY[normalizedCamelot.toLowerCase()] ?? '') : '';
+        }
+      }
 
       if (Object.keys(tags).length > 0) {
-        const res = await fetch('/api/update-tags', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath: track.filePath, tags }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(err.error ?? 'Save failed');
+        // Only persist to file for local MP3s — for web imports just update in-memory state
+        if (isLocal && isMp3) {
+          const fileTags = { title: tags.title, artist: tags.artist, genre: tags.genre, bpm: tags.bpm }
+          const res = await fetch('/api/update-tags', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filePath: track.filePath, tags: fileTags }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            throw new Error(err.error ?? 'Save failed');
+          }
         }
         onUpdateTrack(tags);
       }
@@ -229,15 +252,25 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
         {/* Camelot key */}
         <td className="py-3 px-2 whitespace-nowrap">
           <div className="relative inline-block">
-            <span
-              className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold cursor-help"
-              style={{ backgroundColor: camelotBadgeColor(track.camelot) + '33', color: camelotBadgeColor(track.camelot), border: `1px solid ${camelotBadgeColor(track.camelot)}66` }}
-              onMouseEnter={() => setShowKeyTooltip(true)}
-              onMouseLeave={() => setShowKeyTooltip(false)}
-            >
-              {track.camelot}
-            </span>
-            {showKeyTooltip && (
+            {track.camelot ? (
+              <span
+                className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold cursor-help"
+                style={{ backgroundColor: camelotBadgeColor(track.camelot) + '33', color: camelotBadgeColor(track.camelot), border: `1px solid ${camelotBadgeColor(track.camelot)}66` }}
+                onMouseEnter={() => setShowKeyTooltip(true)}
+                onMouseLeave={() => setShowKeyTooltip(false)}
+              >
+                {track.camelot}
+              </span>
+            ) : (
+              <button
+                onClick={openEdit}
+                className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold border border-dashed border-[#2a2a3a] text-[#334155] hover:border-[#7c3aed] hover:text-[#7c3aed] transition-colors cursor-pointer"
+                title="Key unknown — click to edit"
+              >
+                ?
+              </button>
+            )}
+            {showKeyTooltip && track.camelot && (
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap">
                 {compatibleKeys.length > 0
                   ? `Compatible: ${compatibleKeys.join(', ')}`
@@ -297,16 +330,14 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
                 ✦
               </button>
             )}
-            {isLocal && isMp3 && (
-              <button
-                onClick={openEdit}
-                title="Edit tags"
-                aria-label="Edit tags"
-                className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-              >
-                <Pencil size={14} />
-              </button>
-            )}
+            <button
+              onClick={openEdit}
+              title="Edit tags"
+              aria-label="Edit tags"
+              className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+            >
+              <Pencil size={14} />
+            </button>
             <button
               onClick={onSwap}
               title="Swap track"
@@ -402,6 +433,15 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
                   value={editBpm}
                   onChange={e => setEditBpm(e.target.value)}
                   className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
+                />
+              </div>
+              <div className="flex flex-col gap-1 w-16">
+                <label className="text-[10px] text-[#475569] uppercase tracking-wider">Key</label>
+                <input
+                  value={editCamelot}
+                  onChange={e => setEditCamelot(e.target.value)}
+                  placeholder="e.g. 7A"
+                  className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs font-mono text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
                 />
               </div>
               <div className="flex items-end gap-2 pb-0.5">

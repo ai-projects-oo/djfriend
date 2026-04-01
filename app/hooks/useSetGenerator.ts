@@ -322,7 +322,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     });
   }, []);
 
-  const handleUpdateTrack = useCallback((index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number }) => {
+  const handleUpdateTrack = useCallback((index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => {
     const patch = {
       ...(tags.title !== undefined ? { title: tags.title } : {}),
       ...(tags.artist !== undefined ? { artist: tags.artist } : {}),
@@ -331,6 +331,8 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
         genresFromSpotify: false,
       } : {}),
       ...(tags.bpm !== undefined ? { bpm: tags.bpm } : {}),
+      ...(tags.camelot !== undefined ? { camelot: tags.camelot } : {}),
+      ...(tags.key !== undefined ? { key: tags.key } : {}),
     };
     setGeneratedSet(prev => {
       if (index < 0 || index >= prev.length) return prev;

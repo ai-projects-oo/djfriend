@@ -10,7 +10,7 @@ interface Props {
   onSwapTrack: (index: number) => void;
   onRemoveTrack: (index: number) => void;
   onReorderTrack: (fromIdx: number, toIdx: number) => void;
-  onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number }) => void;
+  onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
   onExport?: () => void;
   onExportSpotify?: () => void;
 }

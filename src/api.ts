@@ -527,9 +527,10 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           }
         } catch { /* skip unresolvable tracks */ }
       }
-      // AI pass: estimate BPM/key/energy for tracks missing MIK prefix (web-only fallback)
+      // AI pass: estimate BPM/key/energy for tracks missing MIK prefix, then semantic-tag all tracks
       const { groqApiKey } = readSettings()
       if (groqApiKey) {
+        // Pass 1: fill in BPM/key/energy for tracks without MIK prefix
         const needsAI = Object.entries(resultsJson).filter(([, s]) => s.bpm === 0 && s.camelot === '')
         if (needsAI.length > 0) {
           const aiInput = needsAI.map(([cacheKey, s]) => ({ file: cacheKey, artist: s.artist, title: s.title }))
@@ -545,11 +546,16 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
                 camelot: keyInfo?.camelot ?? est.camelot,
                 key: keyInfo?.keyName ?? '',
                 energy: est.energy,
-                aiEstimated: true,
-              } as AppSong & { aiEstimated?: boolean }
+              }
             }
           } catch { /* skip AI pass on error */ }
         }
+        // Pass 2: semantic tagging (vibe/mood/venue/time) for all tracks — same as desktop pipeline
+        try {
+          await enrichTracks(resultsJson, groqApiKey, (completed, total) => {
+            writeEvent({ type: 'progress', completed: tracks.length + completed, total: tracks.length + total })
+          })
+        } catch { /* skip enrichment on error */ }
       }
 
       fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })

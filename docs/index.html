@@ -40,7 +40,7 @@
         overflow-x: hidden;
       }
 
-      /* 🌌 BACKGROUND GLOW */
+      /* 🌌 ANIMATED BACKGROUND GLOW */
       body::before {
         content: "";
         position: fixed;
@@ -55,6 +55,27 @@
           transparent 70%
         );
         z-index: -1;
+        animation: glow-drift 10s ease-in-out infinite alternate;
+      }
+
+      @keyframes glow-drift {
+        from {
+          transform: translateX(-50%) translateY(0);
+        }
+        to {
+          transform: translateX(-45%) translateY(20px);
+        }
+      }
+
+      /* 📈 SCROLL PROGRESS BAR */
+      #scroll-progress {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 0%;
+        height: 3px;
+        background: linear-gradient(to right, var(--purple), var(--purple-lt));
+        z-index: 101;
       }
 
       /* NAV */
@@ -86,27 +107,69 @@
         gap: 1.5rem;
         list-style: none;
       }
+
       .nav-links a {
         color: var(--dim);
         text-decoration: none;
         font-size: 0.875rem;
+        position: relative;
       }
+
+      .nav-links a::after {
+        content: "";
+        position: absolute;
+        width: 0;
+        height: 2px;
+        bottom: -4px;
+        left: 0;
+        background-color: var(--purple-lt);
+        transition: width 0.3s ease;
+      }
+
+      .nav-links a:hover::after {
+        width: 100%;
+      }
+
       .nav-links a:hover {
         color: var(--text);
       }
 
-      /* LAYOUT */
+      /* 🛠 SCROLL REVEAL ANIMATIONS */
+      @keyframes reveal {
+        from {
+          opacity: 0;
+          transform: translateY(30px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      section,
+      .card,
+      .source-card,
+      .step,
+      hr {
+        view-timeline-name: --item-reveal;
+        view-timeline-axis: block;
+        animation: reveal linear both;
+        animation-timeline: --item-reveal;
+        animation-range: entry 5% cover 30%;
+      }
+
+      /* HERO */
       .container {
         max-width: 900px;
         margin: 0 auto;
         padding: 0 1.5rem;
       }
 
-      /* HERO */
       .hero {
         text-align: center;
         padding: 8rem 0 4rem;
       }
+
       .hero h1 {
         font-size: clamp(2.5rem, 5vw, 3.8rem);
         font-weight: 800;
@@ -114,6 +177,7 @@
         line-height: 1.1;
         text-shadow: 0 0 40px rgba(124, 58, 237, 0.25);
       }
+
       .hero h1 span {
         color: var(--purple-lt);
       }
@@ -127,6 +191,7 @@
         align-items: center;
         color: var(--muted);
       }
+
       .hero-bullets li::before {
         content: "·";
         color: var(--purple-lt);
@@ -140,7 +205,22 @@
         border-radius: 16px;
         overflow: hidden;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+        animation: reveal-hero 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
       }
+
+      @keyframes reveal-hero {
+        0% {
+          opacity: 0;
+          transform: translateY(60px);
+          filter: blur(10px);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0);
+          filter: blur(0);
+        }
+      }
+
       .hero-preview img {
         width: 100%;
         display: block;
@@ -179,6 +259,7 @@
         grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         gap: 1.5rem;
       }
+
       .card {
         padding: 2rem;
         border-radius: 16px;
@@ -194,7 +275,6 @@
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
       }
 
-      /* COMPACT SQUARE BUTTONS */
       .dl-btns-compact {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
@@ -217,8 +297,8 @@
         justify-content: center;
         gap: 4px;
         border: none;
-        line-height: 1.2;
       }
+
       .btn-square span {
         font-size: 0.7rem;
         opacity: 0.7;
@@ -230,7 +310,6 @@
         box-shadow: 0 8px 20px rgba(124, 58, 237, 0.3);
       }
 
-      /* ICON WRAPPERS */
       .icon-box {
         width: 40px;
         height: 40px;
@@ -247,12 +326,14 @@
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
         gap: 0.5rem 2rem;
       }
+
       .feat-list li {
         list-style: none;
         color: var(--muted);
         font-size: 0.9rem;
         padding: 0.2rem 0;
       }
+
       .feat-list li::before {
         content: "–";
         color: var(--purple-lt);
@@ -264,6 +345,7 @@
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 1.5rem;
       }
+
       .source-card {
         border-top: 1px solid var(--border);
         padding-top: 1.5rem;
@@ -280,6 +362,7 @@
         color: var(--muted);
         line-height: 1.5;
       }
+
       .tag {
         display: inline-block;
         font-size: 0.65rem;
@@ -339,6 +422,7 @@
         margin-top: 2rem;
         font-size: 0.9rem;
       }
+
       kbd {
         background: rgba(255, 255, 255, 0.1);
         padding: 0.1rem 0.4rem;
@@ -354,6 +438,7 @@
         color: var(--dim);
         font-size: 0.85rem;
       }
+
       footer a {
         color: var(--muted);
         text-decoration: none;
@@ -369,6 +454,8 @@
   </head>
 
   <body>
+    <div id="scroll-progress"></div>
+
     <nav>
       <a class="nav-logo" href="#">
         <img
@@ -519,136 +606,32 @@
       <section id="load">
         <h2>Step 1 — Load your music</h2>
         <p class="section-intro">
-          Click <kbd>Analyze</kbd> in the top-right corner. Four ways to bring
-          in your library:
+          Click <kbd>Analyze</kbd> in the top-right corner.
         </p>
         <div class="sources">
           <div class="source-card">
-            <div class="icon-box">
-              <svg
-                width="20"
-                height="20"
-                fill="none"
-                stroke="var(--purple-lt)"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path d="m15 18-3-3 3-3" />
-                <path d="M4 14V4a2 2 0 0 1 2-2h10l4 4v9.4" />
-                <path d="M2 18h10" />
-              </svg>
-            </div>
             <h4>Scan a folder</h4>
             <p>
-              Set your Music Folder in Settings. Desktop apps perform deep local
-              audio analysis for BPM and Key.
+              Set your Music Folder in Settings. Desktop apps perform audio
+              analysis.
             </p>
             <span class="tag">Mac + Windows</span>
           </div>
           <div class="source-card">
-            <div class="icon-box">
-              <svg
-                width="20"
-                height="20"
-                fill="none"
-                stroke="var(--purple-lt)"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path d="M9 18V5l12-2v13" />
-                <circle cx="6" cy="18" r="3" />
-                <circle cx="18" cy="16" r="3" />
-              </svg>
-            </div>
             <h4>Apple Music</h4>
-            <p>
-              Click Analyze → Apple Music and pick a playlist. Uses your
-              existing macOS library metadata.
-            </p>
+            <p>Analyze → Apple Music and pick a playlist.</p>
             <span class="tag">Mac only</span>
           </div>
           <div class="source-card">
-            <div class="icon-box">
-              <svg
-                width="20"
-                height="20"
-                fill="none"
-                stroke="var(--purple-lt)"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"
-                />
-                <polyline points="14 2 14 8 20 8" />
-                <path d="M9 13h6" />
-                <path d="M9 17h3" />
-              </svg>
-            </div>
             <h4>M3U / TXT file</h4>
-            <p>
-              Works with playlist exports from Rekordbox, Serato, and other DJ
-              software.
-            </p>
+            <p>Works with playlist exports from Rekordbox and Serato.</p>
             <span class="tag">All Platforms</span>
           </div>
           <div class="source-card">
-            <div class="icon-box">
-              <svg
-                width="20"
-                height="20"
-                fill="none"
-                stroke="var(--purple-lt)"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <rect width="18" height="18" x="3" y="3" rx="2" />
-                <path d="M12 8v8" />
-                <path d="M8 12h8" />
-              </svg>
-            </div>
             <h4>Rekordbox XML</h4>
-            <p>
-              Export collection as XML from Rekordbox, then import into DJFriend
-              to sync your library.
-            </p>
+            <p>Export collection as XML from Rekordbox to sync your library.</p>
             <span class="tag">Mac + Windows</span>
           </div>
-        </div>
-
-        <div
-          class="callout"
-          style="
-            border-left-color: var(--dim);
-            background: rgba(255, 255, 255, 0.02);
-            margin-top: 3rem;
-          "
-        >
-          <div
-            style="
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              margin-bottom: 8px;
-            "
-          >
-            <svg
-              width="16"
-              height="16"
-              fill="none"
-              stroke="var(--purple-lt)"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-            <strong>Note on Web Analysis:</strong>
-          </div>
-          To protect your privacy and bandwidth, the Web App performs AI
-          metadata estimation powered by <strong>Groq</strong>. A
-          <strong>Groq API Key</strong> is required in settings for this
-          feature. For direct audio file analysis, use the Desktop versions.
         </div>
       </section>
 
@@ -662,8 +645,8 @@
             <div>
               <h3>Shape your energy arc</h3>
               <p>
-                The Energy Curve editor shows 5 draggable handles. Use presets
-                like Build-up, Peak, or W-shape.
+                The Energy Curve editor shows 5 draggable handles for presets
+                like Build-up or Peak.
               </p>
             </div>
           </div>
@@ -671,10 +654,7 @@
             <div class="step-num">3</div>
             <div>
               <h3>Set duration and filters</h3>
-              <p>
-                Choose runtime (30–180 min) and narrow by genre, mood, or venue
-                type.
-              </p>
+              <p>Choose runtime (30–180 min) and filter by genre or mood.</p>
             </div>
           </div>
           <div class="step">
@@ -683,7 +663,7 @@
               <h3>Generate and refine</h3>
               <p>
                 DJFriend builds a tracklist. Drag rows to reorder or use swap
-                icons for alternatives.
+                icons.
               </p>
             </div>
           </div>
@@ -702,40 +682,14 @@
           "
         >
           <div>
-            <div class="icon-box">
-              <svg
-                width="20"
-                height="20"
-                fill="none"
-                stroke="var(--purple-lt)"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-            </div>
             <h4>Save as M3U</h4>
             <p
               style="font-size: 0.9rem; color: var(--muted); margin-top: 0.5rem"
             >
-              Load the playlist in Rekordbox, Serato, or any other DJ software.
+              Load in Rekordbox, Serato, or other DJ software.
             </p>
           </div>
           <div>
-            <div class="icon-box">
-              <svg
-                width="20"
-                height="20"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.302c-.215.353-.678.463-1.03.247-2.864-1.75-6.47-2.144-10.716-1.173-.404.092-.814-.162-.906-.565-.092-.403.162-.814.566-.906 4.654-1.065 8.636-.615 11.84 1.34.352.215.463.678.246 1.03zm1.467-3.258c-.27.438-.846.578-1.283.308-3.277-2.013-8.274-2.597-12.15-1.42-.49.148-1.01-.132-1.158-.622-.148-.49.132-1.01.622-1.158 4.43-1.344 9.93-.687 13.66 1.604.438.27.578.845.308 1.284zm.127-3.38c-3.93-2.333-10.423-2.55-14.195-1.405-.603.183-1.24-.16-1.423-.762-.183-.602.16-1.24.762-1.423 4.33-1.314 11.493-1.056 16.012 1.627.542.32.72 1.02.4 1.562-.32.54-.102.718-1.556.401z"
-                />
-              </svg>
-            </div>
             <h4>Spotify Playlist</h4>
             <p
               style="font-size: 0.9rem; color: var(--muted); margin-top: 0.5rem"
@@ -754,23 +708,20 @@
           <tbody>
             <tr>
               <td>Music Folder</td>
-              <td>The folder DJFriend scans for audio files.</td>
-            </tr>
-            <tr>
-              <td>Playlists Folder</td>
-              <td>Where exported M3U files are saved.</td>
+              <td>Folder DJFriend scans for audio files.</td>
             </tr>
             <tr>
               <td>Groq API Key</td>
-              <td>Required for AI metadata analysis and vibe tagging.</td>
+              <td>Required for AI metadata analysis in the Web App.</td>
             </tr>
           </tbody>
         </table>
         <div class="callout">
-          Questions or integration help? Contact
+          Contact
           <a href="mailto:obo_odedr@hotmail.com" style="color: var(--purple-lt)"
             >obo_odedr@hotmail.com</a
           >
+          for help.
         </div>
       </section>
     </div>
@@ -784,5 +735,17 @@
         >
       </p>
     </footer>
+
+    <script>
+      window.addEventListener("scroll", () => {
+        const winScroll =
+          document.body.scrollTop || document.documentElement.scrollTop;
+        const height =
+          document.documentElement.scrollHeight -
+          document.documentElement.clientHeight;
+        const scrolled = (winScroll / height) * 100;
+        document.getElementById("scroll-progress").style.width = scrolled + "%";
+      });
+    </script>
   </body>
 </html>

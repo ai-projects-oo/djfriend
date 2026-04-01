@@ -416,13 +416,28 @@ function AppInner() {
                   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
                   void runPathListAnalysis(lines, label);
                 } else {
-                  // Web: parse #EXTINF lines for artist + title, enrich via Spotify
+                  // Web: parse playlist file and enrich via Spotify
                   const rawLines = text.split(/\r?\n/);
                   const tracks: Array<{ artist: string; title: string }> = [];
-                  for (let i = 0; i < rawLines.length; i++) {
-                    const line = rawLines[i].trim();
-                    if (line.startsWith('#EXTINF:')) {
-                      const meta = line.replace(/^#EXTINF:[^,]*,/, '').trim();
+
+                  // 1. Apple Music TSV export (first line has tab-separated headers starting with "Name")
+                  const firstLine = rawLines[0] ?? '';
+                  if (firstLine.includes('\t') && firstLine.split('\t')[0].trim() === 'Name') {
+                    const headers = firstLine.split('\t').map(h => h.trim());
+                    const nameIdx = headers.indexOf('Name');
+                    const artistIdx = headers.indexOf('Artist');
+                    for (let i = 1; i < rawLines.length; i++) {
+                      const cols = rawLines[i].split('\t');
+                      const name = cols[nameIdx]?.trim() ?? '';
+                      const artist = artistIdx >= 0 ? (cols[artistIdx]?.trim() ?? '') : '';
+                      if (name) tracks.push({ artist, title: name });
+                    }
+                  }
+                  // 2. M3U/M3U8 with #EXTINF metadata
+                  else if (rawLines.some(l => l.trim().startsWith('#EXTINF:'))) {
+                    for (const line of rawLines) {
+                      if (!line.trim().startsWith('#EXTINF:')) continue;
+                      const meta = line.trim().replace(/^#EXTINF:[^,]*,/, '').trim();
                       const dashIdx = meta.indexOf(' - ');
                       if (dashIdx !== -1) {
                         tracks.push({ artist: meta.slice(0, dashIdx).trim(), title: meta.slice(dashIdx + 3).trim() });
@@ -431,23 +446,23 @@ function AppInner() {
                       }
                     }
                   }
-                  if (tracks.length > 0) {
-                    void runM3uWebImport(tracks, label);
-                  } else {
-                    // Fallback: treat non-# lines as artist/title (handles file paths and plain text)
-                    const lines = rawLines.map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
-                    const plainTracks = lines.map(l => {
-                      // Strip file path and extension to get bare name (e.g. "/Music/Artist - Title.mp3" → "Artist - Title")
-                      const basename = l.replace(/\\/g, '/').split('/').pop() ?? l;
+                  // 3. Plain text / file path list
+                  else {
+                    for (const l of rawLines) {
+                      const line = l.trim();
+                      if (!line || line.startsWith('#')) continue;
+                      const basename = line.replace(/\\/g, '/').split('/').pop() ?? line;
                       const name = basename.replace(/\.[^.]+$/, '').trim();
                       const dashIdx = name.indexOf(' - ');
                       if (dashIdx !== -1) {
-                        return { artist: name.slice(0, dashIdx).trim(), title: name.slice(dashIdx + 3).trim() };
+                        tracks.push({ artist: name.slice(0, dashIdx).trim(), title: name.slice(dashIdx + 3).trim() });
+                      } else {
+                        tracks.push({ artist: '', title: name });
                       }
-                      return { artist: '', title: name };
-                    });
-                    void runM3uWebImport(plainTracks, label);
+                    }
                   }
+
+                  void runM3uWebImport(tracks, label);
                 }
               }}
             />

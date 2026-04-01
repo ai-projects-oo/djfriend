@@ -355,6 +355,11 @@ function AppInner() {
                 )}
               </span>
             )}
+            {!navigator.userAgent.toLowerCase().includes("electron") && libraryName.includes("(imported)") && (
+              <span className="hidden sm:inline text-xs text-[#64748b] italic">
+                BPM/key/energy are AI-estimated — not from audio analysis
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

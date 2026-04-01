@@ -11,7 +11,7 @@ import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
-import { enrichTracks } from './ai.js'
+import { enrichTracks, analyzeTracksWithAI } from './ai.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -527,6 +527,31 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           }
         } catch { /* skip unresolvable tracks */ }
       }
+      // AI pass: estimate BPM/key/energy for tracks missing MIK prefix (web-only fallback)
+      const { groqApiKey } = readSettings()
+      if (groqApiKey) {
+        const needsAI = Object.entries(resultsJson).filter(([, s]) => s.bpm === 0 && s.camelot === '')
+        if (needsAI.length > 0) {
+          const aiInput = needsAI.map(([cacheKey, s]) => ({ file: cacheKey, artist: s.artist, title: s.title }))
+          try {
+            const aiResults = await analyzeTracksWithAI(aiInput, groqApiKey)
+            for (const [cacheKey] of needsAI) {
+              const est = aiResults.get(cacheKey)
+              if (!est) continue
+              const keyInfo = camelotToKey[est.camelot.toLowerCase()]
+              resultsJson[cacheKey] = {
+                ...resultsJson[cacheKey],
+                bpm: est.bpm,
+                camelot: keyInfo?.camelot ?? est.camelot,
+                key: keyInfo?.keyName ?? '',
+                energy: est.energy,
+                aiEstimated: true,
+              } as AppSong & { aiEstimated?: boolean }
+            }
+          } catch { /* skip AI pass on error */ }
+        }
+      }
+
       fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
       fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
       const songs = Object.values(resultsJson)

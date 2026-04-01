@@ -9,7 +9,7 @@ import NodeID3 from 'node-id3'
 import { scanFolder } from './scanner.js'
 import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
-import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
+import { authenticate, getArtistGenres, searchTrack } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
 import { enrichTracks } from './ai.js'
 import type { SemanticTags } from './ai.js'
@@ -448,7 +448,26 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Import failed.' }); res.end() }
   })
 
-  // Web-friendly M3U import: takes artist+title metadata, enriches via Spotify audio features
+  // Reverse Camelot lookup: "7A" → { keyName, camelot }
+  const KEY_NAMES_LOCAL = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B']
+  const CAMELOT_MAJOR_LOCAL = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B']
+  const CAMELOT_MINOR_LOCAL = ['5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A']
+  const camelotToKey: Record<string, { keyName: string; camelot: string }> = {}
+  for (let i = 0; i < 12; i++) {
+    const maj = CAMELOT_MAJOR_LOCAL[i]; camelotToKey[maj.toLowerCase()] = { camelot: maj, keyName: `${KEY_NAMES_LOCAL[i]} Major` }
+    const min = CAMELOT_MINOR_LOCAL[i]; camelotToKey[min.toLowerCase()] = { camelot: min, keyName: `${KEY_NAMES_LOCAL[i]} Minor` }
+  }
+  // Parse MixedInKey prefix: "7A - 6 - Title" → { camelot:"7A", energy:0.6, cleanTitle:"Title" }
+  function parseMIKPrefix(title: string): { camelot: string; keyName: string; energy: number; cleanTitle: string } | null {
+    const m = title.match(/^([0-9]{1,2}[AB])\s*-\s*([0-9]+)\s*-\s*(.+)$/i)
+    if (!m) return null
+    const info = camelotToKey[m[1].toLowerCase()]
+    if (!info) return null
+    const energy = Math.min(1, Math.max(0, parseInt(m[2], 10) / 10))
+    return { ...info, energy, cleanTitle: m[3].trim() }
+  }
+
+  // Web-friendly M3U import: takes artist+title metadata, extracts MIK prefix then enriches via Spotify
   middlewares.use('/api/import-m3u-web', async (req, res, next) => {
     if (req.method !== 'POST') { next(); return }
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
@@ -477,25 +496,34 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         const cacheKey = `m3u:${track.artist}:${track.title}`
         if (existing[cacheKey]) { resultsJson[cacheKey] = existing[cacheKey]; continue }
         try {
-          const match = await searchTrack(track.artist || null, track.title, token)
-          if (!match) continue
-          const [features, genres] = await Promise.all([
-            getAudioFeatures(match.spotifyId, token),
-            match.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([]),
-          ])
-          const camelotInfo = features ? toCamelot(features.key, features.mode) : null
+          // Extract Camelot key + energy from MixedInKey prefix if present
+          const mik = parseMIKPrefix(track.title)
+          const searchTitle = mik ? mik.cleanTitle : track.title
+
+          const match = await searchTrack(track.artist || null, searchTitle, token)
+
+          // Get genres via artist if we found a match
+          let finalGenres: string[] = []
+          if (match?.artistId) {
+            try { finalGenres = await getArtistGenres(match.artistId, token) } catch { /* ignore */ }
+          }
+
+          const camelot = mik?.camelot ?? ''
+          const keyName = mik?.keyName ?? ''
+          const energy = mik ? mik.energy : 0.5
+
           resultsJson[cacheKey] = {
             filePath: cacheKey,
             file: `${track.artist ? track.artist + ' - ' : ''}${track.title}`,
-            artist: match.spotifyArtist || track.artist || 'Unknown artist',
-            title: match.spotifyTitle || track.title,
-            bpm: features?.bpm ?? 0,
-            key: camelotInfo?.keyName ?? '',
-            camelot: camelotInfo?.camelot ?? '',
-            energy: features?.energy ?? 0.5,
-            genres,
-            spotifyArtist: match.spotifyArtist,
-            spotifyTitle: match.spotifyTitle,
+            artist: match?.spotifyArtist || track.artist || 'Unknown artist',
+            title: match?.spotifyTitle || searchTitle,
+            bpm: 0,
+            key: keyName,
+            camelot,
+            energy,
+            genres: finalGenres,
+            spotifyArtist: match?.spotifyArtist,
+            spotifyTitle: match?.spotifyTitle,
           }
         } catch { /* skip unresolvable tracks */ }
       }

@@ -434,9 +434,18 @@ function AppInner() {
                   if (tracks.length > 0) {
                     void runM3uWebImport(tracks, label);
                   } else {
-                    // Fallback: treat non-# lines as plain titles
+                    // Fallback: treat non-# lines as artist/title (handles file paths and plain text)
                     const lines = rawLines.map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
-                    const plainTracks = lines.map(l => ({ artist: '', title: l }));
+                    const plainTracks = lines.map(l => {
+                      // Strip file path and extension to get bare name (e.g. "/Music/Artist - Title.mp3" → "Artist - Title")
+                      const basename = l.replace(/\\/g, '/').split('/').pop() ?? l;
+                      const name = basename.replace(/\.[^.]+$/, '').trim();
+                      const dashIdx = name.indexOf(' - ');
+                      if (dashIdx !== -1) {
+                        return { artist: name.slice(0, dashIdx).trim(), title: name.slice(dashIdx + 3).trim() };
+                      }
+                      return { artist: '', title: name };
+                    });
                     void runM3uWebImport(plainTracks, label);
                   }
                 }

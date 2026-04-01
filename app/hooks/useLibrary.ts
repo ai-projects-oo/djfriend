@@ -309,7 +309,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
         if (event.type === 'error') { setError(event.message); return; }
         if (event.type === 'done') {
           const songs = parseSongs(event.songs);
-          if (!songs) { setError('Import completed but returned invalid song data.'); return; }
+          if (!songs || songs.length === 0) { setError('No tracks could be matched on Spotify. Check that Spotify credentials are configured in Settings.'); return; }
           setLibrary(songs);
           setLibraryName(`${event.libraryName} (imported)`);
           setError(null);

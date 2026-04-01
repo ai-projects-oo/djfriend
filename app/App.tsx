@@ -417,7 +417,7 @@ function AppInner() {
                   void runPathListAnalysis(lines, label);
                 } else {
                   // Web: parse playlist file and enrich via Spotify
-                  const rawLines = text.split(/\r?\n/);
+                  const rawLines = text.split(/\r\n|\r|\n/);
                   const tracks: Array<{ artist: string; title: string }> = [];
 
                   // 1. Apple Music TSV export (first line has tab-separated headers starting with "Name")

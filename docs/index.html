@@ -30,9 +30,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 16px;
   line-height: 1.7;
-  -webkit-font-smoothing: antialiased;
 }
 
 /* NAV */
@@ -55,9 +53,8 @@ nav {
   align-items: center;
   gap: 0.5rem;
   font-weight: 700;
-  font-size: 1rem;
-  text-decoration: none;
   color: var(--text);
+  text-decoration: none;
 }
 
 .nav-links {
@@ -72,9 +69,7 @@ nav {
   font-size: 0.875rem;
 }
 
-.nav-links a:hover {
-  color: var(--text);
-}
+.nav-links a:hover { color: var(--text); }
 
 /* LAYOUT */
 .container {
@@ -93,7 +88,6 @@ nav {
   font-size: clamp(2.2rem, 5vw, 3.5rem);
   font-weight: 800;
   letter-spacing: -0.04em;
-  line-height: 1.1;
   margin-bottom: 1.25rem;
   text-shadow: 0 0 30px rgba(124, 58, 237, 0.15);
 }
@@ -102,221 +96,125 @@ nav {
 
 .hero-bullets {
   list-style: none;
+  margin-top: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
   align-items: center;
-  margin-top: 1.5rem;
   color: var(--muted);
 }
 
-.hero-bullets li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.hero-bullets li::before {
+  content: "·";
+  color: var(--purple-lt);
+  margin-right: 6px;
 }
 
-.hero-bullets li::before {
-  content: '·';
-  color: var(--purple-lt);
-  font-size: 1.3rem;
+/* HERO CTA */
+.hero-cta {
+  margin-top: 2rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* BUTTONS */
+.btn-primary {
+  background: var(--purple);
+  color: #fff;
+  padding: 0.8rem 1.5rem;
+  border-radius: 9px;
+  text-decoration: none;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 30px rgba(124, 58, 237, 0.6);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active { transform: scale(0.96); }
+
+.btn-secondary {
+  border: 1px solid var(--border);
+  padding: 0.8rem 1.5rem;
+  border-radius: 9px;
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.btn-secondary:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.03);
 }
 
 /* DIVIDER */
 hr {
   border: none;
   height: 1px;
-  background: linear-gradient(
-    to right,
-    transparent,
-    rgba(124, 58, 237, 0.2),
-    transparent
-  );
+  background: linear-gradient(to right, transparent, rgba(124,58,237,0.2), transparent);
 }
 
 /* SECTIONS */
-section { padding: 5rem 0; }
-
-h2 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 0.5rem;
+section {
+  padding: 5rem 0;
+  position: relative;
 }
 
-.section-intro {
-  color: var(--muted);
-  font-size: 0.95rem;
-  margin-bottom: 2rem;
+section::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  width: 80%;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(124,58,237,0.15), transparent);
 }
 
-/* FEATURES */
-.feat-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 0.6rem 2rem;
-  margin-top: 1.5rem;
-}
-
-.feat-list li {
-  list-style: none;
-  display: flex;
-  gap: 0.6rem;
-  font-size: 0.9rem;
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.feat-list li::before {
-  content: "–";
-  color: var(--purple-lt);
-}
-
-/* DOWNLOAD CARDS */
+/* CARDS */
 .dl-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
-  margin-top: 1.5rem;
 }
 
 .dl-card {
-  background: linear-gradient(
-    145deg,
-    rgba(255,255,255,0.02),
-    rgba(255,255,255,0.01)
-  );
+  background: linear-gradient(145deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   border: 1px solid rgba(124, 58, 237, 0.08);
   border-radius: 16px;
   padding: 1.9rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
 
 .dl-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-6px) scale(1.01);
   box-shadow: 0 20px 50px rgba(0,0,0,0.55);
-  border-color: rgba(124, 58, 237, 0.25);
 }
 
-.dl-header {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-}
-
-.dl-header img {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  object-fit: cover;
-}
-
-.dl-title { font-weight: 700; }
-.dl-sub { font-size: 0.8rem; color: var(--dim); }
-
-.dl-steps {
-  padding-left: 1.1rem;
-  color: var(--muted);
-  font-size: 0.875rem;
-}
-
-/* BUTTONS */
-.btn-primary {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: var(--purple);
-  color: #fff;
-  font-weight: 600;
-  font-size: 0.9rem;
-  padding: 0.8rem 1.5rem;
-  border-radius: 9px;
-  text-decoration: none;
-  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 25px rgba(124, 58, 237, 0.5);
-}
-
-/* STEPS */
-.steps { display: flex; flex-direction: column; gap: 1.75rem; }
-
-.step {
-  display: flex;
-  gap: 1.25rem;
-}
-
-.step-num {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: rgba(124, 58, 237, 0.15);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--purple-lt);
-  box-shadow: 0 0 12px rgba(124, 58, 237, 0.25);
-}
-
-.step h3 { font-size: 0.95rem; margin-bottom: 0.3rem; }
-.step p { font-size: 0.875rem; color: var(--muted); }
-
-/* SOURCES */
-.sources {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
-}
-
-.source-card {
-  border-top: 2px solid var(--border);
-  padding-top: 0.875rem;
-}
-
-.source-card:hover {
-  border-color: var(--purple);
-}
-
-/* CALLOUT */
-.callout {
-  background: rgba(124, 58, 237, 0.05);
-  border-left: 3px solid var(--purple);
-  padding: 0.75rem 1rem;
-  margin-top: 1.25rem;
-  border-radius: 6px;
+/* FADE ANIMATION */
+.fade-in {
+  opacity: 0;
+  transform: translateY(25px);
 }
 
 /* FOOTER */
 footer {
-  border-top: 1px solid var(--border);
-  padding: 2.5rem 0;
   text-align: center;
+  padding: 2rem;
   color: var(--dim);
-  font-size: 0.82rem;
-  background: rgba(255,255,255,0.01);
 }
 
 /* MOBILE */
 @media (max-width: 600px) {
-  nav { padding: 0 1rem; }
   .nav-links { display: none; }
-  .hero { padding: 5rem 0 3.5rem; }
-  section { padding: 3rem 0; }
 }
 </style>
 </head>
 
 <body>
 
-<!-- NAV -->
 <nav>
   <a class="nav-logo" href="#">
     <img src="icon.png" style="width:22px;height:22px;border-radius:5px">
@@ -324,82 +222,67 @@ footer {
   </a>
   <ul class="nav-links">
     <li><a href="#install">Download</a></li>
-    <li><a href="#load">Load Music</a></li>
+    <li><a href="#load">Load</a></li>
     <li><a href="#generate">Generate</a></li>
     <li><a href="#export">Export</a></li>
-    <li><a href="#settings">Settings</a></li>
   </ul>
 </nav>
 
-<!-- HERO -->
 <div class="container">
   <div class="hero">
     <h1>Build smarter<br><span>DJ sets</span></h1>
     <ul class="hero-bullets">
       <li>Harmonic mixing</li>
       <li>Energy curves</li>
-      <li>AI-powered track selection</li>
-      <li>Your own music library</li>
+      <li>AI-powered selection</li>
     </ul>
+
+    <div class="hero-cta">
+      <a href="#install" class="btn-primary">Download DJFriend</a>
+      <a href="https://djfriend.onrender.com" class="btn-secondary">Try Web App</a>
+    </div>
   </div>
 </div>
 
 <hr>
 
-<!-- FEATURES -->
-<section id="features">
-  <div class="container">
-    <h2>What it does</h2>
-    <ul class="feat-list">
-      <li>Harmonic compatibility scoring</li>
-      <li>Energy curve editor</li>
-      <li>BPM continuity scoring</li>
-      <li>Genre & vibe filters</li>
-      <li>Set duration control</li>
-      <li>Playlist export</li>
-    </ul>
-  </div>
-</section>
-
-<hr>
-
-<!-- DOWNLOAD -->
 <section id="install">
   <div class="container">
     <h2>Download</h2>
     <div class="dl-grid">
       <div class="dl-card">
-        <div class="dl-header">
-          <img src="windows.png">
-          <div>
-            <div class="dl-title">Windows</div>
-            <div class="dl-sub">Windows 10 / 11</div>
-          </div>
-        </div>
+        <h3>Windows</h3>
         <a href="#" class="btn-primary">Download</a>
       </div>
-
       <div class="dl-card">
-        <div class="dl-header">
-          <img src="apple.png">
-          <div>
-            <div class="dl-title">macOS</div>
-            <div class="dl-sub">Monterey+</div>
-          </div>
-        </div>
+        <h3>macOS</h3>
         <a href="#" class="btn-primary">Download</a>
       </div>
     </div>
   </div>
 </section>
 
-<hr>
-
 <footer>
-  <div class="container">
-    DJFriend · 2026
-  </div>
+  DJFriend · 2026
 </footer>
+
+<script>
+const elements = document.querySelectorAll("section, .dl-card");
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.style.opacity = 1;
+      entry.target.style.transform = "translateY(0)";
+    }
+  });
+}, { threshold: 0.1 });
+
+elements.forEach(el => {
+  el.classList.add("fade-in");
+  observer.observe(el);
+});
+</script>
 
 </body>
 </html>

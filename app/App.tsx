@@ -537,32 +537,38 @@ function AppInner() {
       {activeTab === "Generator" && library.length === 0 && (
         <div className="px-2 pt-6">
           <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={folderPath}
-                onChange={e => setFolderPath(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') void runFolderAnalysis(folderPath) }}
-                placeholder="/path/to/music folder"
-                className="flex-1 rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
-              />
-              <button
-                onClick={() => void runFolderAnalysis(folderPath)}
-                disabled={isAnalyzing || !folderPath.trim()}
-                className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isAnalyzing ? 'Analyzing…' : 'Analyze Folder'}
-              </button>
-            </div>
-            {navigator.userAgent.toLowerCase().includes("electron") && (
-              <p className="text-xs text-[#475569] mt-2">
-                Or{" "}
-                <button
-                  onClick={openPlaylistPicker}
-                  className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
-                >
-                  Analyze Apple Music
-                </button>
+            {navigator.userAgent.toLowerCase().includes("electron") ? (
+              <>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={folderPath}
+                    onChange={e => setFolderPath(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') void runFolderAnalysis(folderPath) }}
+                    placeholder="/path/to/music folder"
+                    className="flex-1 rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+                  />
+                  <button
+                    onClick={() => void runFolderAnalysis(folderPath)}
+                    disabled={isAnalyzing || !folderPath.trim()}
+                    className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAnalyzing ? 'Analyzing…' : 'Analyze Folder'}
+                  </button>
+                </div>
+                <p className="text-xs text-[#475569] mt-2">
+                  Or{" "}
+                  <button
+                    onClick={openPlaylistPicker}
+                    className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
+                  >
+                    Analyze Apple Music
+                  </button>
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-[#94a3b8]">
+                Use the <span className="text-[#e2e8f0] font-medium">Analyze</span> menu above to import a playlist file or upload a folder.
               </p>
             )}
           </div>

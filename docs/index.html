@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DJFriend — AI DJ Set Generator</title>
+
+    <title>DJFriend | AI Set Generator</title>
+    <link rel="icon" type="image/png" href="icon.png" />
+    <link rel="apple-touch-icon" href="icon.png" />
 
     <style>
       *,
@@ -12,7 +15,6 @@
         box-sizing: border-box;
         margin: 0;
         padding: 0;
-        transition: all 0.25s ease;
       }
 
       :root {
@@ -21,9 +23,10 @@
         --border: #1e1e2e;
         --purple: #7c3aed;
         --purple-lt: #a78bfa;
+        --spotify: #1db954;
         --text: #e2e8f0;
         --muted: #94a3b8;
-        --dim: #475569;
+        --dim: #64748b;
       }
 
       html {
@@ -40,7 +43,6 @@
         overflow-x: hidden;
       }
 
-      /* 🌌 ANIMATED BACKGROUND GLOW */
       body::before {
         content: "";
         position: fixed;
@@ -51,7 +53,7 @@
         height: 500px;
         background: radial-gradient(
           circle,
-          rgba(124, 58, 237, 0.18),
+          rgba(124, 58, 237, 0.12),
           transparent 70%
         );
         z-index: -1;
@@ -67,7 +69,6 @@
         }
       }
 
-      /* 📈 SCROLL PROGRESS BAR */
       #scroll-progress {
         position: fixed;
         top: 0;
@@ -78,371 +79,279 @@
         z-index: 101;
       }
 
-      /* NAV */
       nav {
         position: sticky;
         top: 0;
         z-index: 100;
-        backdrop-filter: blur(16px);
-        background: rgba(10, 10, 15, 0.7);
-        border-bottom: 1px solid rgba(124, 58, 237, 0.1);
+        backdrop-filter: blur(20px);
+        background: rgba(10, 10, 15, 0.8);
+        border-bottom: 1px solid var(--border);
         display: flex;
         justify-content: space-between;
         padding: 0 2rem;
-        height: 60px;
+        height: 64px;
         align-items: center;
       }
 
       .nav-logo {
         display: flex;
         align-items: center;
-        gap: 0.6rem;
-        font-weight: 700;
+        gap: 0.8rem;
+        font-weight: 800;
         text-decoration: none;
         color: var(--text);
       }
 
       .nav-links {
         display: flex;
-        gap: 1.5rem;
+        gap: 2rem;
         list-style: none;
       }
-
       .nav-links a {
-        color: var(--dim);
+        color: var(--muted);
         text-decoration: none;
         font-size: 0.875rem;
-        position: relative;
+        font-weight: 500;
+        transition: color 0.2s;
       }
-
-      .nav-links a::after {
-        content: "";
-        position: absolute;
-        width: 0;
-        height: 2px;
-        bottom: -4px;
-        left: 0;
-        background-color: var(--purple-lt);
-        transition: width 0.3s ease;
-      }
-
-      .nav-links a:hover::after {
-        width: 100%;
-      }
-
       .nav-links a:hover {
-        color: var(--text);
+        color: var(--purple-lt);
       }
 
-      /* 🛠 SCROLL REVEAL ANIMATIONS */
       @keyframes reveal {
         from {
           opacity: 0;
-          transform: translateY(30px) scale(0.98);
+          transform: translateY(20px);
         }
         to {
           opacity: 1;
-          transform: translateY(0) scale(1);
+          transform: translateY(0);
         }
       }
 
       section,
       .card,
       .source-card,
-      .step,
       hr {
         view-timeline-name: --item-reveal;
         view-timeline-axis: block;
         animation: reveal linear both;
         animation-timeline: --item-reveal;
-        animation-range: entry 5% cover 30%;
+        animation-range: entry 10% cover 30%;
       }
 
-      /* HERO */
       .container {
-        max-width: 900px;
+        max-width: 960px;
         margin: 0 auto;
         padding: 0 1.5rem;
       }
 
       .hero {
         text-align: center;
-        padding: 8rem 0 4rem;
+        padding: 10rem 0 6rem;
       }
-
       .hero h1 {
-        font-size: clamp(2.5rem, 5vw, 3.8rem);
+        font-size: clamp(2.8rem, 6vw, 4.2rem);
         font-weight: 800;
-        letter-spacing: -0.04em;
+        letter-spacing: -0.05em;
         line-height: 1.1;
-        text-shadow: 0 0 40px rgba(124, 58, 237, 0.25);
+        margin-bottom: 1.5rem;
       }
-
       .hero h1 span {
         color: var(--purple-lt);
+        display: block;
       }
 
       .hero-bullets {
         list-style: none;
-        margin-top: 1.5rem;
         display: flex;
-        flex-direction: column;
-        gap: 0.6rem;
-        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1rem 2rem;
         color: var(--muted);
       }
-
-      .hero-bullets li::before {
-        content: "·";
+      .hero-bullets li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
+      }
+      .hero-bullets svg {
         color: var(--purple-lt);
-        margin-right: 6px;
       }
 
       .hero-preview {
-        margin-top: 4rem;
+        margin-top: 5rem;
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 16px;
+        border-radius: 20px;
         overflow: hidden;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-        animation: reveal-hero 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8);
+        padding: 8px;
       }
-
-      @keyframes reveal-hero {
-        0% {
-          opacity: 0;
-          transform: translateY(60px);
-          filter: blur(10px);
-        }
-        100% {
-          opacity: 1;
-          transform: translateY(0);
-          filter: blur(0);
-        }
-      }
-
       .hero-preview img {
         width: 100%;
+        border-radius: 12px;
         display: block;
-        opacity: 0.9;
       }
 
       hr {
         border: none;
         height: 1px;
-        background: linear-gradient(
-          to right,
-          transparent,
-          rgba(124, 58, 237, 0.2),
-          transparent
-        );
-        margin: 4rem 0;
-      }
-
-      section {
-        padding: 4rem 0;
+        background: var(--border);
+        margin: 6rem 0;
       }
       h2 {
-        font-size: 1.6rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
+        font-size: 2rem;
+        font-weight: 800;
+        margin-bottom: 1rem;
       }
       .section-intro {
         color: var(--muted);
-        margin-bottom: 2.5rem;
-        font-size: 0.95rem;
+        margin-bottom: 3rem;
+        font-size: 1.1rem;
       }
 
-      /* CARDS & GRID */
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: 1.5rem;
       }
 
       .card {
-        padding: 2rem;
-        border-radius: 16px;
-        border: 1px solid rgba(124, 58, 237, 0.08);
-        background: linear-gradient(
-          145deg,
-          rgba(255, 255, 255, 0.02),
-          rgba(255, 255, 255, 0.01)
-        );
+        padding: 2.5rem;
+        border-radius: 20px;
+        border: 1px solid var(--border);
+        background: var(--surface);
         display: flex;
         flex-direction: column;
-        gap: 1rem;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        gap: 1.5rem;
+        transition: all 0.3s ease;
+      }
+      .card:hover {
+        border-color: var(--purple);
+        transform: translateY(-5px);
       }
 
-      .dl-btns-compact {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      .dl-btns-stack {
+        display: flex;
+        flex-direction: column;
         gap: 0.75rem;
-        margin-top: 1rem;
       }
 
       .btn-square {
         background: var(--purple);
         color: #fff;
-        padding: 1rem 0.5rem;
+        padding: 0.8rem 1rem;
         border-radius: 12px;
         text-align: center;
         text-decoration: none;
         font-weight: 600;
         font-size: 0.85rem;
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 4px;
-        border: none;
+        gap: 10px;
+        transition: all 0.2s ease;
       }
-
       .btn-square span {
         font-size: 0.7rem;
-        opacity: 0.7;
+        opacity: 0.8;
         font-weight: 400;
       }
       .btn-square:hover {
-        background: #6d28d9;
-        transform: translateY(-3px);
-        box-shadow: 0 8px 20px rgba(124, 58, 237, 0.3);
-      }
-
-      .icon-box {
-        width: 40px;
-        height: 40px;
-        background: rgba(124, 58, 237, 0.1);
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 0.5rem;
+        background: var(--purple-lt);
+        transform: scale(1.02);
       }
 
       .feat-list {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 0.5rem 2rem;
+        gap: 0.8rem 2.5rem;
       }
-
       .feat-list li {
         list-style: none;
         color: var(--muted);
-        font-size: 0.9rem;
-        padding: 0.2rem 0;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
       }
-
-      .feat-list li::before {
-        content: "–";
+      .feat-list svg {
         color: var(--purple-lt);
-        margin-right: 8px;
+        margin-top: 4px;
+        flex-shrink: 0;
       }
 
       .sources {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 1.5rem;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 2rem;
       }
-
       .source-card {
-        border-top: 1px solid var(--border);
+        border-top: 2px solid var(--border);
         padding-top: 1.5rem;
       }
       .source-card h4 {
-        font-size: 0.95rem;
-        margin-bottom: 0.5rem;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
+        margin-bottom: 0.8rem;
       }
-      .source-card p {
-        font-size: 0.85rem;
-        color: var(--muted);
-        line-height: 1.5;
+      .source-card svg {
+        color: var(--purple-lt);
       }
 
       .tag {
-        display: inline-block;
         font-size: 0.65rem;
         color: var(--dim);
         text-transform: uppercase;
-        margin-top: 0.8rem;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-      }
-
-      .steps {
-        display: flex;
-        flex-direction: column;
-        gap: 2rem;
-      }
-      .step {
-        display: flex;
-        gap: 1.2rem;
-      }
-      .step-num {
-        flex-shrink: 0;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: rgba(124, 58, 237, 0.15);
-        color: var(--purple-lt);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-      }
-
-      .settings-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.9rem;
-      }
-      .settings-table td {
-        padding: 1.2rem 0;
-        border-bottom: 1px solid var(--border);
-        vertical-align: top;
-      }
-      .settings-table td:first-child {
-        color: var(--text);
-        font-weight: 600;
-        width: 160px;
-      }
-      .settings-table td:last-child {
-        color: var(--muted);
+        margin-top: 1rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        display: block;
       }
 
       .callout {
-        background: rgba(124, 58, 237, 0.05);
-        border-left: 3px solid var(--purple);
-        padding: 1.2rem;
-        border-radius: 4px;
-        margin-top: 2rem;
-        font-size: 0.9rem;
+        background: rgba(29, 185, 84, 0.05);
+        border: 1px solid rgba(29, 185, 84, 0.2);
+        padding: 1.5rem;
+        border-radius: 16px;
+        margin: 3rem 0;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+      .callout svg {
+        color: var(--spotify);
+        flex-shrink: 0;
       }
 
-      kbd {
-        background: rgba(255, 255, 255, 0.1);
-        padding: 0.1rem 0.4rem;
-        border-radius: 4px;
-        font-family: monospace;
-        color: var(--purple-lt);
+      .contact-box {
+        margin: 4rem auto;
+        background: var(--surface);
+        padding: 3rem;
+        border-radius: 20px;
+        border: 1px dashed var(--border);
+        text-align: center;
+        max-width: 600px;
       }
 
       footer {
-        padding: 5rem 0;
-        border-top: 1px solid var(--border);
+        padding: 8rem 0 4rem;
         text-align: center;
-        color: var(--dim);
-        font-size: 0.85rem;
+        border-top: 1px solid var(--border);
       }
-
       footer a {
         color: var(--muted);
         text-decoration: none;
-        margin: 0 0.5rem;
+        margin: 0 1rem;
+      }
+
+      .small-note {
+        font-size: 0.72rem;
+        color: var(--dim);
+        line-height: 1.4;
+        margin-top: 0.5rem;
       }
 
       @media (max-width: 600px) {
@@ -460,10 +369,10 @@
       <a class="nav-logo" href="#">
         <img
           src="icon.png"
-          alt="DJFriend"
-          style="width: 24px; border-radius: 5px"
+          alt="DJFriend Logo"
+          style="width: 24px; height: 24px; border-radius: 4px"
         />
-        DJFriend
+        DJFRIEND
       </a>
       <ul class="nav-links">
         <li><a href="#install">Download</a></li>
@@ -474,266 +383,370 @@
 
     <div class="container">
       <header class="hero">
-        <h1>Build smarter<br /><span>DJ sets</span></h1>
+        <h1>Build smarter <span>DJ sets</span></h1>
         <ul class="hero-bullets">
-          <li>Harmonic mixing & Camelot compatibility</li>
-          <li>Energy curve generation</li>
-          <li>AI-powered track selection</li>
-          <li>From your existing music library</li>
+          <li>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Harmonic Mixing
+          </li>
+          <li>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Energy Curves
+          </li>
+          <li>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            AI Selection
+          </li>
         </ul>
 
         <div class="hero-preview">
-          <img
-            src="app-preview.png"
-            alt="App interface showing harmonic mixing curves"
-          />
+          <img src="app-preview.png" alt="DJFriend Preview" />
         </div>
       </header>
 
-      <hr />
-
       <section id="features">
-        <h2>What it does</h2>
+        <h2>Intelligent Features</h2>
         <ul class="feat-list">
-          <li>Harmonic compatibility scoring (Camelot wheel)</li>
-          <li>Energy curve editor with 5 presets</li>
-          <li>BPM continuity scoring</li>
-          <li>Genre, vibe, mood, venue, and vocal filters</li>
-          <li>Set duration control — 30 to 180 minutes</li>
-          <li>Load from folder, Apple Music, M3U, or Rekordbox XML</li>
-          <li>Drag-to-reorder tracklist with harmonic warnings</li>
-          <li>One-click swap suggestions for any track</li>
-          <li>Export to M3U playlist or Spotify</li>
-          <li>Full set history — save, rename, reload, re-export</li>
-          <li>Spotify playlist checker — see which tracks you already own</li>
+          <li>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M8 12h8M12 8v8"></path>
+            </svg>
+            Harmonic compatibility (Camelot wheel)
+          </li>
+          <li>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+            </svg>
+            Energy curve editor with 5 presets
+          </li>
+          <li>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            BPM continuity & Set duration (30-180m)
+          </li>
+          <li>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Export to M3U or Spotify
+          </li>
         </ul>
       </section>
 
       <hr />
 
       <section id="install">
-        <h2>Download</h2>
-        <p class="section-intro">Free. No account required. No subscription.</p>
+        <h2>Get Started</h2>
+        <p class="section-intro">
+          Native builds for high-performance audio analysis.
+        </p>
         <div class="grid">
           <div class="card">
-            <div style="display: flex; align-items: center; gap: 12px">
-              <img src="windows.png" alt="Windows" style="width: 28px" />
+            <div style="display: flex; align-items: center; gap: 15px">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path
+                  d="M0 3.449L9.75 2.1V11.4H0V3.449zm0 8.851h9.75v9.3L0 20.251V12.3zm10.55-10.35L24 0v11.4h-13.45V1.95zM24 12.3V24l-13.45-1.95V12.3H24z"
+                />
+              </svg>
               <div>
-                <h3 style="font-size: 1.1rem">Windows</h3>
-                <span style="font-size: 0.75rem; color: var(--dim)"
-                  >10 / 11 · 64-bit</span
-                >
+                <h3>Windows</h3>
+                <span class="tag" style="margin: 0">Native</span>
               </div>
             </div>
-            <div class="dl-btns-compact">
-              <a
-                href="https://github.com/ai-projects-oo/djfriend/releases/latest/download/DJFriend-Setup.exe"
-                class="btn-square"
-              >
-                Download
-                <span>Installer (.exe)</span>
-              </a>
-            </div>
+            <a
+              href="https://github.com/ai-projects-oo/djfriend/releases/latest/download/DJFriend-Setup.exe"
+              class="btn-square"
+            >
+              Download Installer <span>.exe</span>
+            </a>
           </div>
 
           <div class="card">
-            <div style="display: flex; align-items: center; gap: 12px">
-              <img src="apple.png" alt="macOS" style="width: 28px" />
+            <div style="display: flex; align-items: center; gap: 15px">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path
+                  d="M17.057 12.781c.032 2.588 2.254 3.462 2.287 3.477-.023.074-.351 1.204-1.151 2.371-.691 1.012-1.411 2.018-2.54 2.038-1.111.02-1.469-.658-2.738-.658-1.27 0-1.666.638-2.718.678-1.091.039-1.911-1.077-2.606-2.079-1.42-2.05-2.505-5.787-1.045-8.311.725-1.254 2.015-2.049 3.411-2.069 1.054-.02 2.049.71 2.693.71.643 0 1.839-.889 3.102-.759.53.021 2.017.213 2.971 1.611-.077.047-1.771 1.033-1.666 3.071zM15.482 4.907c.565-.683.945-1.633.842-2.585-.818.033-1.81.545-2.397 1.229-.527.605-.989 1.574-.864 2.506.911.07 1.854-.467 2.419-1.15z"
+                />
+              </svg>
               <div>
-                <h3 style="font-size: 1.1rem">macOS</h3>
-                <span style="font-size: 0.75rem; color: var(--dim)"
-                  >Monterey or later</span
-                >
+                <h3>macOS</h3>
+                <span class="tag" style="margin: 0">Universal</span>
               </div>
             </div>
-            <div class="dl-btns-compact">
+            <div class="dl-btns-stack">
               <a
                 href="https://github.com/ai-projects-oo/djfriend/releases/latest/download/DJFriend-arm64.dmg"
                 class="btn-square"
               >
-                M1/M2/M3
-                <span>Apple Silicon</span>
+                Apple Silicon <span>ARM64</span>
               </a>
               <a
                 href="https://github.com/ai-projects-oo/djfriend/releases/latest/download/DJFriend-x64.dmg"
                 class="btn-square"
+                style="
+                  background: rgba(255, 255, 255, 0.05);
+                  border: 1px solid var(--border);
+                "
               >
-                Intel
-                <span>macOS 12+</span>
+                Intel Processor <span>x64</span>
               </a>
             </div>
           </div>
 
           <div class="card">
-            <div style="display: flex; align-items: center; gap: 12px">
-              <div
-                class="icon-box"
-                style="margin-bottom: 0; width: 32px; height: 32px"
+            <div style="display: flex; align-items: center; gap: 15px">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
               >
-                <svg
-                  width="20"
-                  height="20"
-                  fill="none"
-                  stroke="var(--purple-lt)"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <path
-                    d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-                  />
-                </svg>
-              </div>
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <path
+                  d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+                ></path>
+              </svg>
               <div>
-                <h3 style="font-size: 1.1rem">Web</h3>
-                <span style="font-size: 0.75rem; color: var(--dim)"
-                  >In-browser</span
-                >
+                <h3>Web App</h3>
+                <span class="tag" style="margin: 0">Cloud</span>
               </div>
             </div>
-            <div class="dl-btns-compact">
-              <a href="https://djfriend.onrender.com" class="btn-square">
-                Open App
-                <span>No install</span>
-              </a>
-            </div>
+            <a
+              href="https://djfriend.onrender.com"
+              class="btn-square"
+              style="
+                background: var(--surface);
+                border: 1px solid var(--purple);
+              "
+            >
+              Launch Browser App
+            </a>
+            <p class="small-note" style="text-align: center">
+              Request password: <br /><a
+                href="mailto:obo_odedr@hotmail.com"
+                style="color: var(--purple-lt)"
+                >obo_odedr@hotmail.com</a
+              >
+            </p>
+          </div>
+        </div>
+
+        <div class="callout">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.307c-.214.351-.673.463-1.024.248-2.822-1.724-6.375-2.114-10.559-1.161-.403.093-.81-.158-.903-.561-.093-.404.158-.811.561-.904 4.577-1.046 8.508-.601 11.677 1.336.351.214.463.673.248 1.024zm1.468-3.26c-.27.439-.844.582-1.282.311-3.23-1.984-8.156-2.56-11.975-1.401-.493.15-1.018-.129-1.167-.622-.149-.495.13-1.02.622-1.169 4.363-1.323 9.791-.676 13.513 1.61.439.27.581.844.311 1.282zm.127-3.411c-3.873-2.3-10.274-2.513-13.987-1.385-.594.181-1.223-.153-1.403-.747-.181-.594.153-1.223.747-1.403 4.266-1.295 11.33-1.029 15.8 1.625.534.317.712 1.004.394 1.538-.317.534-1.003.711-1.537.394z"
+            />
+          </svg>
+          <div>
+            <strong>Spotify Integration</strong><br />
+            <span style="color: var(--muted); font-size: 0.9rem"
+              >Contact
+              <a
+                href="mailto:obo_odedr@hotmail.com"
+                style="color: var(--purple-lt)"
+                >obo_odedr@hotmail.com</a
+              >
+              to enable your account.</span
+            >
           </div>
         </div>
       </section>
-
-      <hr />
 
       <section id="load">
-        <h2>Step 1 — Load your music</h2>
-        <p class="section-intro">
-          Click <kbd>Analyze</kbd> in the top-right corner.
-        </p>
+        <h2>Process</h2>
         <div class="sources">
           <div class="source-card">
-            <h4>Scan a folder</h4>
+            <h4>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                ></path>
+              </svg>
+              1. Load
+            </h4>
             <p>
-              Set your Music Folder in Settings. Desktop apps perform audio
-              analysis.
+              Scan local folders or sync with Rekordbox/Serato XML libraries.
             </p>
-            <span class="tag">Mac + Windows</span>
           </div>
           <div class="source-card">
-            <h4>Apple Music</h4>
-            <p>Analyze → Apple Music and pick a playlist.</p>
-            <span class="tag">Mac only</span>
+            <h4>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M12 2v20M2 12h20"></path>
+              </svg>
+              2. Sculpt
+            </h4>
+            <p>
+              Shape your energy arc and AI-generate a harmonically perfect list.
+            </p>
           </div>
           <div class="source-card">
-            <h4>M3U / TXT file</h4>
-            <p>Works with playlist exports from Rekordbox and Serato.</p>
-            <span class="tag">All Platforms</span>
-          </div>
-          <div class="source-card">
-            <h4>Rekordbox XML</h4>
-            <p>Export collection as XML from Rekordbox to sync your library.</p>
-            <span class="tag">Mac + Windows</span>
+            <h4>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              3. Play
+            </h4>
+            <p>Export back to DJ software or Spotify and start your mix.</p>
           </div>
         </div>
       </section>
-
-      <hr />
-
-      <section id="generate">
-        <h2>Steps 2–4 — Build your set</h2>
-        <div class="steps">
-          <div class="step">
-            <div class="step-num">2</div>
-            <div>
-              <h3>Shape your energy arc</h3>
-              <p>
-                The Energy Curve editor shows 5 draggable handles for presets
-                like Build-up or Peak.
-              </p>
-            </div>
-          </div>
-          <div class="step">
-            <div class="step-num">3</div>
-            <div>
-              <h3>Set duration and filters</h3>
-              <p>Choose runtime (30–180 min) and filter by genre or mood.</p>
-            </div>
-          </div>
-          <div class="step">
-            <div class="step-num">4</div>
-            <div>
-              <h3>Generate and refine</h3>
-              <p>
-                DJFriend builds a tracklist. Drag rows to reorder or use swap
-                icons.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <hr />
-
-      <section id="export">
-        <h2>Step 5 — Export your set</h2>
-        <div
-          style="
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 2.5rem;
-          "
-        >
-          <div>
-            <h4>Save as M3U</h4>
-            <p
-              style="font-size: 0.9rem; color: var(--muted); margin-top: 0.5rem"
-            >
-              Load in Rekordbox, Serato, or other DJ software.
-            </p>
-          </div>
-          <div>
-            <h4>Spotify Playlist</h4>
-            <p
-              style="font-size: 0.9rem; color: var(--muted); margin-top: 0.5rem"
-            >
-              Authorize your account to create a new playlist automatically.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <hr />
 
       <section id="settings">
-        <h2>Settings</h2>
-        <table class="settings-table">
-          <tbody>
-            <tr>
-              <td>Music Folder</td>
-              <td>Folder DJFriend scans for audio files.</td>
-            </tr>
-            <tr>
-              <td>Groq API Key</td>
-              <td>Required for AI metadata analysis in the Web App.</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="callout">
-          Contact
-          <a href="mailto:obo_odedr@hotmail.com" style="color: var(--purple-lt)"
+        <div class="contact-box">
+          <svg
+            width="32"
+            height="32"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            style="margin-bottom: 1rem; color: var(--purple-lt)"
+          >
+            <path
+              d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+            ></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+          <p style="color: var(--text); font-weight: 600; font-size: 1.1rem">
+            Any questions?
+          </p>
+          <p
+            style="
+              color: var(--muted);
+              margin-bottom: 1.5rem;
+              font-size: 0.95rem;
+            "
+          >
+            For support or custom inquiries, get in touch below.
+          </p>
+          <a
+            href="mailto:obo_odedr@hotmail.com"
+            style="
+              color: var(--purple-lt);
+              text-decoration: none;
+              font-weight: 700;
+              border-bottom: 2px solid var(--purple-lt);
+              padding-bottom: 4px;
+            "
             >obo_odedr@hotmail.com</a
           >
-          for help.
         </div>
       </section>
     </div>
 
     <footer>
-      <p>DJFriend · 2026</p>
-      <p style="margin-top: 0.8rem">
-        <a href="https://github.com/ai-projects-oo/djfriend">GitHub</a> ·
-        <a href="https://github.com/ai-projects-oo/djfriend/blob/main/LICENSE"
-          >License</a
-        >
-      </p>
+      <p>&copy; 2026 DJFriend</p>
+      <div style="margin-top: 1.5rem">
+        <a href="https://github.com/ai-projects-oo/djfriend">GitHub</a>
+        <a href="#">Privacy</a>
+        <a href="#">License</a>
+      </div>
     </footer>
 
     <script>

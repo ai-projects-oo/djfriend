@@ -30,6 +30,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
 }
@@ -54,6 +55,7 @@ nav {
   align-items: center;
   gap: 0.5rem;
   font-weight: 700;
+  font-size: 1rem;
   text-decoration: none;
   color: var(--text);
 }
@@ -100,18 +102,24 @@ nav {
 
 .hero-bullets {
   list-style: none;
-  margin-top: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
   align-items: center;
+  margin-top: 1.5rem;
   color: var(--muted);
+}
+
+.hero-bullets li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .hero-bullets li::before {
   content: '·';
   color: var(--purple-lt);
-  margin-right: 6px;
+  font-size: 1.3rem;
 }
 
 /* DIVIDER */
@@ -132,11 +140,13 @@ section { padding: 5rem 0; }
 h2 {
   font-size: 1.5rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
   margin-bottom: 0.5rem;
 }
 
 .section-intro {
   color: var(--muted);
+  font-size: 0.95rem;
   margin-bottom: 2rem;
 }
 
@@ -145,10 +155,14 @@ h2 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 0.6rem 2rem;
+  margin-top: 1.5rem;
 }
 
 .feat-list li {
   list-style: none;
+  display: flex;
+  gap: 0.6rem;
+  font-size: 0.9rem;
   color: var(--muted);
   line-height: 1.6;
 }
@@ -156,14 +170,14 @@ h2 {
 .feat-list li::before {
   content: "–";
   color: var(--purple-lt);
-  margin-right: 6px;
 }
 
-/* CARDS */
+/* DOWNLOAD CARDS */
 .dl-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
+  margin-top: 1.5rem;
 }
 
 .dl-card {
@@ -175,6 +189,9 @@ h2 {
   border: 1px solid rgba(124, 58, 237, 0.08);
   border-radius: 16px;
   padding: 1.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
 
@@ -184,15 +201,41 @@ h2 {
   border-color: rgba(124, 58, 237, 0.25);
 }
 
+.dl-header {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.dl-header img {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.dl-title { font-weight: 700; }
+.dl-sub { font-size: 0.8rem; color: var(--dim); }
+
+.dl-steps {
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 /* BUTTONS */
 .btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   background: var(--purple);
   color: #fff;
-  padding: 0.8rem;
-  border-radius: 9px;
-  text-align: center;
-  text-decoration: none;
   font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.8rem 1.5rem;
+  border-radius: 9px;
+  text-decoration: none;
   box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);
 }
 
@@ -201,15 +244,12 @@ h2 {
   box-shadow: 0 10px 25px rgba(124, 58, 237, 0.5);
 }
 
-.btn-secondary:hover {
-  background: rgba(255,255,255,0.03);
-}
-
 /* STEPS */
+.steps { display: flex; flex-direction: column; gap: 1.75rem; }
+
 .step {
   display: flex;
-  gap: 1rem;
-  padding: 0.5rem 0;
+  gap: 1.25rem;
 }
 
 .step-num {
@@ -220,11 +260,27 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
   color: var(--purple-lt);
   box-shadow: 0 0 12px rgba(124, 58, 237, 0.25);
 }
 
-/* SOURCE */
+.step h3 { font-size: 0.95rem; margin-bottom: 0.3rem; }
+.step p { font-size: 0.875rem; color: var(--muted); }
+
+/* SOURCES */
+.sources {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.source-card {
+  border-top: 2px solid var(--border);
+  padding-top: 0.875rem;
+}
+
 .source-card:hover {
   border-color: var(--purple);
 }
@@ -233,28 +289,34 @@ h2 {
 .callout {
   background: rgba(124, 58, 237, 0.05);
   border-left: 3px solid var(--purple);
-  padding: 1rem;
+  padding: 0.75rem 1rem;
+  margin-top: 1.25rem;
   border-radius: 6px;
 }
 
 /* FOOTER */
 footer {
-  background: rgba(255,255,255,0.01);
   border-top: 1px solid var(--border);
-  padding: 2rem;
+  padding: 2.5rem 0;
   text-align: center;
   color: var(--dim);
+  font-size: 0.82rem;
+  background: rgba(255,255,255,0.01);
 }
 
 /* MOBILE */
 @media (max-width: 600px) {
+  nav { padding: 0 1rem; }
   .nav-links { display: none; }
+  .hero { padding: 5rem 0 3.5rem; }
+  section { padding: 3rem 0; }
 }
 </style>
 </head>
 
 <body>
 
+<!-- NAV -->
 <nav>
   <a class="nav-logo" href="#">
     <img src="icon.png" style="width:22px;height:22px;border-radius:5px">
@@ -262,42 +324,81 @@ footer {
   </a>
   <ul class="nav-links">
     <li><a href="#install">Download</a></li>
-    <li><a href="#load">Load</a></li>
+    <li><a href="#load">Load Music</a></li>
     <li><a href="#generate">Generate</a></li>
+    <li><a href="#export">Export</a></li>
+    <li><a href="#settings">Settings</a></li>
   </ul>
 </nav>
 
+<!-- HERO -->
 <div class="container">
   <div class="hero">
     <h1>Build smarter<br><span>DJ sets</span></h1>
     <ul class="hero-bullets">
       <li>Harmonic mixing</li>
       <li>Energy curves</li>
-      <li>AI track selection</li>
+      <li>AI-powered track selection</li>
+      <li>Your own music library</li>
     </ul>
   </div>
 </div>
 
 <hr>
 
-<section>
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <h2>What it does</h2>
+    <ul class="feat-list">
+      <li>Harmonic compatibility scoring</li>
+      <li>Energy curve editor</li>
+      <li>BPM continuity scoring</li>
+      <li>Genre & vibe filters</li>
+      <li>Set duration control</li>
+      <li>Playlist export</li>
+    </ul>
+  </div>
+</section>
+
+<hr>
+
+<!-- DOWNLOAD -->
+<section id="install">
   <div class="container">
     <h2>Download</h2>
     <div class="dl-grid">
       <div class="dl-card">
-        <h3>Windows</h3>
-        <a class="btn-primary">Download</a>
+        <div class="dl-header">
+          <img src="windows.png">
+          <div>
+            <div class="dl-title">Windows</div>
+            <div class="dl-sub">Windows 10 / 11</div>
+          </div>
+        </div>
+        <a href="#" class="btn-primary">Download</a>
       </div>
+
       <div class="dl-card">
-        <h3>macOS</h3>
-        <a class="btn-primary">Download</a>
+        <div class="dl-header">
+          <img src="apple.png">
+          <div>
+            <div class="dl-title">macOS</div>
+            <div class="dl-sub">Monterey+</div>
+          </div>
+        </div>
+        <a href="#" class="btn-primary">Download</a>
       </div>
     </div>
   </div>
 </section>
 
+<hr>
+
 <footer>
-  DJFriend · 2026
+  <div class="container">
+    DJFriend · 2026
+  </div>
 </footer>
 
 </body>

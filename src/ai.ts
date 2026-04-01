@@ -114,6 +114,78 @@ export async function enrichTrackBatch(
   return result
 }
 
+const ANALYZE_BATCH_SIZE = 20
+
+export async function analyzeTracksBatch(
+  tracks: Array<{ file: string; artist: string; title: string }>,
+  apiKey: string
+): Promise<Map<string, { bpm: number; camelot: string; energy: number }>> {
+  const client = getGroqClient(apiKey)
+  const completion = await client.chat.completions.create({
+    model: 'llama-3.1-8b-instant',
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'system',
+        content: `You are a DJ and music expert. Given a list of tracks, estimate each track's audio properties from your knowledge.
+Return a JSON object with a "tracks" array. Each item must include:
+- "file": the original file key unchanged
+- "bpm": integer BPM (e.g. 128), or 0 if unknown
+- "camelot": Camelot wheel key (e.g. "7A", "10B", "5B"), or "" if unknown
+- "energy": float 0.0–1.0 (0=very mellow, 1=very intense)
+
+Return ONLY the JSON object, no explanation.`,
+      },
+      {
+        role: 'user',
+        content: JSON.stringify(tracks.map(t => ({ file: t.file, artist: t.artist, title: t.title }))),
+      },
+    ],
+  })
+
+  const raw = completion.choices[0]?.message?.content ?? '{}'
+  let parsed: unknown
+  try { parsed = JSON.parse(raw) } catch { return new Map() }
+
+  const result = new Map<string, { bpm: number; camelot: string; energy: number }>()
+  const items = (parsed as Record<string, unknown>)?.tracks
+  if (!Array.isArray(items)) return result
+
+  for (const item of items) {
+    if (typeof item !== 'object' || item === null) continue
+    const it = item as Record<string, unknown>
+    const file = typeof it.file === 'string' ? it.file : null
+    if (!file) continue
+    result.set(file, {
+      bpm: typeof it.bpm === 'number' ? Math.round(it.bpm) : 0,
+      camelot: typeof it.camelot === 'string' ? it.camelot : '',
+      energy: typeof it.energy === 'number' ? Math.min(1, Math.max(0, it.energy)) : 0.5,
+    })
+  }
+  return result
+}
+
+export async function analyzeTracksWithAI(
+  tracks: Array<{ file: string; artist: string; title: string }>,
+  apiKey: string,
+  onProgress?: (completed: number, total: number) => void
+): Promise<Map<string, { bpm: number; camelot: string; energy: number }>> {
+  const result = new Map<string, { bpm: number; camelot: string; energy: number }>()
+  const limiter = new RateLimiter(1000)
+  let completed = 0
+  for (let i = 0; i < tracks.length; i += ANALYZE_BATCH_SIZE) {
+    const batch = tracks.slice(i, i + ANALYZE_BATCH_SIZE)
+    await limiter.wait()
+    try {
+      const batchResult = await analyzeTracksBatch(batch, apiKey)
+      for (const [file, data] of batchResult) result.set(file, data)
+    } catch { /* skip failed batch */ }
+    completed += batch.length
+    onProgress?.(completed, tracks.length)
+  }
+  return result
+}
+
 export async function enrichTracks(
   resultsMap: Record<string, EnrichableTrack>,
   apiKey: string,

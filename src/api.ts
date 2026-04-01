@@ -264,6 +264,29 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
 }
 
 export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: string | null): void {
+  // Public endpoint — returns whether a password is required
+  middlewares.use('/api/auth/check', (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ requiresPassword: !!process.env.APP_PASSWORD }))
+  })
+
+  // Auth guard — active only when APP_PASSWORD env var is set
+  middlewares.use((req, res, next) => {
+    const url = req.url ?? ''
+    if (!url.startsWith('/api/')) { next(); return }
+    if (url.startsWith('/api/auth/check')) { next(); return }
+    const appPwd = process.env.APP_PASSWORD
+    if (!appPwd) { next(); return }
+    const provided = req.headers['x-app-password']
+    if (provided !== appPwd) {
+      res.writeHead(401, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Unauthorized' }))
+      return
+    }
+    next()
+  })
+
   if (songsFolder) {
     middlewares.use('/results.json', (_req, res, next) => {
       const filePath = path.join(songsFolder, 'results.json')

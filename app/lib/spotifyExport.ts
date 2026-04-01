@@ -1,4 +1,5 @@
 import type { SetTrack } from '../types';
+import { apiFetch } from './apiFetch';
 
 const STORAGE_PREFIX = 'djfriend-spotify';
 const TOKEN_KEY = `${STORAGE_PREFIX}-token`;
@@ -66,7 +67,7 @@ export function clearPendingExport(): void {
 }
 
 async function fetchClientId(): Promise<string> {
-  const res = await fetch('/api/settings');
+  const res = await apiFetch('/api/settings');
   if (!res.ok) throw new Error('Could not read settings.');
   const data = await res.json() as { spotifyClientId: string };
   if (!data.spotifyClientId) throw new Error('Spotify Client ID is not configured. Open Settings to add it.');

@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { apiFetch } from "../lib/apiFetch";
 import type { SetTrack, HistoryEntry, DJPreferences, CurvePoint } from "../types";
 import { generateM3U, downloadM3U } from "../lib/m3uExport";
 import {
@@ -39,7 +40,7 @@ export function useSpotifyExport({
   const exportM3UToServer = useCallback(async (tracks: SetTrack[], filename: string) => {
     const content = generateM3U(tracks);
     try {
-      const r = await fetch('/api/export-m3u', {
+      const r = await apiFetch('/api/export-m3u', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, filename }),

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { apiFetch } from '../lib/apiFetch'
 
 interface Props {
   open: boolean
@@ -27,7 +28,7 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     if (!folderPath.trim()) { setStatus('idle'); return }
     setStatus('checking')
     try {
-      const r = await fetch('/api/check-path', {
+      const r = await apiFetch('/api/check-path', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folderPath: folderPath.trim() }),
@@ -43,7 +44,7 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     if (!open) return
     setMusicFolderStatus('idle')
     setPlaylistsFolderStatus('idle')
-    fetch('/api/settings')
+    apiFetch('/api/settings')
       .then(r => r.json())
       .then((d: { musicFolder: string; playlistsFolder: string; hasGroqKey: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
@@ -58,7 +59,7 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     setError('')
     try {
       const body: Record<string, string> = { musicFolder: musicFolder.trim(), playlistsFolder: playlistsFolder.trim() }
-      const r = await fetch('/api/settings', {
+      const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -78,7 +79,7 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     setSavingGroq(true)
     setGroqSaved(false)
     try {
-      const r = await fetch('/api/settings', {
+      const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ groqApiKey: groqKey.trim() }),
@@ -98,7 +99,7 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
     setClearing(true)
     setError('')
     try {
-      const r = await fetch('/api/clear-database', { method: 'POST' })
+      const r = await apiFetch('/api/clear-database', { method: 'POST' })
       if (!r.ok) throw new Error('Clear failed')
       setClearConfirm(false)
       onSaved()

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { Song } from "../types";
 import { parseSongs } from "../lib/genreUtils";
+import { apiFetch } from "../lib/apiFetch";
 
 interface UseLibraryOptions {
   onNewAnalysis?: () => void;
@@ -66,7 +67,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
 
   // Auto-load saved library on mount: try folder results first, then Apple Music results
   useEffect(() => {
-    fetch("/results.json")
+    apiFetch("/results.json")
       .then((r) => {
         if (!r.ok) throw new Error("not found");
         return r.json() as Promise<unknown>;
@@ -83,7 +84,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
       })
       .catch(() => {
         // Fall back to Apple Music results
-        fetch("/api/apple-library")
+        apiFetch("/api/apple-library")
           .then((r) => {
             if (!r.ok) throw new Error("not found");
             return r.json() as Promise<unknown>;
@@ -105,7 +106,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     setLoadingPlaylists(true);
     setError(null);
     try {
-      const res = await fetch("/api/apple-music-playlists");
+      const res = await apiFetch("/api/apple-music-playlists");
       if (!res.ok) throw new Error("Could not load playlists.");
       const data = (await res.json()) as Array<{ name: string; count: number }>;
       setPlaylistPicker(data);
@@ -126,7 +127,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     onNewAnalysisRef.current?.();
 
     try {
-      const response = await fetch("/api/analyze-apple-music", {
+      const response = await apiFetch("/api/analyze-apple-music", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playlistName }),
@@ -163,7 +164,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     setError(null);
     onNewAnalysisRef.current?.();
     try {
-      const response = await fetch('/api/import-rekordbox', {
+      const response = await apiFetch('/api/import-rekordbox', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tracks }),
@@ -195,7 +196,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     setError(null);
     onNewAnalysisRef.current?.();
     try {
-      const response = await fetch('/api/analyze-paths', {
+      const response = await apiFetch('/api/analyze-paths', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paths, label }),
@@ -227,7 +228,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     setError(null);
     onNewAnalysisRef.current?.();
     try {
-      const response = await fetch('/api/analyze-folder', {
+      const response = await apiFetch('/api/analyze-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folderPath: path.trim() }),
@@ -265,7 +266,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
         const relPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
         formData.append('files', file, relPath);
       }
-      const response = await fetch('/api/analyze-upload', {
+      const response = await apiFetch('/api/analyze-upload', {
         method: 'POST',
         body: formData,
       });

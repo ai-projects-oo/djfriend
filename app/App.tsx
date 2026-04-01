@@ -23,8 +23,73 @@ import { useLibrary } from "./hooks/useLibrary";
 import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
+import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
 
 export default function App() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [requiresPassword, setRequiresPassword] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/check')
+      .then(r => r.json() as Promise<{ requiresPassword: boolean }>)
+      .then(d => {
+        if (!d.requiresPassword) { setIsAuthenticated(true); setAuthChecked(true); return; }
+        const stored = getAppPassword();
+        if (stored) {
+          fetch('/api/settings', { headers: { 'X-App-Password': stored } })
+            .then(r => { if (r.ok) { setIsAuthenticated(true); } else { setRequiresPassword(true); } })
+            .catch(() => setRequiresPassword(true))
+            .finally(() => setAuthChecked(true));
+        } else {
+          setRequiresPassword(true);
+          setAuthChecked(true);
+        }
+      })
+      .catch(() => { setIsAuthenticated(true); setAuthChecked(true); });
+  }, []);
+
+  const handlePasswordSubmit = useCallback(async () => {
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const res = await fetch('/api/settings', { headers: { 'X-App-Password': passwordInput } });
+      if (res.ok) { setAppPassword(passwordInput); setIsAuthenticated(true); }
+      else { setAuthError('Incorrect password.'); }
+    } catch { setAuthError('Could not connect.'); }
+    finally { setAuthLoading(false); }
+  }, [passwordInput]);
+
+  if (!authChecked) return <div className="min-h-screen bg-[#0a0a0f]" />;
+
+  if (requiresPassword && !isAuthenticated) return (
+    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="bg-[#12121a] border border-white/10 rounded-xl p-8 w-80 flex flex-col gap-4">
+        <h1 className="text-white font-semibold text-lg text-center">DJFriend</h1>
+        <input
+          type="password"
+          className="bg-[#0a0a0f] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#7c3aed]"
+          placeholder="Password"
+          value={passwordInput}
+          onChange={e => setPasswordInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') void handlePasswordSubmit(); }}
+          autoFocus
+        />
+        {authError && <p className="text-red-400 text-xs text-center">{authError}</p>}
+        <button
+          onClick={() => void handlePasswordSubmit()}
+          disabled={authLoading || !passwordInput}
+          className="bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-40 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+        >
+          {authLoading ? 'Checking…' : 'Enter'}
+        </button>
+      </div>
+    </div>
+  );
+
   const [activeTab, setActiveTab] = useState<
     "Generator" | "History" | "Import"
   >("Generator");
@@ -185,7 +250,7 @@ export default function App() {
   } = useSpotifyImport({ library, setHistory });
 
   const loadSettings = useCallback(() => {
-    fetch('/api/settings')
+    apiFetch('/api/settings')
       .then(r => r.json() as Promise<{ musicFolder?: string; playlistsFolder?: string }>)
       .then(d => {
         if (d.musicFolder) setFolderPath(prev => prev || d.musicFolder!)
@@ -891,7 +956,7 @@ export default function App() {
                                     <button
                                       onClick={() => {
                                         if (track.inLibrary) {
-                                          void fetch("/api/play-in-music", {
+                                          void apiFetch("/api/play-in-music", {
                                             method: "POST",
                                             headers: {
                                               "Content-Type":

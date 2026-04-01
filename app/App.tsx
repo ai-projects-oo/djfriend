@@ -452,15 +452,17 @@ function AppInner() {
               </button>
               {analyzeMenuOpen && !isAnalyzing && !loadingPlaylists && (
                 <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
-                  <button
-                    onClick={() => { setAnalyzeMenuOpen(false); void openPlaylistPicker(); }}
-                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                  >
-                    Apple Music
-                  </button>
+                  {navigator.userAgent.toLowerCase().includes("electron") && (
+                    <button
+                      onClick={() => { setAnalyzeMenuOpen(false); void openPlaylistPicker(); }}
+                      className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    >
+                      Apple Music
+                    </button>
+                  )}
                   <button
                     onClick={() => { setAnalyzeMenuOpen(false); fileInputRef.current?.click(); }}
-                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     Import M3U / TXT
                   </button>
@@ -552,15 +554,17 @@ function AppInner() {
                 {isAnalyzing ? 'Analyzing…' : 'Analyze Folder'}
               </button>
             </div>
-            <p className="text-xs text-[#475569] mt-2">
-              Or{" "}
-              <button
-                onClick={openPlaylistPicker}
-                className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
-              >
-                Analyze Apple Music
-              </button>
-            </p>
+            {navigator.userAgent.toLowerCase().includes("electron") && (
+              <p className="text-xs text-[#475569] mt-2">
+                Or{" "}
+                <button
+                  onClick={openPlaylistPicker}
+                  className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
+                >
+                  Analyze Apple Music
+                </button>
+              </p>
+            )}
           </div>
         </div>
       )}

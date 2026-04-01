@@ -499,6 +499,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           }
         } catch { /* skip unresolvable tracks */ }
       }
+      fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
       fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
       const songs = Object.values(resultsJson)
       writeEvent({ type: 'done', total: tracks.length, analyzed: songs.length, libraryName: label, songs, resultsJson })

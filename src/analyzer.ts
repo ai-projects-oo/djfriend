@@ -85,11 +85,10 @@ function detectBpm(audio: Float32Array, sampleRate: number): number {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let essentiaInstance: any = null;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- essentia.js has no TypeScript types
 function getEssentia(): any {
   if (!essentiaInstance) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Essentia, EssentiaWASM } = require('essentia.js');
+    const { Essentia, EssentiaWASM } = require('essentia.js') as { Essentia: new (wasm: unknown) => unknown; EssentiaWASM: unknown };
     essentiaInstance = new Essentia(EssentiaWASM);
   }
   return essentiaInstance;
@@ -117,8 +116,7 @@ function resample(audio: Float32Array, fromRate: number, toRate: number): Float3
 
 export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const decodeAudio: (buf: Buffer) => Promise<AudioBuffer> = require('audio-decode').default;
+    const decodeAudio = (require('audio-decode') as { default: (buf: Buffer) => Promise<AudioBuffer> }).default;
 
     const fileBuffer = fs.readFileSync(filePath);
     const audioBuffer = await decodeAudio(fileBuffer);
@@ -217,7 +215,7 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     // Return raw BPM — callers apply genre-aware double-time correction once
     // genre data is available (see normalizeBpm in vite.config.ts / index.ts).
     return { bpm, pitchClass, mode, energy };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;
   }

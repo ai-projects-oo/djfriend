@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { CurvePoint, ArcPreset } from '../types';
 import { buildSvgPath, sampleCurve } from '../lib/curveInterpolation';

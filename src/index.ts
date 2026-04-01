@@ -152,8 +152,8 @@ async function processTrack(
       ? `ok — ${result.camelot ?? '?'} | ${result.bpm ?? '?'} BPM | energy ${result.energy ?? '?'}`
       : 'not found on Spotify';
     console.log(`[${idx + 1}/${total}] ${label} — ${status}`);
-  } catch (err: any) {
-    console.log(`[${idx + 1}/${total}] ${label} — error: ${err.message}`);
+  } catch (err: unknown) {
+    console.log(`[${idx + 1}/${total}] ${label} — error: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return result;

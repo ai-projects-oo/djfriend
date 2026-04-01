@@ -119,7 +119,7 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 export function tokenizeGenre(g: string): string[] {
-  return g.toLowerCase().split(/[\s/,\-]+/).filter(Boolean);
+  return g.toLowerCase().split(/[\s/,-]+/).filter(Boolean);
 }
 
 // Umbrella group tags are stored as "~<phrase>", e.g. "~house", "~indie dance"

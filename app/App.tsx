@@ -90,6 +90,10 @@ export default function App() {
     </div>
   );
 
+  return <AppInner />;
+}
+
+function AppInner() {
   const [activeTab, setActiveTab] = useState<
     "Generator" | "History" | "Import"
   >("Generator");

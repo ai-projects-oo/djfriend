@@ -42,10 +42,12 @@ function resample(audio: Float32Array, fromRate: number, toRate: number): Float3
   return result;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- essentia.js has no TypeScript types
 let essentiaInstance: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- essentia.js has no TypeScript types
 function getEssentia(): any {
   if (!essentiaInstance) {
-    const { Essentia, EssentiaWASM } = require('essentia.js');
+    const { Essentia, EssentiaWASM } = require('essentia.js') as { Essentia: new (wasm: unknown) => unknown; EssentiaWASM: unknown };
     essentiaInstance = new Essentia(EssentiaWASM);
   }
   return essentiaInstance;
@@ -56,7 +58,7 @@ async function extractFeatures(filePath: string): Promise<{
   spectralCentroid: number; hfc: number;
 } | null> {
   try {
-    const decodeAudio: (buf: Buffer) => Promise<AudioBuffer> = require('audio-decode').default;
+    const decodeAudio = (require('audio-decode') as { default: (buf: Buffer) => Promise<AudioBuffer> }).default;
     const fileBuffer = fs.readFileSync(filePath);
     const audioBuffer = await decodeAudio(fileBuffer);
 
@@ -74,11 +76,11 @@ async function extractFeatures(filePath: string): Promise<{
 
     // OnsetRate
     let onsetRate = 0;
-    try { onsetRate = e.OnsetRate(vec).onsetRate ?? 0; } catch {}
+    try { onsetRate = e.OnsetRate(vec).onsetRate ?? 0; } catch { /* feature unavailable */ }
 
     // DynamicComplexity
     let dynamicComplexity = 0;
-    try { dynamicComplexity = e.DynamicComplexity(vec, SAMPLE_RATE).dynamicComplexity ?? 0; } catch {}
+    try { dynamicComplexity = e.DynamicComplexity(vec, SAMPLE_RATE).dynamicComplexity ?? 0; } catch { /* feature unavailable */ }
 
     // Spectral features — need spectrum first
     let spectralCentroid = 0;
@@ -88,7 +90,7 @@ async function extractFeatures(filePath: string): Promise<{
       const spectrum = e.Spectrum(windowed.frame);
       spectralCentroid = e.SpectralCentroidTime(vec).centroid ?? 0;
       hfc = e.HFC(spectrum.spectrum).hfc ?? 0;
-    } catch {}
+    } catch { /* feature unavailable */ }
 
     vec.delete();
 

@@ -383,6 +383,7 @@
 
     <div class="container">
       <header class="hero">
+        <img src="icon.png" alt="DJFriend" style="width:80px;height:80px;border-radius:20px;margin-bottom:1.5rem;box-shadow:0 8px 32px rgba(124,58,237,0.4);" />
         <h1>Build smarter <span>DJ sets</span></h1>
         <ul class="hero-bullets">
           <li>
@@ -432,8 +433,11 @@
           </li>
         </ul>
 
-        <div class="hero-preview">
-          <img src="app-preview.png" alt="DJFriend Preview" />
+        <div class="hero-preview" style="background:#111118;">
+          <picture>
+            <source srcset="app-preview.webp" type="image/webp" />
+            <img src="app-preview.png" alt="DJFriend Preview" fetchpriority="high" style="display:block;" />
+          </picture>
         </div>
       </header>
 

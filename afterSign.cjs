@@ -4,24 +4,22 @@ module.exports = async function notarizing(context) {
   const { electronPlatformName, appOutDir } = context;
   if (electronPlatformName !== 'darwin') return;
 
-  // Skip notarization in CI or when Apple credentials are not configured
-  if (process.env.CI || !process.env.APPLE_ID) {
-    console.log('Skipping notarization (no Apple credentials configured).');
+  const { APPLE_ID, APPLE_APP_PASSWORD, APPLE_TEAM_ID } = process.env;
+  if (!APPLE_ID || !APPLE_APP_PASSWORD || !APPLE_TEAM_ID) {
+    console.log('Skipping notarization (Apple credentials not configured).');
     return;
   }
 
   const appName = context.packager.appInfo.productFilename;
-  console.log(`Notarizing ${appName} in ${appOutDir}...`);
+  console.log(`Notarizing ${appName}...`);
 
-  try {
-    await notarize({
-      tool: 'notarytool',
-      appPath: `${appOutDir}/${appName}.app`,
-      keychainProfile: 'DJFriend',
-    });
-    console.log('Notarization complete.');
-  } catch (err) {
-    console.error('Notarization failed:', err);
-    throw err;
-  }
+  await notarize({
+    tool: 'notarytool',
+    appPath: `${appOutDir}/${appName}.app`,
+    appleId: APPLE_ID,
+    appleIdPassword: APPLE_APP_PASSWORD,
+    teamId: APPLE_TEAM_ID,
+  });
+
+  console.log('Notarization complete.');
 };

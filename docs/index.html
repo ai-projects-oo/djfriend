@@ -367,11 +367,10 @@
 
     <nav>
       <a class="nav-logo" href="#">
-        <img
-          src="icon.png"
-          alt="DJFriend Logo"
-          style="width: 24px; height: 24px; border-radius: 4px"
-        />
+        <picture>
+          <source srcset="icon.webp" type="image/webp" />
+          <img src="icon.png" alt="DJFriend Logo" style="width:24px;height:24px;border-radius:4px;" />
+        </picture>
         DJFRIEND
       </a>
       <ul class="nav-links">
@@ -383,7 +382,10 @@
 
     <div class="container">
       <header class="hero">
-        <img src="icon.png" alt="DJFriend" style="width:80px;height:80px;border-radius:20px;margin-bottom:1.5rem;box-shadow:0 8px 32px rgba(124,58,237,0.4);" />
+        <picture>
+          <source srcset="icon.webp" type="image/webp" />
+          <img src="icon.png" alt="DJFriend" fetchpriority="high" style="width:80px;height:80px;border-radius:20px;margin-bottom:1.5rem;box-shadow:0 8px 32px rgba(124,58,237,0.4);" />
+        </picture>
         <h1>Build smarter <span>DJ sets</span></h1>
         <ul class="hero-bullets">
           <li>

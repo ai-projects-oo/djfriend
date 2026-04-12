@@ -151,9 +151,12 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
 
     const e = getEssentia();
 
-    // BPM — pure-JS onset autocorrelation; tag BPM used to correct ×2/÷2 errors
-    const rawBpm = detectBpm(grooveData.slice(0, 30 * 44100), 44100);
-    const bpm = correctBpmWithTag(rawBpm, tagBpm);
+    // BPM — trust ID3 tag if present and in a valid DJ range (60–200).
+    // Only fall back to audio detection when no tag exists, then use the tag
+    // as a hint to correct ×2/÷2 octave errors in the detection result.
+    const bpm = (tagBpm && tagBpm >= 60 && tagBpm <= 200)
+      ? Math.round(tagBpm * 10) / 10
+      : correctBpmWithTag(detectBpm(grooveData.slice(0, 30 * 44100), 44100), tagBpm);
 
     // Key consensus — 5 segments spread across the first 75 % of the track × 4 profiles.
     // Proportional spacing means we hit the main drop, verse and chorus regardless of

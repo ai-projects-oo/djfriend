@@ -6,11 +6,13 @@ interface Props {
   onClose: () => void
   /** called after settings are saved successfully */
   onSaved: () => void
+  /** called after the database is cleared */
+  onDatabaseCleared?: () => void
 }
 
 type PathStatus = 'idle' | 'checking' | 'ok' | 'missing'
 
-export default function SettingsModal({ open, onClose, onSaved }: Props) {
+export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleared }: Props) {
   const [musicFolder, setMusicFolder] = useState('')
   const [playlistsFolder, setPlaylistsFolder] = useState('')
   const [musicFolderStatus, setMusicFolderStatus] = useState<PathStatus>('idle')
@@ -102,6 +104,7 @@ export default function SettingsModal({ open, onClose, onSaved }: Props) {
       const r = await apiFetch('/api/clear-database', { method: 'POST' })
       if (!r.ok) throw new Error('Clear failed')
       setClearConfirm(false)
+      onDatabaseCleared?.()
       onSaved()
       onClose()
     } catch {

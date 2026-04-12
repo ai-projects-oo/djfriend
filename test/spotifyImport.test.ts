@@ -60,9 +60,9 @@ describe('matchInLibrary', () => {
     expect(matchInLibrary('id1', 'Title', 'Artist', [])).toBe(false)
   })
 
-  it('returns true when spotifyId matches', () => {
+  it('returns "exact" when spotifyId matches', () => {
     const lib = [makeSong({ spotifyId: 'abc123' })]
-    expect(matchInLibrary('abc123', 'Anything', 'Anyone', lib)).toBe(true)
+    expect(matchInLibrary('abc123', 'Anything', 'Anyone', lib)).toBe('exact')
   })
 
   it('returns false when spotifyId does not match and title/artist differ', () => {
@@ -70,23 +70,23 @@ describe('matchInLibrary', () => {
     expect(matchInLibrary('xyz999', 'My Song', 'My Artist', lib)).toBe(false)
   })
 
-  it('returns true on normalized title + artist match', () => {
+  it('returns a truthy match on normalized title + artist match', () => {
     const lib = [makeSong({ title: 'Blue Monday', artist: 'New Order', spotifyId: undefined })]
-    expect(matchInLibrary('', 'Blue Monday', 'New Order', lib)).toBe(true)
+    expect(matchInLibrary('', 'Blue Monday', 'New Order', lib)).toBeTruthy()
   })
 
   it('is case-insensitive for title/artist match', () => {
     const lib = [makeSong({ title: 'Blue Monday', artist: 'New Order', spotifyId: undefined })]
-    expect(matchInLibrary('', 'blue monday', 'new order', lib)).toBe(true)
+    expect(matchInLibrary('', 'blue monday', 'new order', lib)).toBeTruthy()
   })
 
-  it('returns true when artist is a substring of library artist', () => {
+  it('returns a truthy match when artist is a substring of library artist', () => {
     const lib = [makeSong({ title: 'Track', artist: 'Artist A, Artist B', spotifyId: undefined })]
-    expect(matchInLibrary('', 'Track', 'Artist A', lib)).toBe(true)
+    expect(matchInLibrary('', 'Track', 'Artist A', lib)).toBeTruthy()
   })
 
   it('uses spotifyTitle/spotifyArtist for matching when present', () => {
     const lib = [makeSong({ title: 'Local Title', artist: 'Local Artist', spotifyTitle: 'Spotify Title', spotifyArtist: 'Spotify Artist', spotifyId: undefined })]
-    expect(matchInLibrary('', 'Spotify Title', 'Spotify Artist', lib)).toBe(true)
+    expect(matchInLibrary('', 'Spotify Title', 'Spotify Artist', lib)).toBeTruthy()
   })
 })

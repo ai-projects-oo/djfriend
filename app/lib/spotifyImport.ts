@@ -118,13 +118,51 @@ function norm(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-export function matchInLibrary(spotifyId: string, title: string, artist: string, library: Song[]): boolean {
-  if (library.some((s) => s.spotifyId === spotifyId)) return true;
+export function findSongsForImport(tracks: import('../types').ImportTrack[], library: Song[]): Song[] {
+  const seen = new Set<string>();
+  return tracks
+    .filter(t => t.inLibrary && !t.unavailable)
+    .reduce<Song[]>((acc, t) => {
+      const found = library.find(s =>
+        s.spotifyId === t.spotifyId ||
+        (norm(s.spotifyTitle ?? s.title) === norm(t.title) &&
+          (norm(s.spotifyArtist ?? s.artist) === norm(t.artist) ||
+           norm(s.spotifyArtist ?? s.artist).includes(norm(t.artist)) ||
+           norm(t.artist).includes(norm(s.spotifyArtist ?? s.artist))))
+      );
+      if (found && !seen.has(found.file)) {
+        seen.add(found.file);
+        acc.push(found);
+      }
+      return acc;
+    }, []);
+}
+
+// Returns 'exact' (clean match), 'stripped' (needed parenthetical stripping), or false
+function titlesMatch(a: string, b: string): 'exact' | 'stripped' | false {
+  if (a === b) return 'exact';
+  // One is a leading substring of the other (handles " (Dub Mix)" suffix on one side)
+  if (b.startsWith(a) || a.startsWith(b)) return 'stripped';
+  // Strip trailing parenthetical and compare again
+  const strip = (s: string) => s.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  const as = strip(a), bs = strip(b);
+  if (as.length > 2 && (as === bs || bs.startsWith(as) || as.startsWith(bs))) return 'stripped';
+  return false;
+}
+
+export function matchInLibrary(spotifyId: string, title: string, artist: string, library: Song[]): 'exact' | 'fuzzy' | 'partial' | false {
+  if (library.some((s) => s.spotifyId === spotifyId)) return 'exact';
   const nTitle = norm(title);
   const nArtist = norm(artist);
-  return library.some((s) => {
+  let best: 'fuzzy' | 'partial' | false = false;
+  for (const s of library) {
     const sTitle = norm(s.spotifyTitle ?? s.title);
     const sArtist = norm(s.spotifyArtist ?? s.artist);
-    return sTitle === nTitle && (sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist));
-  });
+    const artistOk = sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist);
+    if (!artistOk) continue;
+    const tm = titlesMatch(sTitle, nTitle);
+    if (tm === 'exact') return 'fuzzy';     // clean title/artist match → green
+    if (tm === 'stripped') best = 'partial'; // needed stripping → yellow
+  }
+  return best;
 }

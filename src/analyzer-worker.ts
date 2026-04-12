@@ -1,7 +1,7 @@
 // Persistent worker — Essentia WASM is initialized once per worker and
 // reused across all tracks sent to this worker via message passing.
 import { parentPort } from 'worker_threads';
-import { analyzeAudio } from './analyzer';
+import { analyzeAudio } from './analyzer-core.js';
 
 parentPort!.on('message', async ({ filePath }: { filePath: string }) => {
   const result = await analyzeAudio(filePath);

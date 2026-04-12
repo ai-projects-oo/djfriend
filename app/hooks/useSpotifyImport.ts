@@ -57,6 +57,24 @@ export function useSpotifyImport({ library }: UseSpotifyImportParams) { // setHi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingImportUrl, library]);
 
+  // Re-match all imports whenever the library changes (e.g. after analysis)
+  useEffect(() => {
+    if (library.length === 0) return;
+    setImportHistory(prev => prev.map(entry => ({
+      ...entry,
+      tracks: entry.tracks.map(t => {
+        if (t.unavailable) return { ...t, inLibrary: false, matchConfidence: undefined };
+        if (t.manualMatchFile) {
+          const found = library.some(s => s.file === t.manualMatchFile);
+          return { ...t, inLibrary: found, matchConfidence: found ? 'exact' as const : undefined };
+        }
+        const confidence = matchInLibrary(t.spotifyId, t.title, t.artist, library);
+        return { ...t, inLibrary: confidence !== false, matchConfidence: confidence || undefined };
+      }),
+    })));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library]);
+
   // Click-outside for storeLinkRef
   useEffect(() => {
     if (!openStoreLinkKey) return;
@@ -97,11 +115,10 @@ export function useSpotifyImport({ library }: UseSpotifyImportParams) { // setHi
         (loaded, total) => setImportStatus({ phase: "loading", loaded, total }),
       );
 
-      const importTracks: ImportTrack[] = tracks.map((t) => ({
-        ...t,
-        inLibrary:
-          !t.unavailable && matchInLibrary(t.spotifyId, t.title, t.artist, lib),
-      }));
+      const importTracks: ImportTrack[] = tracks.map((t) => {
+        const confidence = !t.unavailable && matchInLibrary(t.spotifyId, t.title, t.artist, lib);
+        return { ...t, inLibrary: confidence !== false, matchConfidence: confidence || undefined };
+      });
 
       const entry: ImportEntry = {
         id: Date.now().toString(),
@@ -126,6 +143,49 @@ export function useSpotifyImport({ library }: UseSpotifyImportParams) { // setHi
   const handleImport = useCallback(() => {
     void runImport(importUrl, library);
   }, [runImport, importUrl, library]);
+
+  const reloadEntry = useCallback(async (entry: import("../types").ImportEntry) => {
+    const token = getStoredToken();
+    if (!token) {
+      storePendingImport(`https://open.spotify.com/playlist/${entry.playlistId}`);
+      await redirectToSpotifyLogin();
+      return;
+    }
+    setImportStatus({ phase: 'loading', loaded: 0, total: 0 });
+    try {
+      const { playlistName, tracks } = await fetchPlaylistTracks(
+        entry.playlistId,
+        token,
+        (loaded, total) => setImportStatus({ phase: 'loading', loaded, total }),
+      );
+      // Build a lookup of previous manual matches by spotifyId so reload preserves them
+      const prevManualById = new Map<string, string>(); // spotifyId → manualMatchFile
+      for (const t of entry.tracks) {
+        if (t.manualMatchFile && t.spotifyId) prevManualById.set(t.spotifyId, t.manualMatchFile);
+      }
+
+      const importTracks: ImportTrack[] = tracks.map((t) => {
+        // Preserve manual match if the track is still in the playlist
+        const manualMatchFile = t.spotifyId ? prevManualById.get(t.spotifyId) : undefined;
+        if (manualMatchFile) {
+          const stillInLib = library.some(s => s.file === manualMatchFile);
+          return { ...t, inLibrary: stillInLib, matchConfidence: stillInLib ? 'exact' as const : undefined, manualMatchFile: stillInLib ? manualMatchFile : undefined };
+        }
+        const confidence = !t.unavailable && matchInLibrary(t.spotifyId, t.title, t.artist, library);
+        return { ...t, inLibrary: confidence !== false, matchConfidence: confidence || undefined };
+      });
+      setImportHistory(prev => prev.map(e => e.id === entry.id
+        ? { ...e, name: playlistName, tracks: importTracks, timestamp: Date.now() }
+        : e
+      ));
+      setImportStatus(null);
+    } catch (err) {
+      setImportStatus({
+        phase: 'error',
+        message: err instanceof Error ? err.message : 'Reload failed.',
+      });
+    }
+  }, [library]);
 
   const handleBrowseSpotifyPlaylists = useCallback(async () => {
     const token = getStoredToken();
@@ -168,6 +228,7 @@ export function useSpotifyImport({ library }: UseSpotifyImportParams) { // setHi
     setOpenStoreLinkKey,
     storeLinkRef,
     runImport,
+    reloadEntry,
     handleImport,
     handleBrowseSpotifyPlaylists,
   };

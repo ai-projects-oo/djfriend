@@ -9,7 +9,7 @@ import NodeID3 from 'node-id3'
 import { scanFolder } from './scanner.js'
 import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
-import { authenticate, getArtistGenres, searchTrack } from './spotify.js'
+import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
 import { enrichTracks, analyzeTracksWithAI } from './ai.js'
 import type { SemanticTags } from './ai.js'
@@ -26,6 +26,7 @@ export interface AppSong {
   artist: string
   title: string
   duration?: number
+  dateAdded?: number   // Unix timestamp (seconds)
   spotifyArtist?: string
   spotifyTitle?: string
   bpm: number
@@ -88,14 +89,23 @@ function isAppSong(value: unknown): value is AppSong {
 }
 
 
+function normalizePathKey(p: string): string {
+  return path.normalize(p).normalize('NFC')
+}
+
 function readExistingResultsFile(filePath: string): Record<string, AppSong> {
   if (!fs.existsSync(filePath)) return {}
   try {
     const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as unknown
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
     const out: Record<string, AppSong> = {}
-    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-      if (isAppSong(value)) out[key] = value
+    for (const [rawKey, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (!isAppSong(value)) continue
+      const key = normalizePathKey(rawKey)
+      // Skip if we already have an entry for this normalized key
+      if (out[key]) continue
+      // Normalize the file/filePath fields to match the normalized key
+      out[key] = { ...value, file: normalizePathKey(value.file), ...(value.filePath ? { filePath: normalizePathKey(value.filePath) } : {}) }
     }
     return out
   } catch { return {} }
@@ -105,7 +115,7 @@ function readExistingResults(rootPath: string): Record<string, AppSong> {
   return readExistingResultsFile(path.join(rootPath, 'results.json'))
 }
 
-interface AppleMusicTrack { filePath: string; file: string; artist: string | null; title: string; duration: number | null }
+interface AppleMusicTrack { filePath: string; file: string; artist: string | null; title: string; duration: number | null; dateAdded?: number }
 
 async function listAppleMusicPlaylists(): Promise<Array<{ name: string; count: number }>> {
   const rs = String.fromCharCode(30), us = String.fromCharCode(31)
@@ -119,16 +129,24 @@ async function listAppleMusicPlaylists(): Promise<Array<{ name: string; count: n
 async function listAppleMusicTracks(playlistName: string): Promise<AppleMusicTrack[]> {
   const rs = String.fromCharCode(30), us = String.fromCharCode(31)
   const esc = playlistName.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-  const script = `set outputLines to {}\ntell application "Music"\n\trepeat with t in (every track of user playlist "${esc}")\n\t\ttry\n\t\t\tset trackLocation to location of t\n\t\t\tif trackLocation is missing value then\n\t\t\t\terror "skip"\n\t\t\tend if\n\t\t\tset trackPath to POSIX path of trackLocation\n\t\t\tset trackName to (name of t) as text\n\t\t\tset trackArtist to ""\n\t\t\ttry\n\t\t\t\tset trackArtist to (artist of t) as text\n\t\t\tend try\n\t\t\tset trackDuration to ""\n\t\t\ttry\n\t\t\t\tset trackDuration to (duration of t) as text\n\t\t\tend try\n\t\t\tset end of outputLines to trackPath & "${us}" & trackArtist & "${us}" & trackName & "${us}" & trackDuration\n\t\tend try\n\tend repeat\nend tell\nset AppleScript's text item delimiters to "${rs}"\nreturn outputLines as text`
+  const script = `set outputLines to {}\ntell application "Music"\n\trepeat with t in (every track of user playlist "${esc}")\n\t\ttry\n\t\t\tset trackLocation to location of t\n\t\t\tif trackLocation is missing value then\n\t\t\t\terror "skip"\n\t\t\tend if\n\t\t\tset trackPath to POSIX path of trackLocation\n\t\t\tset trackName to (name of t) as text\n\t\t\tset trackArtist to ""\n\t\t\ttry\n\t\t\t\tset trackArtist to (artist of t) as text\n\t\t\tend try\n\t\t\tset trackDuration to ""\n\t\t\ttry\n\t\t\t\tset trackDuration to (duration of t) as text\n\t\t\tend try\n\t\t\tset trackAdded to ""\n\t\t\ttry\n\t\t\t\tset dAdded to date added of t\n\t\t\t\tset trackAdded to ((year of dAdded) as text) & "-" & ((month of dAdded as integer) as text) & "-" & ((day of dAdded) as text)\n\t\t\tend try\n\t\t\tset end of outputLines to trackPath & "${us}" & trackArtist & "${us}" & trackName & "${us}" & trackDuration & "${us}" & trackAdded\n\t\tend try\n\tend repeat\nend tell\nset AppleScript's text item delimiters to "${rs}"\nreturn outputLines as text`
   const { stdout } = await execFileAsync('osascript', ['-e', script], { maxBuffer: 64 * 1024 * 1024 })
   const tracks: AppleMusicTrack[] = []
   for (const row of (stdout.trim() ? stdout.trim().split(rs) : [])) {
-    const [rawPath, rawArtist, rawTitle, rawDuration] = row.split(us)
+    const [rawPath, rawArtist, rawTitle, rawDuration, rawAdded] = row.split(us)
     const filePath = (rawPath ?? '').trim()
     if (!filePath) continue
     const ext = path.extname(filePath).toLowerCase()
     if (!AUDIO_EXTENSIONS.has(ext) || !fs.existsSync(filePath)) continue
-    tracks.push({ filePath, file: path.basename(filePath), artist: (rawArtist ?? '').trim() || null, title: (rawTitle ?? '').trim() || path.basename(filePath, ext), duration: Number.isFinite(Number(rawDuration)) ? Number(rawDuration) : null })
+    let dateAdded: number | undefined
+    if (rawAdded?.trim()) {
+      const parts = rawAdded.trim().split('-')
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0] ?? '0'), parseInt(parts[1] ?? '1') - 1, parseInt(parts[2] ?? '1'))
+        if (!isNaN(d.getTime())) dateAdded = Math.floor(d.getTime() / 1000)
+      }
+    }
+    tracks.push({ filePath, file: path.basename(filePath), artist: (rawArtist ?? '').trim() || null, title: (rawTitle ?? '').trim() || path.basename(filePath, ext), duration: Number.isFinite(Number(rawDuration)) ? Number(rawDuration) : null, dateAdded })
   }
   return tracks
 }
@@ -185,6 +203,7 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
       const relativeFilePath = path.relative(rootPath, track.filePath).replace(/\\/g, '/')
       completed += 1
       writeEvent({ type: 'progress', completed, total, folder: folderKey, file: track.file })
+      await new Promise<void>(r => setImmediate(r)) // yield: flush progress event before heavy work
       const cached = existing[relativeFilePath]
       if (cached) {
         if (cached.duration == null) { try { const meta = await mm.parseFile(track.filePath, { duration: true }); if (meta.format.duration != null) cached.duration = meta.format.duration } catch { /* ignore */ } }
@@ -227,25 +246,35 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
   const resultsJson: Record<string, AppSong> = { ...existing }
   let completed = 0
   for (const track of tracks) {
-    const key = track.filePath
+    const key = normalizePathKey(track.filePath)
     completed += 1
     writeEvent({ type: 'progress', completed, total: tracks.length, folder: 'Apple Music', file: track.file })
+    await new Promise<void>(r => setImmediate(r)) // yield: flush progress event before heavy work
     const cached = existing[key]
     if (cached) {
       if (cached.duration == null && track.duration != null) cached.duration = track.duration
       else if (cached.duration == null) { try { const meta = await mm.parseFile(track.filePath, { duration: true }); if (meta.format.duration != null) cached.duration = meta.format.duration } catch { /* ignore */ } }
+      if (track.dateAdded != null && cached.dateAdded == null) cached.dateAdded = track.dateAdded
       resultsJson[key] = cached; continue
     }
     try {
       let localGenres: string[] = []
       try { const meta = await mm.parseFile(track.filePath, { duration: false }); localGenres = meta.common.genre ?? [] } catch { /* ignore */ }
       const match = await searchTrack(track.artist, track.title, token)
-      const [features, spotifyGenres] = await Promise.all([analyzeAudio(track.filePath), localGenres.length === 0 && match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([])])
+      const [localFeatures, spotifyGenres] = await Promise.all([analyzeAudio(track.filePath), localGenres.length === 0 && match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([])])
       const genres = localGenres.length > 0 ? localGenres : spotifyGenres
+
+      let features = localFeatures
+      // Fallback: if local audio decode failed (e.g. FLAC), use Spotify audio features
+      if (!features && match?.spotifyId) {
+        const sf = await getAudioFeatures(match.spotifyId, token)
+        if (sf) features = { bpm: sf.bpm, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
+      }
       if (!features) continue
+
       const keyInfo = toCamelot(features.pitchClass, features.mode)
       if (!keyInfo) continue
-      resultsJson[key] = { filePath: track.filePath, file: track.filePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}) }
+      resultsJson[key] = { filePath: track.filePath, file: track.filePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), ...(track.dateAdded != null ? { dateAdded: track.dateAdded } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}) }
     } catch { /* skip */ }
   }
   const { groqApiKey } = readSettings()

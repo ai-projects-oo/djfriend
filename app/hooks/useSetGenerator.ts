@@ -6,11 +6,12 @@ import { DEFAULT_CURVE } from "../components/EnergyCurveEditor";
 import { generateSet } from "../lib/setGenerator";
 import { isHarmonicWarning, camelotHarmonyScore } from "../lib/camelot";
 
-export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<React.SetStateAction<Song[]>>) {
+export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<React.SetStateAction<Song[]>>, playlistFilterFiles?: Set<string>) {
   const [prefs, setPrefs] = useState<DJPreferences>(DEFAULT_PREFS);
   const [curve, setCurve] = useState<CurvePoint[]>(DEFAULT_CURVE);
   const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
   const [autoRegen, setAutoRegen] = useState(false);
+  const [anchored, setAnchored] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [swapModal, setSwapModal] = useState<{
     index: number;
@@ -111,30 +112,31 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     library.filter(s => matchesGenrePref(s, prefs.genre)).length > filteredTrackCount;
 
   const runGenerate = useCallback(
-    (songs: Song[], p: DJPreferences, c: CurvePoint[]) => {
+    (songs: Song[], p: DJPreferences, c: CurvePoint[], extraOpts?: { jitter?: number; excludeFiles?: Set<string> }) => {
       if (songs.length === 0) return;
-      setGeneratedSet(generateSet(songs, p, c));
+      setGeneratedSet(generateSet(songs, p, c, { ...extraOpts, playlistFilterFiles }));
     },
-    [],
+    [playlistFilterFiles],
   );
 
   const handleGenerate = useCallback(() => {
+    if (anchored) return;
     runGenerate(library, prefs, curve);
     setAutoRegen(true);
-  }, [library, prefs, curve, runGenerate]);
+  }, [anchored, library, prefs, curve, runGenerate]);
 
   const handleRegenerate = useCallback(() => {
-    if (library.length === 0) return;
-    setGeneratedSet(generateSet(library, prefs, curve, { jitter: 0.4 }));
+    if (anchored || library.length === 0) return;
+    setGeneratedSet(generateSet(library, prefs, curve, { jitter: 0.4, playlistFilterFiles }));
     setAutoRegen(true);
-  }, [library, prefs, curve]);
+  }, [anchored, library, prefs, curve, playlistFilterFiles]);
 
   const handleGenerateNew = useCallback(() => {
-    if (library.length === 0) return;
+    if (anchored || library.length === 0) return;
     const excludeFiles = new Set(generatedSet.map(t => t.file));
-    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15 }));
+    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15, playlistFilterFiles }));
     setAutoRegen(true);
-  }, [library, prefs, curve, generatedSet]);
+  }, [anchored, library, prefs, curve, generatedSet, playlistFilterFiles]);
 
   const selectGenre = useCallback((genre: string) => {
     if (genre === 'Any') {
@@ -170,13 +172,13 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const handleCurveChange = useCallback(
     (newCurve: CurvePoint[]) => {
       setCurve(newCurve);
-      if (!autoRegen || library.length === 0) return;
+      if (!autoRegen || anchored || library.length === 0) return;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         runGenerate(library, prefs, newCurve);
       }, 150);
     },
-    [autoRegen, library, prefs, runGenerate],
+    [autoRegen, anchored, library, prefs, runGenerate],
   );
 
   const buildSwapSuggestions = useCallback(
@@ -294,6 +296,45 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     [swapModal],
   );
 
+  const handleLoadToSet = useCallback((songs: Song[]) => {
+    if (songs.length === 0) return;
+    const tracks: SetTrack[] = songs.map((song, i) => ({
+      ...song,
+      slot: i,
+      targetEnergy: song.energy,
+      harmonicWarning: i > 0 ? isHarmonicWarning(songs[i - 1].camelot, song.camelot) : false,
+    }));
+    setGeneratedSet(tracks);
+    setAnchored(true);
+    setAutoRegen(false);
+  }, []);
+
+  const handleAppendTracks = useCallback(() => {
+    if (library.length === 0) return;
+    const FALLBACK_DURATION = 210;
+    const GAP = 10;
+    const currentSeconds = generatedSet.reduce((s, t) => s + (t.duration ?? FALLBACK_DURATION) + GAP, 0);
+    const budgetSeconds = prefs.setDuration * 60;
+    const remainingSeconds = budgetSeconds - currentSeconds;
+    if (remainingSeconds <= 0) return;
+    const excludeFiles = new Set(generatedSet.map(t => t.file));
+    const appended = generateSet(library, prefs, curve, {
+      excludeFiles,
+      jitter: 0.15,
+      playlistFilterFiles,
+      maxDurationSeconds: remainingSeconds,
+    });
+    if (appended.length === 0) return;
+    setGeneratedSet(prev => {
+      const combined = [...prev, ...appended];
+      return combined.map((track, i) => ({
+        ...track,
+        slot: i,
+        harmonicWarning: i > 0 ? isHarmonicWarning(combined[i - 1].camelot, track.camelot) : false,
+      }));
+    });
+  }, [library, prefs, curve, generatedSet, playlistFilterFiles]);
+
   const handleRemoveTrack = useCallback((index: number) => {
     setGeneratedSet((prev) => {
       if (index < 0 || index >= prev.length) return prev;
@@ -353,6 +394,8 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     setGeneratedSet,
     autoRegen,
     setAutoRegen,
+    anchored,
+    setAnchored,
     debounceRef,
     swapModal,
     setSwapModal,
@@ -376,5 +419,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     handleRemoveTrack,
     handleReorderTrack,
     handleUpdateTrack,
+    handleLoadToSet,
+    handleAppendTracks,
   };
 }

@@ -15,6 +15,7 @@ export interface Song {
   spotifyArtist?: string;
   spotifyTitle?: string;
   duration?: number; // in seconds (may be absent if not scanned)
+  dateAdded?: number; // Unix timestamp (seconds) — set for Apple Music tracks
   bpm: number;
   key: string; // e.g. "E♭ Major"
   camelot: string; // e.g. "5B"
@@ -55,12 +56,15 @@ export interface TagFilters {
   timeOfNightTags: string[];
 }
 
+export type AddedTimeFilter = 'all' | '30d' | '90d' | '120d' | 'year';
+
 export interface DJPreferences {
   setDuration: number; // minutes
   venueType: VenueType;
   setPhase: SetPhase;
   genre: string;
   tagFilters: TagFilters;
+  addedTimeFilter: AddedTimeFilter;
 }
 
 export interface HistoryEntry {
@@ -77,7 +81,9 @@ export interface ImportTrack {
   title: string;
   artist: string;
   inLibrary: boolean;
+  matchConfidence?: 'exact' | 'fuzzy' | 'partial'; // exact/fuzzy = green; partial = yellow (parenthetical strip needed)
   unavailable?: boolean;
+  manualMatchFile?: string; // file path of manually-matched library song (skips auto-rematch)
 }
 
 export interface ImportEntry {

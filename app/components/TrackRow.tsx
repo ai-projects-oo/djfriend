@@ -426,14 +426,24 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
                   className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
                 />
               </div>
-              <div className="flex flex-col gap-1 w-20">
+              <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-[#475569] uppercase tracking-wider">BPM</label>
-                <input
-                  type="number"
-                  value={editBpm}
-                  onChange={e => setEditBpm(e.target.value)}
-                  className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
-                />
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={editBpm}
+                    onChange={e => setEditBpm(e.target.value)}
+                    className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-16"
+                  />
+                  <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v * 2))); }}
+                    className="px-1.5 py-1 text-[10px] rounded border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">
+                    ×2
+                  </button>
+                  <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v / 2))); }}
+                    className="px-1.5 py-1 text-[10px] rounded border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">
+                    ÷2
+                  </button>
+                </div>
               </div>
               <div className="flex flex-col gap-1 w-16">
                 <label className="text-[10px] text-[#475569] uppercase tracking-wider">Key</label>

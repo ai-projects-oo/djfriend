@@ -189,24 +189,28 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
       >
         {/* # */}
         <td className="py-3 pl-4 pr-2 w-10">
-          <div className="relative flex items-center gap-1.5">
-            <span
-              className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
-              title="Drag to reorder"
-            >
-              {index + 1}
-            </span>
-            <button
-              onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
-              className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-              title="Play in Apple Music"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            </button>
+          <div className="flex flex-col items-center gap-1">
+            {/* Number / play toggle */}
+            <div className="relative w-5 h-4 flex items-center justify-center">
+              <span
+                className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
+                title="Drag to reorder"
+              >
+                {index + 1}
+              </span>
+              <button
+                onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+                className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+                title="Play in Apple Music"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </button>
+            </div>
+            {/* Fit dot — always visible when there's an issue */}
             {fitInfo && fitInfo.level !== 'good' && (
-              <div className="relative flex-shrink-0">
+              <div className="relative">
                 <span
-                  className="cursor-help text-[8px] leading-none select-none"
+                  className="cursor-help text-[8px] leading-none select-none block"
                   style={{ color: fitInfo.level === 'bad' ? '#ef4444' : '#f59e0b' }}
                   onMouseEnter={() => setShowFitTooltip(true)}
                   onMouseLeave={() => setShowFitTooltip(false)}
@@ -214,7 +218,7 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
                   ●
                 </span>
                 {showFitTooltip && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none"
+                  <div className="absolute top-full left-0 mt-1 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none"
                     style={{ borderColor: fitInfo.level === 'bad' ? '#ef444466' : '#f59e0b66' }}
                   >
                     <p className="text-[10px] font-semibold mb-1.5"

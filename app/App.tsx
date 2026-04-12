@@ -227,13 +227,21 @@ function AppInner() {
     handleBrowseSpotifyPlaylists,
   } = useSpotifyImport({ library, setHistory });
 
-  // Derive the file set for the active playlist filter
+  // Derive the file set + duration for the active playlist filter (both memoized)
   const playlistFilterFiles = useMemo<Set<string> | undefined>(() => {
     if (!playlistFilterId) return undefined;
     const entry = importHistory.find(e => e.id === playlistFilterId);
     if (!entry) return undefined;
     const songs = findSongsForImport(entry.tracks, library);
     return songs.length > 0 ? new Set(songs.map(s => s.file)) : undefined;
+  }, [playlistFilterId, importHistory, library]);
+
+  const playlistTotalMinutes = useMemo<number>(() => {
+    if (!playlistFilterId) return 0;
+    const entry = importHistory.find(e => e.id === playlistFilterId);
+    if (!entry) return 0;
+    const songs = findSongsForImport(entry.tracks, library);
+    return songs.reduce((s, t) => s + (t.duration ?? 210), 0) / 60;
   }, [playlistFilterId, importHistory, library]);
 
   const {
@@ -883,10 +891,6 @@ function AppInner() {
                 const GAP = 10;
                 const setTotalSeconds = generatedSet.reduce((s, t) => s + (t.duration ?? FALLBACK_DURATION) + GAP, 0);
                 const setTotalMinutes = setTotalSeconds / 60;
-                const playlistEntry = playlistFilterId ? importHistory.find(e => e.id === playlistFilterId) : null;
-                const playlistTotalMinutes = playlistEntry
-                  ? findSongsForImport(playlistEntry.tracks, library).reduce((s, t) => s + (t.duration ?? FALLBACK_DURATION), 0) / 60
-                  : 0;
                 return (
               <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
                 <div className="flex items-center gap-2 flex-wrap">

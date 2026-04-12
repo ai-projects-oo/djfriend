@@ -2,6 +2,56 @@ import { useState, useRef, useEffect } from 'react';
 import type { SetTrack, DJPreferences } from '../types';
 import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
+import { matchesGenrePref } from '../lib/genreUtils';
+import { getAffinityKey, genreAffinityBonus } from '../lib/setGenerator';
+
+export type FitLevel = 'good' | 'warn' | 'bad';
+
+export interface FitInfo {
+  level: FitLevel;
+  reasons: string[];
+}
+
+function computeFit(track: SetTrack, prevTrack: SetTrack | null, prefs: DJPreferences): FitInfo {
+  const reasons: string[] = [];
+  let worst: FitLevel = 'good';
+
+  function flag(level: FitLevel, reason: string) {
+    reasons.push(reason);
+    if (level === 'bad') worst = 'bad';
+    else if (worst !== 'bad') worst = 'warn';
+  }
+
+  // Harmonic clash
+  if (track.harmonicWarning) {
+    flag('bad', 'Harmonic clash with previous track');
+  }
+
+  // Energy vs target
+  const eDelta = Math.abs(track.energy - track.targetEnergy);
+  if (eDelta > 0.35) flag('bad', `Energy ${(eDelta * 100).toFixed(0)}% off target`);
+  else if (eDelta > 0.20) flag('warn', `Energy ${(eDelta * 100).toFixed(0)}% off target`);
+
+  // BPM jump from previous
+  if (prevTrack && track.bpm > 0 && prevTrack.bpm > 0) {
+    const bDelta = Math.abs(track.bpm - prevTrack.bpm);
+    if (bDelta > 20) flag('bad', `BPM jump of ${bDelta.toFixed(0)} from previous`);
+    else if (bDelta > 12) flag('warn', `BPM jump of ${bDelta.toFixed(0)} from previous`);
+  }
+
+  // Genre filter mismatch
+  if (prefs.genre !== 'Any' && !matchesGenrePref(track, prefs.genre)) {
+    flag('warn', `Genre doesn't match filter (${prefs.genre.replace('~', '')})`);
+  }
+
+  // Venue/phase affinity
+  const affinityKey = getAffinityKey(prefs.venueType, prefs.setPhase);
+  if (affinityKey && genreAffinityBonus(track, affinityKey) === 0) {
+    flag('warn', `Genre doesn't suit ${prefs.venueType} · ${prefs.setPhase}`);
+  }
+
+  return { level: worst, reasons };
+}
 
 interface Props {
   tracks: SetTrack[];
@@ -53,9 +103,20 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
 
   const duration = totalDurationMinutes(tracks);
   const warnings = tracks.filter((t) => t.harmonicWarning).length;
+  const badFitCount = tracks.filter((t, i) =>
+    computeFit(t, i > 0 ? tracks[i - 1] : null, prefs).level === 'bad'
+  ).length;
+  const warnFitCount = tracks.filter((t, i) =>
+    computeFit(t, i > 0 ? tracks[i - 1] : null, prefs).level === 'warn'
+  ).length;
 
   function scrollToFirstWarning() {
     const el = tableContainerRef.current?.querySelector('[data-warning="true"]');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function scrollToFirstBadFit() {
+    const el = tableContainerRef.current?.querySelector('[data-fit="bad"]');
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
@@ -73,10 +134,31 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
           <span>
             Target: <span className="text-[#e2e8f0] font-semibold">{prefs.setDuration}</span> min
           </span>
-          {warnings > 0 && (
+          {badFitCount > 0 && (
+            <button
+              onClick={scrollToFirstBadFit}
+              className="text-[#ef4444] hover:text-[#f87171] transition-colors cursor-pointer text-xs"
+              title="Jump to first track needing replacement"
+            >
+              ● {badFitCount} {badFitCount === 1 ? 'track needs' : 'tracks need'} replacing
+            </button>
+          )}
+          {warnFitCount > 0 && (
+            <button
+              onClick={() => {
+                const el = tableContainerRef.current?.querySelector('[data-fit="warn"]');
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-[#f59e0b] hover:text-[#fbbf24] transition-colors cursor-pointer text-xs"
+              title="Jump to first track with fit warnings"
+            >
+              ● {warnFitCount} {warnFitCount === 1 ? 'track has' : 'tracks have'} fit issues
+            </button>
+          )}
+          {warnings > 0 && badFitCount === 0 && warnFitCount === 0 && (
             <button
               onClick={scrollToFirstWarning}
-              className="text-[#f59e0b] hover:text-[#fbbf24] transition-colors cursor-pointer"
+              className="text-[#f59e0b] hover:text-[#fbbf24] transition-colors cursor-pointer text-xs"
               title="Jump to first harmonic warning"
             >
               ⚠ {warnings} harmonic {warnings === 1 ? 'warning' : 'warnings'}
@@ -135,6 +217,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
                   key={track.file}
                   track={track}
                   index={idx}
+                  fitInfo={computeFit(track, idx > 0 ? tracks[idx - 1] : null, prefs)}
                   onSwap={() => onSwapTrack(idx)}
                   onRemove={() => onRemoveTrack(idx)}
                   onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}

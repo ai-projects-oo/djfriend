@@ -20,7 +20,7 @@ const GENRE_AFFINITY: Record<AffinityKey, string[]> = {
   festival: ['electronic', 'rock', 'indie', 'alternative', 'edm', 'dance'],
 };
 
-function getAffinityKey(venue: VenueType, setPhase: SetPhase): AffinityKey | null {
+export function getAffinityKey(venue: VenueType, setPhase: SetPhase): AffinityKey | null {
   if (venue === 'Club' && setPhase === 'Peak time') return 'club-peak';
   if (venue === 'Bar') return 'bar-background';
   if (venue === 'Wedding') return 'wedding-birthday';
@@ -28,7 +28,7 @@ function getAffinityKey(venue: VenueType, setPhase: SetPhase): AffinityKey | nul
   return null;
 }
 
-function genreAffinityBonus(song: Song, affinityKey: AffinityKey | null): number {
+export function genreAffinityBonus(song: Song, affinityKey: AffinityKey | null): number {
   if (!affinityKey) return 0;
   const preferred = GENRE_AFFINITY[affinityKey];
   const hasMatch = song.genres.some((g) =>

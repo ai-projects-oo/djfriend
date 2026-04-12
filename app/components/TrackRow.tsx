@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { RefreshCcw, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { SetTrack } from '../types';
 import { parseCamelot } from '../lib/camelot';
+import { camelotColor } from '../lib/camelotColors';
 import type { FitInfo } from './SetTracklist';
 
 interface Props {
@@ -19,11 +20,6 @@ interface Props {
   isDragOver?: boolean;
 }
 
-const CAMELOT_COLORS: Record<string, string> = {
-  A: '#06b6d4',
-  B: '#7c3aed',
-};
-
 const KEY_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B']
 const CAMELOT_MAJOR = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B']
 const CAMELOT_MINOR = ['5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A']
@@ -33,14 +29,9 @@ for (let i = 0; i < 12; i++) {
   CAMELOT_TO_KEY[CAMELOT_MINOR[i].toLowerCase()] = `${KEY_NAMES[i]} Minor`
 }
 
-function camelotBadgeColor(camelot: string): string {
-  const letter = camelot.slice(-1).toUpperCase();
-  return CAMELOT_COLORS[letter] ?? '#6b7280';
-}
-
 function energyBarColor(energy: number): string {
-  if (energy < 0.4) return '#22c55e';
-  if (energy < 0.7) return '#eab308';
+  if (energy < 0.4) return '#3b82f6';
+  if (energy < 0.7) return '#a855f7';
   return '#ef4444';
 }
 
@@ -111,10 +102,6 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
   const isLocal = Boolean(track.filePath);
   const isMp3 = track.filePath?.toLowerCase().endsWith('.mp3') ?? false;
 
-  const energyDelta = track.energy - track.targetEnergy;
-  const absDelta = Math.abs(energyDelta);
-  const deltaColor = absDelta <= 0.05 ? '#22c55e' : absDelta <= 0.15 ? '#eab308' : '#f97316';
-  const deltaSign = energyDelta >= 0 ? '+' : '';
 
   const compatibleKeys = getCompatibleKeys(track.camelot);
 
@@ -294,7 +281,7 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
             {track.camelot ? (
               <span
                 className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold cursor-help"
-                style={{ backgroundColor: camelotBadgeColor(track.camelot) + '33', color: camelotBadgeColor(track.camelot), border: `1px solid ${camelotBadgeColor(track.camelot)}66` }}
+                style={{ backgroundColor: camelotColor(track.camelot) + '26', color: camelotColor(track.camelot), border: `1px solid ${camelotColor(track.camelot)}66` }}
                 onMouseEnter={() => setShowKeyTooltip(true)}
                 onMouseLeave={() => setShowKeyTooltip(false)}
               >
@@ -319,24 +306,38 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
           </div>
         </td>
 
-        {/* Energy bar + delta */}
+        {/* Energy bar + decimal */}
         <td className="py-3 px-2 pr-4">
           <div className="flex items-center gap-2">
-            <div className="w-16 h-2 rounded-full bg-[#1e1e2e] overflow-hidden flex-shrink-0">
+            {/* Bar container: 56px wide, 4px tall, with target tick overlay */}
+            <div
+              className="relative flex-shrink-0 rounded-full bg-[#1e1e2e]"
+              style={{ width: 56, height: 4 }}
+              title={`Energy: ${track.energy.toFixed(2)} · Target: ${track.targetEnergy.toFixed(2)}`}
+            >
+              {/* Filled portion */}
               <div
                 className="h-full rounded-full transition-all"
-                style={{ width: `${(track.energy * 100).toFixed(1)}%`, backgroundColor: barColor }}
+                style={{
+                  width: `${Math.min(track.energy * 100, 100).toFixed(1)}%`,
+                  backgroundColor: barColor,
+                }}
+              />
+              {/* Target energy tick: 1px wide, 6px tall, centred vertically on the 4px bar */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{
+                  left: `${Math.min(Math.max(track.targetEnergy * 100, 0), 100).toFixed(1)}%`,
+                  width: 1,
+                  height: 6,
+                  backgroundColor: 'rgba(255,255,255,0.4)',
+                  transform: 'translate(-50%, -50%)',
+                }}
               />
             </div>
-            <span className="text-[10px] text-[#475569] tabular-nums w-8">
-              {(track.energy * 100).toFixed(0)}%
-            </span>
-            <span
-              className="text-[10px] tabular-nums w-9 hidden xl:inline"
-              style={{ color: deltaColor }}
-              title={`Target: ${(track.targetEnergy * 100).toFixed(0)}%`}
-            >
-              {deltaSign}{(energyDelta * 100).toFixed(0)}%
+            {/* Decimal value */}
+            <span className="text-[10px] text-[#64748b] tabular-nums">
+              {track.energy.toFixed(2)}
             </span>
           </div>
         </td>

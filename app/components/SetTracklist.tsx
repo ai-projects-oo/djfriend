@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { SetTrack, DJPreferences } from '../types';
 import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
@@ -212,29 +212,61 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
               </tr>
             </thead>
             <tbody>
-              {tracks.map((track, idx) => (
-                <TrackRow
-                  key={track.file}
-                  track={track}
-                  index={idx}
-                  fitInfo={computeFit(track, idx > 0 ? tracks[idx - 1] : null, prefs)}
-                  onSwap={() => onSwapTrack(idx)}
-                  onRemove={() => onRemoveTrack(idx)}
-                  onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}
-                  onDragStart={() => setDraggingIdx(idx)}
-                  onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
-                  onDragOver={(e) => { e.preventDefault(); if (draggingIdx !== null && draggingIdx !== idx) setDragOverIdx(idx); }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (draggingIdx !== null && draggingIdx !== idx) {
-                      onReorderTrack(draggingIdx, idx);
-                    }
-                    setDraggingIdx(null);
-                    setDragOverIdx(null);
-                  }}
-                  isDragOver={dragOverIdx === idx}
-                />
-              ))}
+              {tracks.map((track, idx) => {
+                const prevTrack = idx > 0 ? tracks[idx - 1] : null;
+                const bpmDelta = prevTrack && track.bpm > 0 && prevTrack.bpm > 0
+                  ? Math.abs(track.bpm - prevTrack.bpm)
+                  : 0;
+                const bpmDir = prevTrack && track.bpm > 0 && prevTrack.bpm > 0
+                  ? (track.bpm >= prevTrack.bpm ? '▲' : '▼')
+                  : '';
+                const bpmDeltaColor = bpmDelta <= 8 ? '#475569' : bpmDelta <= 15 ? '#f59e0b' : '#ef4444';
+
+                return (
+                  <React.Fragment key={track.file}>
+                    {bpmDelta > 0 && (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className="text-center"
+                          style={{ height: '16px', padding: '0', lineHeight: '16px' }}
+                        >
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              color: bpmDeltaColor,
+                              fontVariantNumeric: 'tabular-nums',
+                              letterSpacing: '0.02em',
+                            }}
+                          >
+                            {bpmDir}{Math.round(bpmDelta)} BPM
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                    <TrackRow
+                      track={track}
+                      index={idx}
+                      fitInfo={computeFit(track, prevTrack, prefs)}
+                      onSwap={() => onSwapTrack(idx)}
+                      onRemove={() => onRemoveTrack(idx)}
+                      onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}
+                      onDragStart={() => setDraggingIdx(idx)}
+                      onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
+                      onDragOver={(e) => { e.preventDefault(); if (draggingIdx !== null && draggingIdx !== idx) setDragOverIdx(idx); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggingIdx !== null && draggingIdx !== idx) {
+                          onReorderTrack(draggingIdx, idx);
+                        }
+                        setDraggingIdx(null);
+                        setDragOverIdx(null);
+                      }}
+                      isDragOver={dragOverIdx === idx}
+                    />
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

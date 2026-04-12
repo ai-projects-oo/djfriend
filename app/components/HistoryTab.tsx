@@ -1,4 +1,5 @@
 import type { HistoryEntry, SetTrack, CurvePoint } from "../types";
+import { camelotColor } from "../lib/camelotColors";
 import { buildSvgPath } from "../lib/curveInterpolation";
 import { downloadM3U } from "../lib/m3uExport";
 import { ARC_PRESETS } from "./EnergyCurveEditor";
@@ -320,8 +321,17 @@ export default function HistoryTab({
                         <td className="py-2.5 px-2 text-sm text-[#94a3b8] tabular-nums">
                           {Math.round(track.bpm)}
                         </td>
-                        <td className="py-2.5 px-2 text-sm text-[#94a3b8]">
-                          {track.camelot}
+                        <td className="py-2.5 px-2">
+                          {track.camelot ? (
+                            <span
+                              className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold"
+                              style={{ backgroundColor: camelotColor(track.camelot) + '26', color: camelotColor(track.camelot), border: `1px solid ${camelotColor(track.camelot)}66` }}
+                            >
+                              {track.camelot}
+                            </span>
+                          ) : (
+                            <span className="text-[#475569] text-sm">—</span>
+                          )}
                         </td>
                         <td className="py-2.5 px-2 text-sm text-[#94a3b8] tabular-nums">
                           {Math.round(track.energy * 100)}%

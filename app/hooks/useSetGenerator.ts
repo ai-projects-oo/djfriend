@@ -21,7 +21,6 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const [prefs, setPrefs] = useState<DJPreferences>(DEFAULT_PREFS);
   const [curve, setCurve] = useState<CurvePoint[]>(DEFAULT_CURVE);
   const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
-  const [autoRegen, setAutoRegen] = useState(false);
   const [anchored, setAnchored] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [swapModal, setSwapModal] = useState<{
@@ -132,20 +131,20 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const handleGenerate = useCallback(() => {
     if (anchored) return;
     runGenerate(library, prefs, curve);
-    setAutoRegen(true);
+
   }, [anchored, library, prefs, curve, runGenerate]);
 
   const handleRegenerate = useCallback(() => {
     if (anchored || library.length === 0) return;
     setGeneratedSet(generateSet(library, prefs, curve, { jitter: 0.4, playlistFilterFiles }));
-    setAutoRegen(true);
+
   }, [anchored, library, prefs, curve, playlistFilterFiles]);
 
   const handleGenerateNew = useCallback(() => {
     if (anchored || library.length === 0) return;
     const excludeFiles = new Set(generatedSet.map(t => t.file));
     setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15, playlistFilterFiles }));
-    setAutoRegen(true);
+
   }, [anchored, library, prefs, curve, generatedSet, playlistFilterFiles]);
 
   const selectGenre = useCallback((genre: string) => {
@@ -182,13 +181,8 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const handleCurveChange = useCallback(
     (newCurve: CurvePoint[]) => {
       setCurve(newCurve);
-      if (!autoRegen || anchored || library.length === 0) return;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        runGenerate(library, prefs, newCurve);
-      }, 150);
     },
-    [autoRegen, anchored, library, prefs, runGenerate],
+    [],
   );
 
   const buildSwapSuggestions = useCallback(
@@ -322,7 +316,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     }));
     setGeneratedSet(tracks);
     setAnchored(true);
-    setAutoRegen(false);
+
   }, []);
 
   const handleAppendTracks = useCallback(() => {
@@ -408,8 +402,6 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     setCurve,
     generatedSet,
     setGeneratedSet,
-    autoRegen,
-    setAutoRegen,
     anchored,
     setAnchored,
     debounceRef,

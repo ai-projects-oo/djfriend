@@ -262,8 +262,6 @@ function AppInner() {
     setCurve,
     generatedSet,
     setGeneratedSet,
-    autoRegen,
-    setAutoRegen,
     anchored,
     setAnchored,
     swapModal,
@@ -301,9 +299,8 @@ function AppInner() {
     setPrefs({ ...entry.prefs, addedTimeFilter: entry.prefs.addedTimeFilter ?? 'all' });
     setCurve(entry.curve);
     setGeneratedSet(entry.tracks);
-    setAutoRegen(true);
     setActiveTab("Generator");
-  }, [setPrefs, setCurve, setGeneratedSet, setAutoRegen]);
+  }, [setPrefs, setCurve, setGeneratedSet]);
 
   const {
     spotifyExportStatus,
@@ -700,11 +697,7 @@ function AppInner() {
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
                     Energy Curve
                   </h2>
-                  {autoRegen && (
-                    <span className="text-[10px] text-[#475569] bg-[#0d0d14] border border-[#1e1e2e] px-2 py-0.5 rounded">
-                      Live
-                    </span>
-                  )}
+
                 </div>
                 <EnergyCurveEditor points={curve} onChange={handleCurveChange} />
               </div>

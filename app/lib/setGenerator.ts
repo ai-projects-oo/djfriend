@@ -1,5 +1,5 @@
 import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, SetPhase, TagFilters } from '../types';
-import { camelotHarmonyScore, isHarmonicWarning } from './camelot';
+import { camelotHarmonyScore, isHarmonicWarning, isCamelotClockwise } from './camelot';
 import { sampleCurve } from './curveInterpolation';
 import { matchesGenrePref } from './genreUtils';
 
@@ -161,6 +161,11 @@ export function generateSet(
     const prevCamelot = prevTrack?.camelot ?? null;
     const prevBpm = prevTrack?.bpm ?? null;
 
+    // Slope-aware energy boost: when the curve is rising (≥ 0.05 delta),
+    // apply a small bonus to tracks that move clockwise on the Camelot wheel.
+    const prevTargetEnergy = prevTrack?.targetEnergy ?? targetEnergy;
+    const slopeRising = targetEnergy - prevTargetEnergy >= 0.05;
+
     const available = candidatePool.filter((s) => !used.has(s.file));
     if (available.length === 0) break;
 
@@ -185,8 +190,11 @@ export function generateSet(
       const affinityBonus = genreAffinityBonus(song, affinityKey);
       const semBonus = semanticAffinityBonus(song, prefs.venueType, prefs.setPhase);
       const tagBonus = tagFilterBonus(song, prefs.tagFilters);
+      // Clockwise Camelot move bonus: on rising curve slopes, prefer tracks that
+      // step forward on the wheel (energy boost direction per MixedInKey).
+      const boostBonus = slopeRising && prevCamelot !== null && isCamelotClockwise(prevCamelot, song.camelot) ? 0.08 : 0;
       const jitter = options?.jitter ? Math.random() * options.jitter : 0;
-      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus + semBonus + tagBonus + jitter;
+      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus + semBonus + tagBonus + boostBonus + jitter;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;

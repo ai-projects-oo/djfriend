@@ -70,3 +70,16 @@ export function camelotHarmonyScore(from: string, to: string): number {
 export function isHarmonicWarning(from: string, to: string): boolean {
   return getCamelotCompatibility(from, to) === 'incompatible';
 }
+
+/**
+ * Returns true when `to` is exactly one step clockwise from `from` on the
+ * Camelot wheel (number increases by 1, wrapping 12→1), regardless of letter.
+ * Used by the set generator to reward clockwise moves during rising energy slopes.
+ */
+export function isCamelotClockwise(from: string, to: string): boolean {
+  const a = parseCamelot(from);
+  const b = parseCamelot(to);
+  if (!a || !b) return false;
+  const next = a.num === 12 ? 1 : a.num + 1;
+  return b.num === next;
+}

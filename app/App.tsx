@@ -279,7 +279,6 @@ function AppInner() {
     handleSwapTrack,
     applySwapSuggestion,
     handleRemoveTrack,
-    handleRemoveTracks,
     handleReorderTrack,
     handleUpdateTrack,
     handleLoadToSet,
@@ -1054,7 +1053,6 @@ function AppInner() {
                   libraryLoaded={library.length > 0}
                   onSwapTrack={handleSwapTrack}
                   onRemoveTrack={handleRemoveTrack}
-                  onRemoveTracks={handleRemoveTracks}
                   onReorderTrack={handleReorderTrack}
                   onUpdateTrack={handleUpdateTrack}
                   onExport={handleExportM3U}

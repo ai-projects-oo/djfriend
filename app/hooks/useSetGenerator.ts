@@ -359,19 +359,6 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     });
   }, []);
 
-  const handleRemoveTracks = useCallback((indices: number[]) => {
-    setGeneratedSet((prev) => {
-      const toRemove = new Set(indices);
-      const next = prev.filter((_, i) => !toRemove.has(i));
-      return next.map((track, i) => ({
-        ...track,
-        slot: i,
-        harmonicWarning:
-          i > 0 ? isHarmonicWarning(next[i - 1].camelot, track.camelot) : false,
-      }));
-    });
-  }, []);
-
   const handleReorderTrack = useCallback((fromIdx: number, toIdx: number) => {
     setGeneratedSet(prev => {
       if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= prev.length || toIdx >= prev.length) return prev;
@@ -436,7 +423,6 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     handleSwapTrack,
     applySwapSuggestion,
     handleRemoveTrack,
-    handleRemoveTracks,
     handleReorderTrack,
     handleUpdateTrack,
     handleLoadToSet,

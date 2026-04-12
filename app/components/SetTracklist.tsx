@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { SetTrack, DJPreferences } from '../types';
 import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
@@ -59,6 +59,7 @@ interface Props {
   libraryLoaded: boolean;
   onSwapTrack: (index: number) => void;
   onRemoveTrack: (index: number) => void;
+  onRemoveTracks: (indices: number[]) => void;
   onReorderTrack: (fromIdx: number, toIdx: number) => void;
   onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
   onExport?: () => void;
@@ -70,12 +71,51 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
   return Math.round(totalSecs / 60);
 }
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack, onRemoveTrack, onRemoveTracks, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const lastSelectedRef = useRef<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Clear selection when track list changes (after generate/remove)
+  useEffect(() => { setSelectedIndices(new Set()); }, [tracks]);
+
+  // Escape to deselect all
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSelectedIndices(new Set());
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const handleRowSelect = useCallback((idx: number, e: React.MouseEvent) => {
+    if (e.shiftKey && lastSelectedRef.current !== null) {
+      // Range select
+      const from = Math.min(lastSelectedRef.current, idx);
+      const to = Math.max(lastSelectedRef.current, idx);
+      setSelectedIndices(prev => {
+        const next = new Set(prev);
+        for (let i = from; i <= to; i++) next.add(i);
+        return next;
+      });
+    } else if (e.metaKey || e.ctrlKey) {
+      // Toggle individual
+      setSelectedIndices(prev => {
+        const next = new Set(prev);
+        if (next.has(idx)) next.delete(idx); else next.add(idx);
+        return next;
+      });
+      lastSelectedRef.current = idx;
+    } else {
+      // Single select (deselect others)
+      setSelectedIndices(new Set([idx]));
+      lastSelectedRef.current = idx;
+    }
+  }, []);
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -195,6 +235,25 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
         </div>
       </div>
 
+      {/* Selection bar */}
+      {selectedIndices.size > 0 && (
+        <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#7c3aed1a] border border-[#7c3aed44] text-sm">
+          <span className="text-[#a78bfa] font-medium">{selectedIndices.size} {selectedIndices.size === 1 ? 'track' : 'tracks'} selected</span>
+          <button
+            onClick={() => { onRemoveTracks(Array.from(selectedIndices)); setSelectedIndices(new Set()); }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#ef44441a] border border-[#ef444444] text-[#f87171] text-xs font-medium hover:bg-[#ef444433] transition-colors cursor-pointer"
+          >
+            Remove selected
+          </button>
+          <button
+            onClick={() => setSelectedIndices(new Set())}
+            className="ml-auto text-[#475569] hover:text-[#94a3b8] text-xs cursor-pointer transition-colors"
+          >
+            ✕ Deselect
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="rounded-lg border border-[#1e1e2e] overflow-hidden" ref={tableContainerRef}>
         <div className="overflow-x-auto">
@@ -248,6 +307,8 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
                       track={track}
                       index={idx}
                       fitInfo={computeFit(track, prevTrack, prefs)}
+                      isSelected={selectedIndices.has(idx)}
+                      onSelect={(e) => handleRowSelect(idx, e)}
                       onSwap={() => onSwapTrack(idx)}
                       onRemove={() => onRemoveTrack(idx)}
                       onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}

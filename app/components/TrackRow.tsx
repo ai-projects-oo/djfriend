@@ -9,6 +9,8 @@ interface Props {
   track: SetTrack;
   index: number;
   fitInfo?: FitInfo;
+  isSelected?: boolean;
+  onSelect?: (e: React.MouseEvent) => void;
   onSwap: () => void;
   onRemove: () => void;
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
@@ -71,7 +73,7 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, isSelected, onSelect, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
   const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showFitTooltip, setShowFitTooltip] = useState(false);
@@ -177,8 +179,8 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
   return (
     <>
       <tr
-        className={`border-b border-[#1e1e2e] group ${swapFlash ? 'bg-green-900/20' : 'hover:bg-[#12121a]'} ${isDragOver ? 'border-t-2 border-t-[#7c3aed]' : ''}`}
-        style={rowStyle}
+        className={`border-b border-[#1e1e2e] group ${swapFlash ? 'bg-green-900/20' : isSelected ? 'bg-[#7c3aed1a]' : 'hover:bg-[#12121a]'} ${isDragOver ? 'border-t-2 border-t-[#7c3aed]' : ''}`}
+        style={{ ...rowStyle, cursor: onSelect ? 'default' : undefined }}
         data-warning={track.harmonicWarning ? 'true' : undefined}
         data-fit={fitInfo && fitInfo.level !== 'good' ? fitInfo.level : undefined}
         draggable={!editing}
@@ -186,6 +188,12 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
         onDragEnd={onDragEnd}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        onClick={(e) => {
+          if (editing) return;
+          const target = e.target as HTMLElement;
+          if (target.closest('button, input, a, [role="button"]')) return;
+          onSelect?.(e);
+        }}
       >
         {/* # */}
         <td className="py-3 pl-4 pr-2 w-10">

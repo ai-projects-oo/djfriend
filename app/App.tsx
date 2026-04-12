@@ -266,8 +266,6 @@ function AppInner() {
     setAnchored,
     swapModal,
     setSwapModal,
-    swapVisibleCount,
-    setSwapVisibleCount,
     availableGenres,
     genreGroups,
     availableTags,
@@ -1625,74 +1623,45 @@ function AppInner() {
       {swapModal && (
         <div
           className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-          onClick={() => {
-            setSwapModal(null);
-            setSwapVisibleCount(5);
-          }}
+          onClick={() => setSwapModal(null)}
         >
           <div
-            className="w-full max-w-2xl rounded-xl border border-[#2a2a3a] bg-[#12121a] p-4"
+            className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#12121a] p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-[#e2e8f0]">
-                Swap Suggestions
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+                Best replacements
               </h3>
               <button
-                className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
-                onClick={() => {
-                  setSwapModal(null);
-                  setSwapVisibleCount(5);
-                }}
+                className="text-xs text-[#475569] hover:text-[#e2e8f0] cursor-pointer transition-colors"
+                onClick={() => setSwapModal(null)}
               >
-                Close
+                ✕
               </button>
             </div>
 
             {swapModal.suggestions.length === 0 ? (
-              <div className="text-sm text-[#94a3b8] py-6">
-                No fitting suggestions found for this slot with current set
-                constraints.
-              </div>
+              <p className="text-sm text-[#475569] py-4 text-center">
+                No other tracks in your library fit this slot well enough.
+              </p>
             ) : (
-              <>
-                <div className="flex flex-col gap-2 max-h-[55vh] overflow-y-auto">
-                  {swapModal.suggestions
-                    .slice(0, swapVisibleCount)
-                    .map(({ song, score }) => (
-                      <button
-                        key={song.file}
-                        onClick={() => applySwapSuggestion(song)}
-                        className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2 hover:border-[#7c3aed] transition-colors cursor-pointer"
-                      >
-                        <div className="text-sm text-[#e2e8f0] truncate">
-                          {song.title} - {song.artist}
-                        </div>
-                        <div className="text-[11px] text-[#94a3b8] mt-1">
-                          {song.camelot} • {Math.round(song.bpm)} BPM •{" "}
-                          {Math.round(song.energy * 100)}% energy •{" "}
-                          {song.duration != null ? `${Math.floor(song.duration / 60)}:${String(Math.round(song.duration % 60)).padStart(2, '0')}` : '—'}{" "}
-                          • relevance {Math.round(score * 100)}%
-                        </div>
-                      </button>
-                    ))}
-                </div>
-
-                {swapVisibleCount < swapModal.suggestions.length && (
-                  <div className="mt-3 flex justify-center">
-                    <button
-                      onClick={() =>
-                        setSwapVisibleCount((count) =>
-                          Math.min(count + 5, swapModal.suggestions.length),
-                        )
-                      }
-                      className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                    >
-                      More
-                    </button>
-                  </div>
-                )}
-              </>
+              <div className="flex flex-col divide-y divide-[#1e1e2e]">
+                {swapModal.suggestions.map(({ song }) => (
+                  <button
+                    key={song.file}
+                    onClick={() => applySwapSuggestion(song)}
+                    className="w-full text-left px-1 py-3 hover:bg-[#0d0d14] transition-colors cursor-pointer group"
+                  >
+                    <div className="text-sm font-medium text-[#e2e8f0] truncate group-hover:text-white">
+                      {song.title}
+                    </div>
+                    <div className="text-xs text-[#64748b] truncate mt-0.5">
+                      {song.artist}
+                    </div>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>

@@ -52,7 +52,7 @@ const TIME_TAG_MAP: Partial<Record<SetPhase, string[]>> = {
   'After-party': ['after-hours'],
 }
 
-function semanticAffinityBonus(song: Song, venue: VenueType, setPhase: SetPhase): number {
+export function semanticAffinityBonus(song: Song, venue: VenueType, setPhase: SetPhase): number {
   if (!song.semanticTags) return 0
   const { venueTags, timeOfNightTags } = song.semanticTags
   const expectedVenueTags = VENUE_TAG_MAP[venue] ?? []

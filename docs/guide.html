@@ -412,8 +412,6 @@
               <p>Drop in any M3U, M3U8, or plain text file (one track per line). Works on the web version too, without audio files.</p>
             </div>
           </div>
-          <h3>What happens during analysis</h3>
-          <p>For each audio file DJFriend extracts BPM, musical key (converted to Camelot notation), and energy level from the raw waveform. If Spotify credentials are configured, genres are fetched and cached at the same time. Results are written once and reused on every subsequent load.</p>
           <div class="tip warn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
             <span><strong>BPM doubling?</strong> If a track has an existing BPM tag, DJFriend reads it and uses it as a hint during analysis — this prevents the common ×2 detection error on slow tracks. If a track still shows a doubled BPM after loading, open the track editor and use the <em>÷2</em> button to halve it.</span>
@@ -426,7 +424,7 @@
         <section class="guide-section" id="import-playlist">
           <span class="section-label">03</span>
           <h2>Import a Spotify playlist</h2>
-          <p>Go to the <strong>Import</strong> tab. Paste a Spotify playlist URL (or the raw playlist ID) and click <em>Import</em>. DJFriend fetches the track list and matches each entry against your local library using Spotify ID, title, and artist.</p>
+          <p>Go to the <strong>Import</strong> tab. Paste a Spotify playlist URL (or the raw playlist ID) and click <em>Import</em>. DJFriend finds the matching tracks in your local library and shows you what was found.</p>
           <div class="steps">
             <div class="step">
               <div class="step-num">1</div>
@@ -458,7 +456,7 @@
         <section class="guide-section" id="energy-curve">
           <span class="section-label">04</span>
           <h2>Energy curve</h2>
-          <p>The energy curve is the arc of your set — how the vibe rises, peaks, and falls. DJFriend uses it to pick tracks that match the target energy at each position in the timeline.</p>
+          <p>The energy curve defines the vibe arc of your set — how it rises, peaks, and falls. Draw it before generating.</p>
           <h3>Presets</h3>
           <p>Five presets cover the most common set shapes:</p>
           <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.9rem;display:flex;flex-direction:column;gap:0.3rem;">
@@ -469,7 +467,7 @@
             <li><strong style="color:var(--text)">Roller-coaster</strong> — alternating highs and lows for variety</li>
           </ul>
           <h3>Drawing freehand</h3>
-          <p>Click any point on the curve editor canvas to add a control point, then drag it. Points can be removed by right-clicking. The curve is always smooth — DJFriend interpolates between your control points using a spline.</p>
+          <p>Click anywhere on the curve editor canvas to add a control point, then drag it. Right-click a point to remove it.</p>
           <div class="tip">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
             <span><strong>Tip:</strong> fewer control points = smoother curve = more musical transitions. Start with 3–4 points and add more only if you need a specific shape.</span>
@@ -484,15 +482,15 @@
           <h2>Preferences</h2>
           <p>The generator sidebar contains several controls that shape which tracks are eligible:</p>
           <h3>Venue &amp; Set Phase</h3>
-          <p>Choose from <em>Club, Bar, Wedding, Festival, Private event</em> and <em>Warm-up, Peak time, Cool-down, After-party</em>. These map to a genre affinity table — tracks whose genres suit the venue and phase get a small scoring bonus.</p>
+          <p>Choose your venue (<em>Club, Bar, Wedding, Festival, Private event</em>) and phase (<em>Warm-up, Peak time, Cool-down, After-party</em>). DJFriend will favour tracks that suit the vibe.</p>
           <h3>BPM Range</h3>
-          <p>Set a minimum and maximum BPM. Only tracks within this range enter the candidate pool. Use this to keep a techno set from accidentally pulling in a 90 BPM track.</p>
+          <p>Set a minimum and maximum BPM. Only tracks within this range will be used.</p>
           <h3>Genre Filter</h3>
-          <p>Select a genre (exact match) or a prefix (fuzzy match, shown with a ~). Tracks outside the filter are excluded from the pool. Leave it on <em>Any</em> to use your full library.</p>
+          <p>Pick a genre to restrict the set to matching tracks. Leave it on <em>Any</em> to use your full library. Genres shown with ~ are fuzzy matches.</p>
           <h3>Added Time Filter</h3>
-          <p>Restrict the pool to tracks added recently: <em>Last 30 days, 90 days, 120 days, This year,</em> or <em>All</em>. Useful for keeping a set fresh with new additions.</p>
+          <p>Limit the set to recently added tracks: <em>Last 30 days, 90 days, 120 days, This year,</em> or <em>All</em>.</p>
           <h3>Set Duration</h3>
-          <p>Pills from 30 to 180 minutes. DJFriend stops adding tracks once the cumulative duration would exceed the target. The generator never runs over — it stops short if needed.</p>
+          <p>Choose a target length (30–180 min). The generated set will not exceed it.</p>
           <div class="tip">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
             <span><strong>Playlist mode auto-selects duration:</strong> when you switch to <em>From Playlist</em> source mode, the closest duration pill that fits the playlist is selected automatically and all shorter ones are disabled.</span>
@@ -525,7 +523,7 @@
               <div class="step-num">3</div>
               <div class="step-body">
                 <strong>Generate</strong>
-                <p>Hit <em>Generate</em>. Only tracks from that playlist enter the candidate pool. All other preferences (genre, BPM, curve) still apply.</p>
+                <p>Hit <em>Generate</em>. The set is built from that playlist only. Your other preferences (genre, BPM, curve) still apply.</p>
               </div>
             </div>
           </div>
@@ -541,17 +539,9 @@
         <section class="guide-section" id="generate">
           <span class="section-label">07</span>
           <h2>Generate the set</h2>
-          <p>Press the <strong>▶ Generate</strong> button. DJFriend runs the scoring algorithm over your candidate pool and builds the set in seconds.</p>
-          <h3>How the algorithm works</h3>
-          <p>For each slot in the set, the algorithm:</p>
-          <ol style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.4rem;">
-            <li>Samples the energy curve at this position to get a target energy value.</li>
-            <li>Sorts all unused tracks by proximity to the target energy and takes the closest 15% (at least 5) as candidates.</li>
-            <li>Scores each candidate: <strong style="color:var(--text)">harmonic (60%)</strong> + <strong style="color:var(--text)">BPM continuity (30%)</strong> + genre/semantic affinity bonus.</li>
-            <li>Picks the highest scorer. If adding the track would exceed the duration budget, the loop stops.</li>
-          </ol>
-          <h3>Regenerate with variation</h3>
-          <p>Each run adds a small random jitter so two consecutive generations produce slightly different results. Click <em>▶ Generate</em> again to get a new variation. Use <em>Generate from remaining</em> to replace only the portion of the set after a specific track.</p>
+          <p>Press the <strong>▶ Generate</strong> button. DJFriend builds the full set automatically based on your curve, preferences, and library.</p>
+          <h3>Get a different result</h3>
+          <p>Click <em>▶ Generate</em> again — each run produces a slightly different set. Use <em>Generate from remaining</em> to replace only the tracks after a specific position while keeping the ones before it.</p>
         </section>
 
         <hr />
@@ -564,25 +554,18 @@
           <div class="fit-legend">
             <div class="fit-row">
               <div class="fit-dot good"></div>
-              <p><strong>Green — good fit.</strong> No issues detected. The track passes all four signals.</p>
+              <p><strong>Green — good fit.</strong> No issues with this track.</p>
             </div>
             <div class="fit-row">
               <div class="fit-dot warn"></div>
-              <p><strong>Amber — fit warning.</strong> One or more signals are slightly off: energy is more than 20% away from target, BPM jumps more than 12 from the previous track, or the genre doesn't fully match the venue/phase preference.</p>
+              <p><strong>Amber — minor issue.</strong> Hover to see what's slightly off — could be energy, BPM, or genre.</p>
             </div>
             <div class="fit-row">
               <div class="fit-dot bad"></div>
-              <p><strong>Red — needs replacing.</strong> A hard problem was detected: harmonic clash with the previous track, energy more than 35% off target, or BPM jump greater than 20.</p>
+              <p><strong>Red — needs replacing.</strong> Hover to see the problem — harmonic clash, energy mismatch, or a big BPM jump.</p>
             </div>
           </div>
-          <p>The stats bar at the top of the set list shows how many tracks fall into each category. Clicking the red or amber count jumps directly to the first offending track.</p>
-          <h3>Four signals explained</h3>
-          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.35rem;">
-            <li><strong style="color:var(--text)">Harmonic clash</strong> — the Camelot keys of this track and the previous are incompatible (not adjacent on the wheel).</li>
-            <li><strong style="color:var(--text)">Energy off target</strong> — the track's energy doesn't match what the curve asks for at this point in the set.</li>
-            <li><strong style="color:var(--text)">BPM jump</strong> — the BPM difference between this track and the previous exceeds the threshold.</li>
-            <li><strong style="color:var(--text)">Genre mismatch</strong> — the genre filter or venue/phase affinity isn't met.</li>
-          </ul>
+          <p>The stats bar at the top shows how many tracks have issues. Click the count to jump to the first one.</p>
         </section>
 
         <hr />
@@ -592,15 +575,7 @@
           <span class="section-label">09</span>
           <h2>Swapping tracks</h2>
           <p>Every track row has a <strong>⟳ Swap</strong> button. Click it to open the smart swap panel.</p>
-          <h3>How suggestions are scored</h3>
-          <p>DJFriend searches your entire library (not just the active source) for the best replacement, using a four-signal composite score:</p>
-          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.3rem;">
-            <li><strong style="color:var(--text)">Energy proximity (35%)</strong> — how close the candidate's energy is to the target for this slot.</li>
-            <li><strong style="color:var(--text)">Harmonic compatibility (35%)</strong> — Camelot wheel score against the previous track.</li>
-            <li><strong style="color:var(--text)">BPM continuity (20%)</strong> — BPM delta from the previous track, normalised to 0–1.</li>
-            <li><strong style="color:var(--text)">Semantic affinity (10%)</strong> — vibe/mood tag overlap and venue/phase genre bonus.</li>
-          </ul>
-          <p>Up to 5 suggestions are shown, sorted best to worst. If no candidate scores above 0.45, the panel shows <em>"No other tracks in your library fit this slot well enough."</em></p>
+          <p>DJFriend looks through your full library and shows up to 5 replacement tracks, sorted best to worst fit. If nothing suitable is found it says so. Click any suggestion to swap it in.</p>
           <h3>Manual reordering</h3>
           <p>Drag any track row to a new position using the grip handle on the left. The fit indicators update immediately to reflect the new order.</p>
           <h3>Removing a track</h3>
@@ -615,12 +590,12 @@
           <h2>Editing track metadata</h2>
           <p>Click the <strong>✎ Edit</strong> button on any row to open the inline editor. You can update:</p>
           <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.3rem;">
-            <li><strong style="color:var(--text)">Title &amp; Artist</strong> — display names only; does not write to the audio file.</li>
-            <li><strong style="color:var(--text)">BPM</strong> — manual override. Use the <em>×2</em> and <em>÷2</em> buttons to fix halved or doubled BPM readings in one click.</li>
-            <li><strong style="color:var(--text)">Key / Camelot</strong> — if your DJ software shows a different key, correct it here so the harmonic scoring is accurate.</li>
-            <li><strong style="color:var(--text)">Genre</strong> — add or change the primary genre. Affects scoring and the genre filter.</li>
+            <li><strong style="color:var(--text)">Title &amp; Artist</strong> — change the display name.</li>
+            <li><strong style="color:var(--text)">BPM</strong> — manual override. Use <em>×2</em> / <em>÷2</em> to fix a halved or doubled reading in one click.</li>
+            <li><strong style="color:var(--text)">Key / Camelot</strong> — correct the key if it doesn't match what your DJ software shows.</li>
+            <li><strong style="color:var(--text)">Genre</strong> — add or change the genre.</li>
           </ul>
-          <p>Changes apply immediately to the current set. They are stored in your local results cache and persist across sessions.</p>
+          <p>Changes apply immediately and are saved for future sessions.</p>
         </section>
 
         <hr />
@@ -633,7 +608,7 @@
           <h3>M3U playlist</h3>
           <p>Exports an M3U file with absolute file paths. Open it directly in <strong>Rekordbox, Serato, VirtualDJ, Traktor,</strong> or any other DJ software that reads M3U. The file preserves track order and includes the runtime of each track.</p>
           <h3>Spotify playlist</h3>
-          <p>Sends the set to your Spotify account as a new playlist. Requires Spotify credentials configured in Settings. Tracks are matched by Spotify ID (if available) or by title + artist search. Unmatched tracks are skipped.</p>
+          <p>Sends the set to your Spotify account as a new playlist. Requires Spotify credentials in Settings. Tracks that can't be found on Spotify are skipped.</p>
           <div class="tip">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
             <span><strong>Pro tip:</strong> use the Spotify export after a gig to save the actual set you played — import the playlist, generate from it in source mode, and you have a reproducible template for future bookings.</span>
@@ -648,11 +623,11 @@
           <h2>Settings</h2>
           <p>Open Settings via the gear icon in the top-right corner. There are three sections:</p>
           <h3>Spotify credentials</h3>
-          <p>Enter your Spotify <strong>Client ID</strong> and <strong>Client Secret</strong>. These are used to fetch genre data for tracks in your library and to export sets to Spotify. Get them free at <a href="https://developer.spotify.com/dashboard">developer.spotify.com/dashboard</a> — create an app with any name and copy the credentials.</p>
+          <p>Enter your Spotify <strong>Client ID</strong> and <strong>Client Secret</strong> to enable genre data and Spotify export. Get them free at <a href="https://developer.spotify.com/dashboard">developer.spotify.com/dashboard</a> — create an app and copy the credentials.</p>
           <h3>AI (Groq)</h3>
-          <p>Enter your <strong>Groq API key</strong> to enable AI semantic tagging. Groq is free at <a href="https://console.groq.com">console.groq.com</a> — sign up, generate a key, and paste it here. Once set, DJFriend enriches every track in your library with vibe, mood, venue, and time-of-night tags. This runs once per track and is cached.</p>
+          <p>Enter your <strong>Groq API key</strong> to enable AI tagging (vibe, mood, venue fit). Groq is free at <a href="https://console.groq.com">console.groq.com</a>. Without it the app works fine — you just won't have AI tags.</p>
           <h3>Library path</h3>
-          <p>Shows the folder currently loaded. Change it here to switch between libraries (e.g. home vs. studio).</p>
+          <p>Shows the currently loaded folder. Change it here to switch between libraries.</p>
         </section>
 
       </main>

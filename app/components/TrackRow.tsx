@@ -41,14 +41,17 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function getCompatibleKeys(camelot: string): string[] {
+function getCompatibleKeys(camelot: string): { standard: string[]; boost: string[] } {
   const parsed = parseCamelot(camelot);
-  if (!parsed) return [];
+  if (!parsed) return { standard: [], boost: [] };
   const { num, letter } = parsed;
   const other = letter === 'A' ? 'B' : 'A';
   const prev = num === 1 ? 12 : num - 1;
   const next = num === 12 ? 1 : num + 1;
-  return [`${prev}${letter}`, `${next}${letter}`, `${num}${other}`];
+  return {
+    standard: [`${prev}${letter}`, `${next}${letter}`, `${num}${other}`],
+    boost:    [`${next}${other}`, `${prev}${other}`],
+  };
 }
 
 const TAG_COLORS: Record<string, { bg: string; text: string }> = {
@@ -103,7 +106,7 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
   const isMp3 = track.filePath?.toLowerCase().endsWith('.mp3') ?? false;
 
 
-  const compatibleKeys = getCompatibleKeys(track.camelot);
+  const { standard: compatibleKeys, boost: boostKeys } = getCompatibleKeys(track.camelot);
 
   function openEdit() {
     setEditTitle(track.title);
@@ -301,10 +304,13 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
               </button>
             )}
             {showKeyTooltip && track.camelot && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap">
-                {compatibleKeys.length > 0
-                  ? `Compatible: ${compatibleKeys.join(', ')}`
-                  : track.camelot}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1">
+                {compatibleKeys.length > 0 && (
+                  <span><span className="text-[#64748b]">Compatible: </span>{compatibleKeys.join(', ')}</span>
+                )}
+                {boostKeys.length > 0 && (
+                  <span><span className="text-[#f59e0b]">Energy boost: </span><span className="text-[#fbbf24]">{boostKeys.join(', ')}</span></span>
+                )}
               </div>
             )}
           </div>

@@ -244,6 +244,15 @@ function AppInner() {
     return songs.reduce((s, t) => s + (t.duration ?? 210), 0) / 60;
   }, [playlistFilterId, importHistory, library]);
 
+  const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
+  // The only pill enabled in playlist mode: smallest duration that fits the playlist
+  const minViablePill = useMemo<number | null>(() => {
+    if (!playlistFilterId || playlistTotalMinutes <= 0) return null;
+    return SET_DURATIONS.find(d => d >= playlistTotalMinutes) ?? 180;
+  }, [playlistFilterId, playlistTotalMinutes]);
+
+  // Auto-select effect wired below after setPrefs is available from useSetGenerator
+
   const {
     prefs,
     setPrefs,
@@ -280,6 +289,13 @@ function AppInner() {
 
   // Wire setGeneratedSet into the bridge ref so useLibrary can reset the set on new analysis
   onNewAnalysisRef.current = () => { setGeneratedSet([]); setAnchored(false); };
+
+  // Auto-select the min viable duration pill when playlist mode activates or playlist changes
+  useEffect(() => {
+    if (minViablePill !== null) {
+      setPrefs(p => p.setDuration !== minViablePill ? { ...p, setDuration: minViablePill } : p);
+    }
+  }, [minViablePill, setPrefs]);
 
   const handleLoadHistoryEntry = useCallback((entry: HistoryEntry) => {
     setPrefs({ ...entry.prefs, addedTimeFilter: entry.prefs.addedTimeFilter ?? 'all' });
@@ -896,15 +912,18 @@ function AppInner() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">Duration</span>
                   <div className="flex gap-1.5 flex-wrap">
-                    {[30, 45, 60, 90, 120, 180].map(min => {
+                    {SET_DURATIONS.map(min => {
                       const active = prefs.setDuration === min;
-                      const tooShort = generatedSet.length > 0 && min < setTotalMinutes;
-                      const belowPlaylist = playlistFilterId !== null && playlistTotalMinutes > 0 && min < playlistTotalMinutes;
-                      const disabled = tooShort || belowPlaylist;
+                      const tooShort = minViablePill === null && generatedSet.length > 0 && min < setTotalMinutes;
+                      // In playlist mode: only the min viable pill is enabled
+                      const lockedByPlaylist = minViablePill !== null && min !== minViablePill;
+                      const disabled = tooShort || lockedByPlaylist;
                       const title = tooShort
                         ? `Current set is ~${Math.ceil(setTotalMinutes)}m — select a longer duration`
-                        : belowPlaylist
-                        ? `Playlist is ~${Math.ceil(playlistTotalMinutes)}m — select a longer duration`
+                        : lockedByPlaylist
+                        ? min < (minViablePill ?? 0)
+                          ? `Playlist is ~${Math.ceil(playlistTotalMinutes)}m — too short`
+                          : `Use ${minViablePill}m to match the playlist length`
                         : undefined;
                       return (
                         <button key={min} type="button"

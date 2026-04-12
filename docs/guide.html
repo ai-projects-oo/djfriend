@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DJFriend | DJ Guide</title>
+    <meta name="description" content="Complete guide for DJs: how to load your library, shape the energy curve, generate a set, read fit indicators, swap tracks, and export." />
+    <link rel="icon" type="image/png" href="icon.png" />
+    <link rel="apple-touch-icon" href="icon.png" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      :root {
+        --bg: #0a0a0f;
+        --surface: #111118;
+        --border: #1e1e2e;
+        --purple: #7c3aed;
+        --purple-lt: #a78bfa;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --dim: #64748b;
+        --green: #22c55e;
+        --amber: #f59e0b;
+        --red: #ef4444;
+      }
+      html { scroll-behavior: smooth; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        top: -200px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 900px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(124,58,237,0.12), transparent 70%);
+        z-index: -1;
+      }
+
+      /* Scroll progress */
+      #scroll-progress {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 3px;
+        width: 0%;
+        background: linear-gradient(90deg, var(--purple), var(--purple-lt));
+        z-index: 200;
+        transition: width 0.1s linear;
+      }
+
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        backdrop-filter: blur(20px);
+        background: rgba(10,10,15,0.8);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        padding: 0 2rem;
+        height: 64px;
+        align-items: center;
+      }
+      .nav-logo {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        font-weight: 800;
+        text-decoration: none;
+        color: var(--text);
+      }
+      .nav-links { display: flex; gap: 2rem; list-style: none; }
+      .nav-links a {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: color 0.2s;
+      }
+      .nav-links a:hover, .nav-links a.active { color: var(--purple-lt); }
+
+      /* Layout */
+      .page-wrap {
+        display: flex;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+        gap: 3rem;
+        align-items: flex-start;
+      }
+
+      /* Sidebar TOC */
+      .toc {
+        position: sticky;
+        top: 80px;
+        width: 220px;
+        flex-shrink: 0;
+        padding: 1.5rem 0;
+      }
+      .toc-title {
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--dim);
+        margin-bottom: 0.75rem;
+      }
+      .toc ol { list-style: none; padding: 0; }
+      .toc li { margin-bottom: 0.1rem; }
+      .toc a {
+        display: block;
+        padding: 0.3rem 0.75rem;
+        border-left: 2px solid transparent;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.82rem;
+        transition: color 0.15s, border-color 0.15s;
+        border-radius: 0 6px 6px 0;
+      }
+      .toc a:hover { color: var(--purple-lt); border-left-color: var(--purple); }
+      .toc a.active { color: var(--purple-lt); border-left-color: var(--purple); background: rgba(124,58,237,0.08); }
+
+      /* Main content */
+      .content {
+        flex: 1;
+        min-width: 0;
+        padding: 4rem 0 6rem;
+      }
+
+      .page-hero {
+        margin-bottom: 3.5rem;
+      }
+      .page-hero .tag {
+        font-size: 0.65rem;
+        color: var(--purple-lt);
+        text-transform: uppercase;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        display: block;
+        margin-bottom: 0.6rem;
+      }
+      .page-hero h1 {
+        font-size: clamp(2rem, 4vw, 3rem);
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 1.1;
+        margin-bottom: 0.75rem;
+      }
+      .page-hero h1 span { color: var(--purple-lt); }
+      .page-hero p { color: var(--muted); font-size: 1.05rem; max-width: 580px; }
+
+      hr { border: none; height: 1px; background: var(--border); margin: 3rem 0; }
+
+      /* Sections */
+      .guide-section { scroll-margin-top: 88px; margin-bottom: 3.5rem; }
+      .section-label {
+        font-size: 0.65rem;
+        color: var(--purple-lt);
+        text-transform: uppercase;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        display: block;
+        margin-bottom: 0.4rem;
+      }
+      .guide-section h2 {
+        font-size: 1.55rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin-bottom: 1rem;
+      }
+      .guide-section h3 {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--text);
+        margin: 1.5rem 0 0.4rem;
+      }
+      .guide-section p { color: var(--muted); margin-bottom: 0.75rem; }
+      .guide-section p:last-child { margin-bottom: 0; }
+      .guide-section a { color: var(--purple-lt); text-decoration: none; }
+      .guide-section a:hover { text-decoration: underline; }
+
+      /* Step list */
+      .steps { display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem; }
+      .step {
+        display: flex;
+        gap: 1rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 1.25rem 1.5rem;
+        transition: border-color 0.25s;
+      }
+      .step:hover { border-color: rgba(124,58,237,0.4); }
+      .step-num {
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(124,58,237,0.15);
+        border: 1px solid rgba(124,58,237,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 0.82rem;
+        color: var(--purple-lt);
+        margin-top: 2px;
+      }
+      .step-body { flex: 1; }
+      .step-body strong { color: var(--text); display: block; margin-bottom: 0.25rem; font-size: 0.95rem; }
+      .step-body p { margin: 0; font-size: 0.875rem; }
+
+      /* Tip / note callout */
+      .tip {
+        display: flex;
+        gap: 0.9rem;
+        background: rgba(124,58,237,0.08);
+        border: 1px solid rgba(124,58,237,0.2);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        margin: 1.25rem 0;
+        font-size: 0.875rem;
+        color: var(--muted);
+      }
+      .tip svg { flex-shrink: 0; margin-top: 2px; color: var(--purple-lt); }
+      .tip strong { color: var(--purple-lt); }
+
+      .warn {
+        background: rgba(245,158,11,0.08);
+        border-color: rgba(245,158,11,0.25);
+      }
+      .warn svg { color: var(--amber); }
+      .warn strong { color: var(--amber); }
+
+      /* Fit indicator legend */
+      .fit-legend { display: flex; flex-direction: column; gap: 0.6rem; margin: 1rem 0; }
+      .fit-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        font-size: 0.875rem;
+      }
+      .fit-dot {
+        flex-shrink: 0;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-top: 5px;
+      }
+      .fit-dot.good { background: var(--green); }
+      .fit-dot.warn { background: var(--amber); }
+      .fit-dot.bad  { background: var(--red); }
+      .fit-row p { margin: 0; color: var(--muted); }
+      .fit-row strong { color: var(--text); }
+
+      /* Source grid */
+      .source-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+      .source-item {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        transition: border-color 0.25s;
+      }
+      .source-item:hover { border-color: rgba(124,58,237,0.4); }
+      .source-item h4 {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        margin-bottom: 0.35rem;
+        color: var(--text);
+      }
+      .source-item p { font-size: 0.82rem; margin: 0; }
+
+      /* Kbd */
+      kbd {
+        display: inline-block;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 1px 7px;
+        font-family: ui-monospace, monospace;
+        font-size: 0.78rem;
+        color: var(--text);
+        vertical-align: middle;
+      }
+
+      footer {
+        padding: 5rem 0 3rem;
+        text-align: center;
+        border-top: 1px solid var(--border);
+      }
+      footer a { color: var(--muted); text-decoration: none; margin: 0 1rem; font-size: 0.875rem; }
+      footer a:hover { color: var(--purple-lt); }
+
+      @media (max-width: 800px) {
+        .toc { display: none; }
+        .page-wrap { padding: 0 1rem; }
+        .nav-links { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scroll-progress"></div>
+
+    <nav>
+      <a class="nav-logo" href="index.html">
+        <picture>
+          <source srcset="icon.webp" type="image/webp" />
+          <img src="icon.png" alt="DJFriend" style="width:24px;height:24px;border-radius:6px;" />
+        </picture>
+        DJFRIEND
+      </a>
+      <ul class="nav-links">
+        <li><a href="index.html#install">Download</a></li>
+        <li><a href="index.html#features">Features</a></li>
+        <li><a href="guide.html" class="active">Guide</a></li>
+        <li><a href="about.html">About</a></li>
+      </ul>
+    </nav>
+
+    <div class="page-wrap">
+
+      <!-- Sidebar TOC -->
+      <aside class="toc">
+        <p class="toc-title">On this page</p>
+        <ol>
+          <li><a href="#getting-started">Getting started</a></li>
+          <li><a href="#load-library">Load your library</a></li>
+          <li><a href="#import-playlist">Import a playlist</a></li>
+          <li><a href="#energy-curve">Energy curve</a></li>
+          <li><a href="#preferences">Preferences</a></li>
+          <li><a href="#source-mode">Generate from playlist</a></li>
+          <li><a href="#generate">Generate the set</a></li>
+          <li><a href="#fit-indicator">Fit indicators</a></li>
+          <li><a href="#swap-tracks">Swapping tracks</a></li>
+          <li><a href="#edit-metadata">Editing metadata</a></li>
+          <li><a href="#export">Export</a></li>
+          <li><a href="#settings">Settings</a></li>
+        </ol>
+      </aside>
+
+      <!-- Main guide content -->
+      <main class="content">
+
+        <header class="page-hero">
+          <span class="tag">DJ Guide</span>
+          <h1>How to use <span>DJFriend</span></h1>
+          <p>Everything you need to go from an empty library to a polished, export-ready DJ set — step by step.</p>
+        </header>
+
+        <!-- 1. Getting started -->
+        <section class="guide-section" id="getting-started">
+          <span class="section-label">01</span>
+          <h2>Getting started</h2>
+          <p>DJFriend is a desktop app for Mac and Windows (and a web version at <a href="https://djfriend.onrender.com">djfriend.onrender.com</a>). Download the right build for your machine from the <a href="index.html#install">Downloads</a> page and install it.</p>
+          <p>On first launch the app opens to the <strong>Library</strong> tab. All analysis happens locally — your music never leaves your computer.</p>
+          <div class="tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span><strong>First time?</strong> Head to Settings (gear icon, top right) and add your Spotify Client ID and Secret. This enables genre data for every track. Without it the app still works — you'll just have fewer genre signals.</span>
+          </div>
+        </section>
+
+        <hr />
+
+        <!-- 2. Load library -->
+        <section class="guide-section" id="load-library">
+          <span class="section-label">02</span>
+          <h2>Load your library</h2>
+          <p>Go to the <strong>Library</strong> tab and choose your source. DJFriend will scan, analyse, and cache the results in <code>results.json</code> in the same folder — subsequent loads are instant.</p>
+          <div class="source-grid">
+            <div class="source-item">
+              <h4>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--purple-lt)" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Local folder
+              </h4>
+              <p>Click <em>Choose folder</em> and point to any directory. Sub-folders are scanned recursively. Supported: MP3, FLAC, AAC, WAV, M4A, OGG.</p>
+            </div>
+            <div class="source-item">
+              <h4>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="color:var(--purple-lt)"><path d="M17.057 12.781c.032 2.588 2.254 3.462 2.287 3.477-.023.074-.351 1.204-1.151 2.371-.691 1.012-1.411 2.018-2.54 2.038-1.111.02-1.469-.658-2.738-.658-1.27 0-1.666.638-2.718.678-1.091.039-1.911-1.077-2.606-2.079-1.42-2.05-2.505-5.787-1.045-8.311.725-1.254 2.015-2.049 3.411-2.069 1.054-.02 2.049.71 2.693.71.643 0 1.839-.889 3.102-.759.53.021 2.017.213 2.971 1.611-.077.047-1.771 1.033-1.666 3.071z"/></svg>
+                Apple Music
+              </h4>
+              <p>Mac only. Pick any playlist from your Apple Music library. DJFriend reads the local files directly — no export needed.</p>
+            </div>
+            <div class="source-item">
+              <h4>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--purple-lt)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+                Rekordbox XML
+              </h4>
+              <p>Export your collection from Rekordbox (<em>File → Export Collection as XML</em>), then import the file. BPM and key tags carry over automatically.</p>
+            </div>
+            <div class="source-item">
+              <h4>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--purple-lt)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                M3U / TXT
+              </h4>
+              <p>Drop in any M3U, M3U8, or plain text file (one track per line). Works on the web version too, without audio files.</p>
+            </div>
+          </div>
+          <h3>What happens during analysis</h3>
+          <p>For each audio file DJFriend extracts BPM, musical key (converted to Camelot notation), and energy level from the raw waveform. If Spotify credentials are configured, genres are fetched and cached at the same time. Results are written once and reused on every subsequent load.</p>
+          <div class="tip warn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
+            <span><strong>BPM doubling?</strong> If a track has an existing BPM tag, DJFriend reads it and uses it as a hint during analysis — this prevents the common ×2 detection error on slow tracks. If a track still shows a doubled BPM after loading, open the track editor and use the <em>÷2</em> button to halve it.</span>
+          </div>
+        </section>
+
+        <hr />
+
+        <!-- 3. Import a Spotify playlist -->
+        <section class="guide-section" id="import-playlist">
+          <span class="section-label">03</span>
+          <h2>Import a Spotify playlist</h2>
+          <p>Go to the <strong>Import</strong> tab. Paste a Spotify playlist URL (or the raw playlist ID) and click <em>Import</em>. DJFriend fetches the track list and matches each entry against your local library using Spotify ID, title, and artist.</p>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <strong>Copy the playlist URL</strong>
+                <p>In Spotify: right-click the playlist → <em>Share → Copy link to playlist</em>. A full URL like <code>https://open.spotify.com/playlist/37i9d…</code> or just the 22-character ID both work.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <strong>Paste and import</strong>
+                <p>Paste into the input field and click <em>Import Playlist</em>. Matched tracks are shown with a green checkmark; unmatched ones appear greyed out.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <strong>Use it in the generator</strong>
+                <p>Once imported, the playlist is available in the <em>Source</em> card in the Generator sidebar. Select it to restrict set generation to only those tracks (see <a href="#source-mode">Generate from playlist</a>).</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr />
+
+        <!-- 4. Energy curve -->
+        <section class="guide-section" id="energy-curve">
+          <span class="section-label">04</span>
+          <h2>Energy curve</h2>
+          <p>The energy curve is the arc of your set — how the vibe rises, peaks, and falls. DJFriend uses it to pick tracks that match the target energy at each position in the timeline.</p>
+          <h3>Presets</h3>
+          <p>Five presets cover the most common set shapes:</p>
+          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.9rem;display:flex;flex-direction:column;gap:0.3rem;">
+            <li><strong style="color:var(--text)">Warm-up</strong> — gentle ramp from low to mid energy</li>
+            <li><strong style="color:var(--text)">Peak-time</strong> — sustained high energy throughout</li>
+            <li><strong style="color:var(--text)">Festival arc</strong> — slow build to a sharp peak, then gradual decline</li>
+            <li><strong style="color:var(--text)">Closing</strong> — starts mid, peaks, then winds down</li>
+            <li><strong style="color:var(--text)">Roller-coaster</strong> — alternating highs and lows for variety</li>
+          </ul>
+          <h3>Drawing freehand</h3>
+          <p>Click any point on the curve editor canvas to add a control point, then drag it. Points can be removed by right-clicking. The curve is always smooth — DJFriend interpolates between your control points using a spline.</p>
+          <div class="tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span><strong>Tip:</strong> fewer control points = smoother curve = more musical transitions. Start with 3–4 points and add more only if you need a specific shape.</span>
+          </div>
+        </section>
+
+        <hr />
+
+        <!-- 5. Preferences -->
+        <section class="guide-section" id="preferences">
+          <span class="section-label">05</span>
+          <h2>Preferences</h2>
+          <p>The generator sidebar contains several controls that shape which tracks are eligible:</p>
+          <h3>Venue &amp; Set Phase</h3>
+          <p>Choose from <em>Club, Bar, Wedding, Festival, Private event</em> and <em>Warm-up, Peak time, Cool-down, After-party</em>. These map to a genre affinity table — tracks whose genres suit the venue and phase get a small scoring bonus.</p>
+          <h3>BPM Range</h3>
+          <p>Set a minimum and maximum BPM. Only tracks within this range enter the candidate pool. Use this to keep a techno set from accidentally pulling in a 90 BPM track.</p>
+          <h3>Genre Filter</h3>
+          <p>Select a genre (exact match) or a prefix (fuzzy match, shown with a ~). Tracks outside the filter are excluded from the pool. Leave it on <em>Any</em> to use your full library.</p>
+          <h3>Added Time Filter</h3>
+          <p>Restrict the pool to tracks added recently: <em>Last 30 days, 90 days, 120 days, This year,</em> or <em>All</em>. Useful for keeping a set fresh with new additions.</p>
+          <h3>Set Duration</h3>
+          <p>Pills from 30 to 180 minutes. DJFriend stops adding tracks once the cumulative duration would exceed the target. The generator never runs over — it stops short if needed.</p>
+          <div class="tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span><strong>Playlist mode auto-selects duration:</strong> when you switch to <em>From Playlist</em> source mode, the closest duration pill that fits the playlist is selected automatically and all shorter ones are disabled.</span>
+          </div>
+        </section>
+
+        <hr />
+
+        <!-- 6. Source mode -->
+        <section class="guide-section" id="source-mode">
+          <span class="section-label">06</span>
+          <h2>Generate from playlist</h2>
+          <p>By default, DJFriend draws from your <strong>Full Library</strong>. If you have imported playlists, a <strong>Source</strong> card appears above the Duration pills in the sidebar.</p>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <strong>Toggle to "From Playlist"</strong>
+                <p>Click the <em>From Playlist</em> button in the Source card. A dropdown appears listing all your imported playlists.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <strong>Pick a playlist</strong>
+                <p>Select the playlist you want to work from. The duration pill auto-selects to the shortest option that fits the playlist's total length. Shorter pills are disabled.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <strong>Generate</strong>
+                <p>Hit <em>Generate</em>. Only tracks from that playlist enter the candidate pool. All other preferences (genre, BPM, curve) still apply.</p>
+              </div>
+            </div>
+          </div>
+          <div class="tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span>This is the ideal workflow for a booked set: import the playlist you've prepared in Spotify, then let DJFriend find the best harmonic order within it.</span>
+          </div>
+        </section>
+
+        <hr />
+
+        <!-- 7. Generate -->
+        <section class="guide-section" id="generate">
+          <span class="section-label">07</span>
+          <h2>Generate the set</h2>
+          <p>Press the <strong>▶ Generate</strong> button. DJFriend runs the scoring algorithm over your candidate pool and builds the set in seconds.</p>
+          <h3>How the algorithm works</h3>
+          <p>For each slot in the set, the algorithm:</p>
+          <ol style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.4rem;">
+            <li>Samples the energy curve at this position to get a target energy value.</li>
+            <li>Sorts all unused tracks by proximity to the target energy and takes the closest 15% (at least 5) as candidates.</li>
+            <li>Scores each candidate: <strong style="color:var(--text)">harmonic (60%)</strong> + <strong style="color:var(--text)">BPM continuity (30%)</strong> + genre/semantic affinity bonus.</li>
+            <li>Picks the highest scorer. If adding the track would exceed the duration budget, the loop stops.</li>
+          </ol>
+          <h3>Regenerate with variation</h3>
+          <p>Each run adds a small random jitter so two consecutive generations produce slightly different results. Click <em>▶ Generate</em> again to get a new variation. Use <em>Generate from remaining</em> to replace only the portion of the set after a specific track.</p>
+        </section>
+
+        <hr />
+
+        <!-- 8. Fit indicators -->
+        <section class="guide-section" id="fit-indicator">
+          <span class="section-label">08</span>
+          <h2>Fit indicators</h2>
+          <p>Every track in the generated set shows a small coloured dot in the <strong>#</strong> column. Hover over it to see exactly why a track might not fit.</p>
+          <div class="fit-legend">
+            <div class="fit-row">
+              <div class="fit-dot good"></div>
+              <p><strong>Green — good fit.</strong> No issues detected. The track passes all four signals.</p>
+            </div>
+            <div class="fit-row">
+              <div class="fit-dot warn"></div>
+              <p><strong>Amber — fit warning.</strong> One or more signals are slightly off: energy is more than 20% away from target, BPM jumps more than 12 from the previous track, or the genre doesn't fully match the venue/phase preference.</p>
+            </div>
+            <div class="fit-row">
+              <div class="fit-dot bad"></div>
+              <p><strong>Red — needs replacing.</strong> A hard problem was detected: harmonic clash with the previous track, energy more than 35% off target, or BPM jump greater than 20.</p>
+            </div>
+          </div>
+          <p>The stats bar at the top of the set list shows how many tracks fall into each category. Clicking the red or amber count jumps directly to the first offending track.</p>
+          <h3>Four signals explained</h3>
+          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.35rem;">
+            <li><strong style="color:var(--text)">Harmonic clash</strong> — the Camelot keys of this track and the previous are incompatible (not adjacent on the wheel).</li>
+            <li><strong style="color:var(--text)">Energy off target</strong> — the track's energy doesn't match what the curve asks for at this point in the set.</li>
+            <li><strong style="color:var(--text)">BPM jump</strong> — the BPM difference between this track and the previous exceeds the threshold.</li>
+            <li><strong style="color:var(--text)">Genre mismatch</strong> — the genre filter or venue/phase affinity isn't met.</li>
+          </ul>
+        </section>
+
+        <hr />
+
+        <!-- 9. Swap tracks -->
+        <section class="guide-section" id="swap-tracks">
+          <span class="section-label">09</span>
+          <h2>Swapping tracks</h2>
+          <p>Every track row has a <strong>⟳ Swap</strong> button. Click it to open the smart swap panel.</p>
+          <h3>How suggestions are scored</h3>
+          <p>DJFriend searches your entire library (not just the active source) for the best replacement, using a four-signal composite score:</p>
+          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.3rem;">
+            <li><strong style="color:var(--text)">Energy proximity (35%)</strong> — how close the candidate's energy is to the target for this slot.</li>
+            <li><strong style="color:var(--text)">Harmonic compatibility (35%)</strong> — Camelot wheel score against the previous track.</li>
+            <li><strong style="color:var(--text)">BPM continuity (20%)</strong> — BPM delta from the previous track, normalised to 0–1.</li>
+            <li><strong style="color:var(--text)">Semantic affinity (10%)</strong> — vibe/mood tag overlap and venue/phase genre bonus.</li>
+          </ul>
+          <p>Up to 5 suggestions are shown, sorted best to worst. If no candidate scores above 0.45, the panel shows <em>"No other tracks in your library fit this slot well enough."</em></p>
+          <h3>Manual reordering</h3>
+          <p>Drag any track row to a new position using the grip handle on the left. The fit indicators update immediately to reflect the new order.</p>
+          <h3>Removing a track</h3>
+          <p>Click the <strong>✕ Remove</strong> button on any row to delete it from the set. The track remains in your library — it is simply not part of this set.</p>
+        </section>
+
+        <hr />
+
+        <!-- 10. Edit metadata -->
+        <section class="guide-section" id="edit-metadata">
+          <span class="section-label">10</span>
+          <h2>Editing track metadata</h2>
+          <p>Click the <strong>✎ Edit</strong> button on any row to open the inline editor. You can update:</p>
+          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.3rem;">
+            <li><strong style="color:var(--text)">Title &amp; Artist</strong> — display names only; does not write to the audio file.</li>
+            <li><strong style="color:var(--text)">BPM</strong> — manual override. Use the <em>×2</em> and <em>÷2</em> buttons to fix halved or doubled BPM readings in one click.</li>
+            <li><strong style="color:var(--text)">Key / Camelot</strong> — if your DJ software shows a different key, correct it here so the harmonic scoring is accurate.</li>
+            <li><strong style="color:var(--text)">Genre</strong> — add or change the primary genre. Affects scoring and the genre filter.</li>
+          </ul>
+          <p>Changes apply immediately to the current set. They are stored in your local results cache and persist across sessions.</p>
+        </section>
+
+        <hr />
+
+        <!-- 11. Export -->
+        <section class="guide-section" id="export">
+          <span class="section-label">11</span>
+          <h2>Export</h2>
+          <p>Click the <strong>↓ Export</strong> button at the top right of the set list to open the export menu.</p>
+          <h3>M3U playlist</h3>
+          <p>Exports an M3U file with absolute file paths. Open it directly in <strong>Rekordbox, Serato, VirtualDJ, Traktor,</strong> or any other DJ software that reads M3U. The file preserves track order and includes the runtime of each track.</p>
+          <h3>Spotify playlist</h3>
+          <p>Sends the set to your Spotify account as a new playlist. Requires Spotify credentials configured in Settings. Tracks are matched by Spotify ID (if available) or by title + artist search. Unmatched tracks are skipped.</p>
+          <div class="tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span><strong>Pro tip:</strong> use the Spotify export after a gig to save the actual set you played — import the playlist, generate from it in source mode, and you have a reproducible template for future bookings.</span>
+          </div>
+        </section>
+
+        <hr />
+
+        <!-- 12. Settings -->
+        <section class="guide-section" id="settings">
+          <span class="section-label">12</span>
+          <h2>Settings</h2>
+          <p>Open Settings via the gear icon in the top-right corner. There are three sections:</p>
+          <h3>Spotify credentials</h3>
+          <p>Enter your Spotify <strong>Client ID</strong> and <strong>Client Secret</strong>. These are used to fetch genre data for tracks in your library and to export sets to Spotify. Get them free at <a href="https://developer.spotify.com/dashboard">developer.spotify.com/dashboard</a> — create an app with any name and copy the credentials.</p>
+          <h3>AI (Groq)</h3>
+          <p>Enter your <strong>Groq API key</strong> to enable AI semantic tagging. Groq is free at <a href="https://console.groq.com">console.groq.com</a> — sign up, generate a key, and paste it here. Once set, DJFriend enriches every track in your library with vibe, mood, venue, and time-of-night tags. This runs once per track and is cached.</p>
+          <h3>Library path</h3>
+          <p>Shows the folder currently loaded. Change it here to switch between libraries (e.g. home vs. studio).</p>
+        </section>
+
+      </main>
+    </div>
+
+    <footer>
+      <p style="color:var(--dim);font-size:0.82rem;">&copy; 2026 DJFriend</p>
+      <div style="margin-top:1.25rem;">
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="https://github.com/ai-projects-oo/djfriend">GitHub</a>
+        <a href="mailto:obo_odedr@hotmail.com">Contact</a>
+      </div>
+    </footer>
+
+    <script>
+      // Scroll progress bar
+      window.addEventListener("scroll", () => {
+        const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+        const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        document.getElementById("scroll-progress").style.width = (winScroll / height * 100) + "%";
+      });
+
+      // Active TOC link
+      const sections = document.querySelectorAll(".guide-section");
+      const tocLinks = document.querySelectorAll(".toc a");
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            tocLinks.forEach(a => a.classList.remove("active"));
+            const active = document.querySelector(`.toc a[href="#${entry.target.id}"]`);
+            if (active) active.classList.add("active");
+          }
+        });
+      }, { rootMargin: "-20% 0px -70% 0px" });
+      sections.forEach(s => observer.observe(s));
+    </script>
+  </body>
+</html>

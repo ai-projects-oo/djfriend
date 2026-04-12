@@ -20,7 +20,7 @@ const GENRE_AFFINITY: Record<AffinityKey, string[]> = {
   festival: ['electronic', 'rock', 'indie', 'alternative', 'edm', 'dance'],
 };
 
-function getAffinityKey(venue: VenueType, setPhase: SetPhase): AffinityKey | null {
+export function getAffinityKey(venue: VenueType, setPhase: SetPhase): AffinityKey | null {
   if (venue === 'Club' && setPhase === 'Peak time') return 'club-peak';
   if (venue === 'Bar') return 'bar-background';
   if (venue === 'Wedding') return 'wedding-birthday';
@@ -28,7 +28,7 @@ function getAffinityKey(venue: VenueType, setPhase: SetPhase): AffinityKey | nul
   return null;
 }
 
-function genreAffinityBonus(song: Song, affinityKey: AffinityKey | null): number {
+export function genreAffinityBonus(song: Song, affinityKey: AffinityKey | null): number {
   if (!affinityKey) return 0;
   const preferred = GENRE_AFFINITY[affinityKey];
   const hasMatch = song.genres.some((g) =>
@@ -52,7 +52,7 @@ const TIME_TAG_MAP: Partial<Record<SetPhase, string[]>> = {
   'After-party': ['after-hours'],
 }
 
-function semanticAffinityBonus(song: Song, venue: VenueType, setPhase: SetPhase): number {
+export function semanticAffinityBonus(song: Song, venue: VenueType, setPhase: SetPhase): number {
   if (!song.semanticTags) return 0
   const { venueTags, timeOfNightTags } = song.semanticTags
   const expectedVenueTags = VENUE_TAG_MAP[venue] ?? []
@@ -98,6 +98,10 @@ export interface GenerateOptions {
   jitter?: number;
   /** songs to exclude from the candidate pool (for "generate new" from remaining tracks) */
   excludeFiles?: Set<string>;
+  /** restrict pool to only these files (playlist filter) */
+  playlistFilterFiles?: Set<string>;
+  /** hard cap in seconds — stop adding tracks once cumulative duration would exceed this */
+  maxDurationSeconds?: number;
 }
 
 export function generateSet(
@@ -110,29 +114,47 @@ export function generateSet(
 
   const genreFilteredSongs = songs.filter((song) => matchesGenrePref(song, prefs.genre));
   let candidatePool = genreFilteredSongs.length > 0 ? genreFilteredSongs : songs;
+
+  // Date added filter — only applied when tracks actually have dateAdded set
+  const filter = prefs.addedTimeFilter ?? 'all';
+  if (filter !== 'all') {
+    const nowSec = Date.now() / 1000;
+    const cutoff = filter === 'year'
+      ? new Date(new Date().getFullYear(), 0, 1).getTime() / 1000
+      : nowSec - (filter === '30d' ? 30 : filter === '90d' ? 90 : 120) * 86400;
+    const dateFiltered = candidatePool.filter(s => s.dateAdded == null || s.dateAdded >= cutoff);
+    if (dateFiltered.length > 0) candidatePool = dateFiltered;
+  }
+
+  if (options?.playlistFilterFiles?.size) {
+    const filtered = candidatePool.filter(s => options.playlistFilterFiles!.has(s.file));
+    if (filtered.length > 0) candidatePool = filtered;
+  }
+
   if (options?.excludeFiles?.size) {
     const remaining = candidatePool.filter(s => !options.excludeFiles!.has(s.file));
     if (remaining.length > 0) candidatePool = remaining;
   }
 
-  const setDurationSeconds = prefs.setDuration * 60;
-
-  // 1. Calculate track count based on average song duration + gap
   const FALLBACK_DURATION = 210; // 3.5 min fallback when duration is absent
+  const budgetSeconds = options?.maxDurationSeconds ?? prefs.setDuration * 60;
+
+  // 1. Estimate track count from average duration (upper bound; actual loop stops on budget)
   const avgDuration =
     candidatePool.reduce((sum, s) => sum + (s.duration ?? FALLBACK_DURATION), 0) / candidatePool.length;
   const trackSlotDuration = avgDuration + GAP_SECONDS;
-  const trackCount = Math.max(1, Math.floor(setDurationSeconds / trackSlotDuration));
-  const actualCount = Math.min(trackCount, candidatePool.length);
+  const estCount = Math.max(1, Math.floor(budgetSeconds / trackSlotDuration));
+  const maxCount = Math.min(estCount, candidatePool.length);
 
   const affinityKey = getAffinityKey(prefs.venueType, prefs.setPhase);
 
   const result: SetTrack[] = [];
   const used = new Set<string>();
+  let cumulativeSeconds = 0;
 
-  for (let slot = 0; slot < actualCount; slot++) {
-    // 2. Sample the energy curve for this slot
-    const slotProgress = actualCount === 1 ? 0.5 : slot / (actualCount - 1);
+  for (let slot = 0; slot < maxCount; slot++) {
+    // 2. Sample the energy curve for this slot (use maxCount so curve shape is preserved)
+    const slotProgress = maxCount === 1 ? 0.5 : slot / (maxCount - 1);
     const targetEnergy = sampleCurve(curve, slotProgress);
 
     const prevTrack = result.length > 0 ? result[result.length - 1] : null;
@@ -171,6 +193,11 @@ export function generateSet(
       }
     }
 
+    // 5. Hard duration cap — stop before exceeding the budget
+    const trackDur = (bestSong.duration ?? FALLBACK_DURATION) + GAP_SECONDS;
+    if (result.length > 0 && cumulativeSeconds + trackDur > budgetSeconds) break;
+
+    cumulativeSeconds += trackDur;
     used.add(bestSong.file);
     result.push({
       ...bestSong,

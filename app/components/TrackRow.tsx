@@ -2,10 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { RefreshCcw, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { SetTrack } from '../types';
 import { parseCamelot } from '../lib/camelot';
+import type { FitInfo } from './SetTracklist';
 
 interface Props {
   track: SetTrack;
   index: number;
+  fitInfo?: FitInfo;
   onSwap: () => void;
   onRemove: () => void;
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
@@ -78,9 +80,10 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
   const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
+  const [showFitTooltip, setShowFitTooltip] = useState(false);
   const [showTags, setShowTags] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -190,6 +193,7 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
         className={`border-b border-[#1e1e2e] group ${swapFlash ? 'bg-green-900/20' : 'hover:bg-[#12121a]'} ${isDragOver ? 'border-t-2 border-t-[#7c3aed]' : ''}`}
         style={rowStyle}
         data-warning={track.harmonicWarning ? 'true' : undefined}
+        data-fit={fitInfo && fitInfo.level !== 'good' ? fitInfo.level : undefined}
         draggable={!editing}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
@@ -198,19 +202,54 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
       >
         {/* # */}
         <td className="py-3 pl-4 pr-2 w-10">
-          <span
-            className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
-            title="Drag to reorder"
-          >
-            {index + 1}
-          </span>
-          <button
-            onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
-            className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-            title="Play in Apple Music"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          </button>
+          <div className="relative flex items-center gap-1.5">
+            <span
+              className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
+              title="Drag to reorder"
+            >
+              {index + 1}
+            </span>
+            <button
+              onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+              className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+              title="Play in Apple Music"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+            {fitInfo && fitInfo.level !== 'good' && (
+              <div className="relative flex-shrink-0">
+                <span
+                  className="cursor-help text-[8px] leading-none select-none"
+                  style={{ color: fitInfo.level === 'bad' ? '#ef4444' : '#f59e0b' }}
+                  onMouseEnter={() => setShowFitTooltip(true)}
+                  onMouseLeave={() => setShowFitTooltip(false)}
+                >
+                  ●
+                </span>
+                {showFitTooltip && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none"
+                    style={{ borderColor: fitInfo.level === 'bad' ? '#ef444466' : '#f59e0b66' }}
+                  >
+                    <p className="text-[10px] font-semibold mb-1.5"
+                      style={{ color: fitInfo.level === 'bad' ? '#f87171' : '#fbbf24' }}
+                    >
+                      {fitInfo.level === 'bad' ? 'Needs replacing' : 'Fit issues'}
+                    </p>
+                    <ul className="flex flex-col gap-1">
+                      {fitInfo.reasons.map((r, i) => (
+                        <li key={i} className="text-[11px] text-[#94a3b8] flex items-start gap-1.5">
+                          <span className="flex-shrink-0 mt-0.5"
+                            style={{ color: fitInfo.level === 'bad' ? '#ef4444' : '#f59e0b' }}
+                          >·</span>
+                          {r}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </td>
 
         {/* Title / Artist */}
@@ -426,14 +465,24 @@ export default function TrackRow({ track, index, onSwap, onRemove, onUpdateTrack
                   className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
                 />
               </div>
-              <div className="flex flex-col gap-1 w-20">
+              <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-[#475569] uppercase tracking-wider">BPM</label>
-                <input
-                  type="number"
-                  value={editBpm}
-                  onChange={e => setEditBpm(e.target.value)}
-                  className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
-                />
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={editBpm}
+                    onChange={e => setEditBpm(e.target.value)}
+                    className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-16"
+                  />
+                  <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v * 2))); }}
+                    className="px-1.5 py-1 text-[10px] rounded border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">
+                    ×2
+                  </button>
+                  <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v / 2))); }}
+                    className="px-1.5 py-1 text-[10px] rounded border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">
+                    ÷2
+                  </button>
+                </div>
               </div>
               <div className="flex flex-col gap-1 w-16">
                 <label className="text-[10px] text-[#475569] uppercase tracking-wider">Key</label>

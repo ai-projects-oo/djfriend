@@ -86,6 +86,7 @@ export const DEFAULT_PREFS: DJPreferences = {
   setPhase: "Peak time",
   genre: "Any",
   tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] },
+  addedTimeFilter: 'all',
 };
 
 export function isValidSong(obj: unknown): obj is Song {
@@ -111,7 +112,20 @@ export function parseSongs(raw: unknown): Song[] | null {
       : null;
   if (!source) return null;
   const valid = source.filter(isValidSong);
-  return valid.length > 0 ? valid : null;
+  // Deduplicate: same normalized file path or same spotifyId
+  const seenFile = new Set<string>();
+  const seenSpotifyId = new Set<string>();
+  const deduped = valid.filter((s) => {
+    const fileKey = s.file.normalize("NFC");
+    if (seenFile.has(fileKey)) return false;
+    seenFile.add(fileKey);
+    if (s.spotifyId) {
+      if (seenSpotifyId.has(s.spotifyId)) return false;
+      seenSpotifyId.add(s.spotifyId);
+    }
+    return true;
+  });
+  return deduped.length > 0 ? deduped : null;
 }
 
 export function clamp(value: number, min: number, max: number): number {

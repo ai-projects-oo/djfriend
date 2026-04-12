@@ -3,20 +3,31 @@ import type { Song, SetTrack, DJPreferences, CurvePoint } from "../types";
 import { DEFAULT_PREFS, matchesGenrePref, genreMatchesUmbrella, TAG_GROUPS, BEATPORT_UMBRELLAS } from "../lib/genreUtils";
 import { clamp } from "../lib/genreUtils";
 import { DEFAULT_CURVE } from "../components/EnergyCurveEditor";
-import { generateSet } from "../lib/setGenerator";
+import { generateSet, getAffinityKey, genreAffinityBonus, semanticAffinityBonus } from "../lib/setGenerator";
 import { isHarmonicWarning, camelotHarmonyScore } from "../lib/camelot";
 
-export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<React.SetStateAction<Song[]>>) {
+export interface SwapBreakdown {
+  harmonicPrev: number | null;   // 0–1 camelot harmony score with previous track
+  harmonicNext: number | null;   // 0–1 camelot harmony score with next track
+  energyDelta: number;           // signed: candidate.energy – targetEnergy
+  bpmDeltaPrev: number | null;   // signed BPM delta from previous track
+  bpmDeltaNext: number | null;   // signed BPM delta from next track
+  tagOverlap: boolean;           // candidate shares vibe/mood tags with neighbors
+  venueFit: boolean;             // genre fits current venue/phase affinity
+  hasSemanticTags: boolean;      // whether candidate has AI tags at all
+}
+
+export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<React.SetStateAction<Song[]>>, playlistFilterFiles?: Set<string>) {
   const [prefs, setPrefs] = useState<DJPreferences>(DEFAULT_PREFS);
   const [curve, setCurve] = useState<CurvePoint[]>(DEFAULT_CURVE);
   const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
   const [autoRegen, setAutoRegen] = useState(false);
+  const [anchored, setAnchored] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [swapModal, setSwapModal] = useState<{
     index: number;
-    suggestions: Array<{ song: Song; score: number }>;
+    suggestions: Array<{ song: Song; breakdown: SwapBreakdown }>;
   } | null>(null);
-  const [swapVisibleCount, setSwapVisibleCount] = useState(5);
 
   // Computed values derived from library — all memoized so they only recompute when library changes
   const availableGenres = useMemo(
@@ -111,30 +122,31 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     library.filter(s => matchesGenrePref(s, prefs.genre)).length > filteredTrackCount;
 
   const runGenerate = useCallback(
-    (songs: Song[], p: DJPreferences, c: CurvePoint[]) => {
+    (songs: Song[], p: DJPreferences, c: CurvePoint[], extraOpts?: { jitter?: number; excludeFiles?: Set<string> }) => {
       if (songs.length === 0) return;
-      setGeneratedSet(generateSet(songs, p, c));
+      setGeneratedSet(generateSet(songs, p, c, { ...extraOpts, playlistFilterFiles }));
     },
-    [],
+    [playlistFilterFiles],
   );
 
   const handleGenerate = useCallback(() => {
+    if (anchored) return;
     runGenerate(library, prefs, curve);
     setAutoRegen(true);
-  }, [library, prefs, curve, runGenerate]);
+  }, [anchored, library, prefs, curve, runGenerate]);
 
   const handleRegenerate = useCallback(() => {
-    if (library.length === 0) return;
-    setGeneratedSet(generateSet(library, prefs, curve, { jitter: 0.4 }));
+    if (anchored || library.length === 0) return;
+    setGeneratedSet(generateSet(library, prefs, curve, { jitter: 0.4, playlistFilterFiles }));
     setAutoRegen(true);
-  }, [library, prefs, curve]);
+  }, [anchored, library, prefs, curve, playlistFilterFiles]);
 
   const handleGenerateNew = useCallback(() => {
-    if (library.length === 0) return;
+    if (anchored || library.length === 0) return;
     const excludeFiles = new Set(generatedSet.map(t => t.file));
-    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15 }));
+    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15, playlistFilterFiles }));
     setAutoRegen(true);
-  }, [library, prefs, curve, generatedSet]);
+  }, [anchored, library, prefs, curve, generatedSet, playlistFilterFiles]);
 
   const selectGenre = useCallback((genre: string) => {
     if (genre === 'Any') {
@@ -170,92 +182,99 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const handleCurveChange = useCallback(
     (newCurve: CurvePoint[]) => {
       setCurve(newCurve);
-      if (!autoRegen || library.length === 0) return;
+      if (!autoRegen || anchored || library.length === 0) return;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         runGenerate(library, prefs, newCurve);
       }, 150);
     },
-    [autoRegen, library, prefs, runGenerate],
+    [autoRegen, anchored, library, prefs, runGenerate],
   );
 
   const buildSwapSuggestions = useCallback(
-    (index: number): Array<{ song: Song; score: number }> => {
+    (index: number): Array<{ song: Song; breakdown: SwapBreakdown }> => {
       if (index < 0 || index >= generatedSet.length) return [];
-      const currentSet = generatedSet;
-      const current = currentSet[index];
+      const current = generatedSet[index];
       const usedFiles = new Set(
-        currentSet.filter((_, i) => i !== index).map((track) => track.file),
+        generatedSet.filter((_, i) => i !== index).map((t) => t.file),
       );
-      const previousTrack = index > 0 ? currentSet[index - 1] : null;
-      const nextTrack =
-        index < currentSet.length - 1 ? currentSet[index + 1] : null;
+      const prevTrack = index > 0 ? generatedSet[index - 1] : null;
+      const nextTrack = index < generatedSet.length - 1 ? generatedSet[index + 1] : null;
+      const affinityKey = getAffinityKey(prefs.venueType, prefs.setPhase);
 
       const candidates = library.filter(
-        (song) =>
-          !usedFiles.has(song.file) &&
-          song.file !== current.file &&
-          matchesGenrePref(song, prefs.genre),
+        (s) => !usedFiles.has(s.file) && s.file !== current.file,
       );
 
-      const scored = candidates.map((candidate) => {
-        const energyDiff = Math.abs(candidate.energy - current.targetEnergy);
-        const fromPrevHarmony = previousTrack
-          ? camelotHarmonyScore(previousTrack.camelot, candidate.camelot)
-          : 1;
-        const toNextHarmony = nextTrack
-          ? camelotHarmonyScore(candidate.camelot, nextTrack.camelot)
-          : 1;
-        const fromPrevBpmDiff = previousTrack
-          ? Math.abs(candidate.bpm - previousTrack.bpm)
-          : 0;
-        const toNextBpmDiff = nextTrack
-          ? Math.abs(candidate.bpm - nextTrack.bpm)
-          : 0;
-        const fromPrevBpm = previousTrack
-          ? 1 - clamp(fromPrevBpmDiff / 20, 0, 1)
-          : 1;
-        const toNextBpm = nextTrack ? 1 - clamp(toNextBpmDiff / 20, 0, 1) : 1;
-        const energyScore = 1 - energyDiff;
-        const baseScore =
-          energyScore * 0.45 +
-          fromPrevHarmony * 0.2 +
-          toNextHarmony * 0.2 +
-          fromPrevBpm * 0.075 +
-          toNextBpm * 0.075;
-        const strictFit =
-          energyDiff <= 0.24 &&
-          fromPrevHarmony > 0 &&
-          toNextHarmony > 0 &&
-          fromPrevBpmDiff <= 12 &&
-          toNextBpmDiff <= 12;
-        const relaxedFit =
-          energyDiff <= 0.35 &&
-          fromPrevHarmony > 0 &&
-          toNextHarmony > 0 &&
-          fromPrevBpmDiff <= 20 &&
-          toNextBpmDiff <= 20;
-        return {
-          candidate,
-          strictFit,
-          relaxedFit,
-          score: baseScore + (strictFit ? 0.05 : 0),
+      const scored = candidates.map((c) => {
+        // ── Harmonic ──────────────────────────────────────────────
+        const hPrev = prevTrack ? camelotHarmonyScore(prevTrack.camelot, c.camelot) : null;
+        const hNext = nextTrack ? camelotHarmonyScore(c.camelot, nextTrack.camelot) : null;
+        const harmonicScore = ((hPrev ?? 1) + (hNext ?? 1)) / 2;
+
+        // ── Energy ────────────────────────────────────────────────
+        const eDelta = c.energy - current.targetEnergy;
+        const energyScore = 1 - Math.abs(eDelta);
+
+        // ── BPM ───────────────────────────────────────────────────
+        const bDeltaPrev = prevTrack ? c.bpm - prevTrack.bpm : null;
+        const bDeltaNext = nextTrack ? c.bpm - nextTrack.bpm : null;
+        const bpmScore =
+          ((bDeltaPrev !== null ? 1 - clamp(Math.abs(bDeltaPrev) / 20, 0, 1) : 1) +
+           (bDeltaNext !== null ? 1 - clamp(Math.abs(bDeltaNext) / 20, 0, 1) : 1)) / 2;
+
+        // ── Semantic tags ─────────────────────────────────────────
+        const venueFit = affinityKey ? genreAffinityBonus(c, affinityKey) > 0 : true;
+        const semBonus = semanticAffinityBonus(c, prefs.venueType, prefs.setPhase);
+
+        // Tag overlap with neighboring tracks (vibe + mood)
+        let tagOverlap = false;
+        if (c.semanticTags) {
+          for (const neighbor of [prevTrack, nextTrack]) {
+            if (!neighbor?.semanticTags) continue;
+            const sharedVibe = c.semanticTags.vibeTags.some(t => neighbor.semanticTags!.vibeTags.includes(t));
+            const sharedMood = c.semanticTags.moodTags.some(t => neighbor.semanticTags!.moodTags.includes(t));
+            if (sharedVibe || sharedMood) { tagOverlap = true; break; }
+          }
+        }
+        const semanticScore = semBonus + (tagOverlap ? 0.1 : 0);
+
+        // ── Composite score ───────────────────────────────────────
+        const score =
+          energyScore   * 0.35 +
+          harmonicScore * 0.35 +
+          bpmScore      * 0.20 +
+          semanticScore * 0.10;
+
+        const breakdown: SwapBreakdown = {
+          harmonicPrev: hPrev,
+          harmonicNext: hNext,
+          energyDelta: eDelta,
+          bpmDeltaPrev: bDeltaPrev,
+          bpmDeltaNext: bDeltaNext,
+          tagOverlap,
+          venueFit,
+          hasSemanticTags: Boolean(c.semanticTags),
         };
+
+        return { candidate: c, score, breakdown };
       });
 
-      const strict = scored.filter((s) => s.strictFit);
-      const relaxed = scored.filter((s) => !s.strictFit && s.relaxedFit);
-      const ranked = [...strict, ...relaxed].sort((a, b) => b.score - a.score);
-      return ranked.map((r) => ({ song: r.candidate, score: r.score }));
+      // Minimum quality floor: exclude candidates that score poorly across all dimensions.
+      // A score below 0.45 means the track fails most signals — not worth suggesting.
+      const MIN_SCORE = 0.45;
+      return scored
+        .filter(s => s.score >= MIN_SCORE)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map(({ candidate, breakdown }) => ({ song: candidate, breakdown }));
     },
-    [generatedSet, library, prefs.genre],
+    [generatedSet, library, prefs],
   );
 
   const handleSwapTrack = useCallback(
     (index: number) => {
-      const suggestions = buildSwapSuggestions(index);
-      setSwapVisibleCount(5);
-      setSwapModal({ index, suggestions });
+      setSwapModal({ index, suggestions: buildSwapSuggestions(index) });
     },
     [buildSwapSuggestions],
   );
@@ -289,10 +308,48 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
         return next;
       });
       setSwapModal(null);
-      setSwapVisibleCount(5);
     },
     [swapModal],
   );
+
+  const handleLoadToSet = useCallback((songs: Song[]) => {
+    if (songs.length === 0) return;
+    const tracks: SetTrack[] = songs.map((song, i) => ({
+      ...song,
+      slot: i,
+      targetEnergy: song.energy,
+      harmonicWarning: i > 0 ? isHarmonicWarning(songs[i - 1].camelot, song.camelot) : false,
+    }));
+    setGeneratedSet(tracks);
+    setAnchored(true);
+    setAutoRegen(false);
+  }, []);
+
+  const handleAppendTracks = useCallback(() => {
+    if (library.length === 0) return;
+    const FALLBACK_DURATION = 210;
+    const GAP = 10;
+    const currentSeconds = generatedSet.reduce((s, t) => s + (t.duration ?? FALLBACK_DURATION) + GAP, 0);
+    const budgetSeconds = prefs.setDuration * 60;
+    const remainingSeconds = budgetSeconds - currentSeconds;
+    if (remainingSeconds <= 0) return;
+    const excludeFiles = new Set(generatedSet.map(t => t.file));
+    const appended = generateSet(library, prefs, curve, {
+      excludeFiles,
+      jitter: 0.15,
+      playlistFilterFiles,
+      maxDurationSeconds: remainingSeconds,
+    });
+    if (appended.length === 0) return;
+    setGeneratedSet(prev => {
+      const combined = [...prev, ...appended];
+      return combined.map((track, i) => ({
+        ...track,
+        slot: i,
+        harmonicWarning: i > 0 ? isHarmonicWarning(combined[i - 1].camelot, track.camelot) : false,
+      }));
+    });
+  }, [library, prefs, curve, generatedSet, playlistFilterFiles]);
 
   const handleRemoveTrack = useCallback((index: number) => {
     setGeneratedSet((prev) => {
@@ -353,11 +410,11 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     setGeneratedSet,
     autoRegen,
     setAutoRegen,
+    anchored,
+    setAnchored,
     debounceRef,
     swapModal,
     setSwapModal,
-    swapVisibleCount,
-    setSwapVisibleCount,
     availableGenres,
     genreGroups,
     availableTags,
@@ -376,5 +433,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     handleRemoveTrack,
     handleReorderTrack,
     handleUpdateTrack,
+    handleLoadToSet,
+    handleAppendTracks,
   };
 }

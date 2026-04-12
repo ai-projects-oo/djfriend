@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type {
   HistoryEntry,
 } from "./types";
@@ -18,7 +18,9 @@ import {
   getPendingImport,
   clearPendingImport,
   fetchUserPlaylists,
+  findSongsForImport,
 } from "./lib/spotifyImport";
+import { downloadM3U } from "./lib/m3uExport";
 import { useLibrary } from "./hooks/useLibrary";
 import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
@@ -119,6 +121,10 @@ function AppInner() {
   const [playlistsFolder, setPlaylistsFolder] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [analyzeMenuOpen, setAnalyzeMenuOpen] = useState(false);
+  const [playlistSearch, setPlaylistSearch] = useState('');
+  const [manualMatchKey, setManualMatchKey] = useState<string | null>(null);
+  const [manualMatchQuery, setManualMatchQuery] = useState('');
+  const manualSearchRef = useRef<HTMLDivElement | null>(null);
   const analyzeMenuRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const rbFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -138,6 +144,19 @@ function AppInner() {
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
   }, [analyzeMenuOpen]);
+
+  // Click-outside for manual library search panel
+  useEffect(() => {
+    if (!manualMatchKey) return;
+    const handle = (e: MouseEvent) => {
+      if (manualSearchRef.current && !manualSearchRef.current.contains(e.target as Node)) {
+        setManualMatchKey(null);
+        setManualMatchQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [manualMatchKey]);
 
   // Click-outside for history export dropdown
   useEffect(() => {
@@ -161,23 +180,78 @@ function AppInner() {
     library,
     setLibrary,
     libraryName,
-    isAnalyzing,
-    analysisProgress,
+    enrichmentStatus,
+    analysisQueue,
+    cancelQueueItem,
     folderPath,
     setFolderPath,
     playlistPicker,
     setPlaylistPicker,
     loadingPlaylists,
     analyzedApplePlaylists,
+    setAnalyzedApplePlaylists,
     error,
     openPlaylistPicker,
     runAppleMusicAnalysis,
-    runFolderAnalysis,
     runPathListAnalysis,
     runRekordboxImport,
     runUploadAnalysis,
     runM3uWebImport,
   } = useLibrary({ onNewAnalysis: () => onNewAnalysisRef.current?.() });
+
+  // Playlist filter — which import entry restricts the generator pool
+  const [playlistFilterId, setPlaylistFilterId] = useState<string | null>(null);
+  // Controls visibility of the playlist picker select element in the Source card
+  const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
+
+  // useSpotifyImport first so we have importHistory before calling useSetGenerator
+  const {
+    importHistory,
+    setImportHistory,
+    expandedImportId,
+    setExpandedImportId,
+    importUrl,
+    setImportUrl,
+    importStatus,
+    setPendingImportUrl,
+    spotifyPlaylistPicker,
+    setSpotifyPlaylistPicker,
+    loadingSpotifyPlaylists,
+    setLoadingSpotifyPlaylists,
+    openStoreLinkKey,
+    setOpenStoreLinkKey,
+    storeLinkRef,
+    runImport,
+    reloadEntry,
+    handleImport,
+    handleBrowseSpotifyPlaylists,
+  } = useSpotifyImport({ library, setHistory });
+
+  // Derive the file set + duration for the active playlist filter (both memoized)
+  const playlistFilterFiles = useMemo<Set<string> | undefined>(() => {
+    if (!playlistFilterId) return undefined;
+    const entry = importHistory.find(e => e.id === playlistFilterId);
+    if (!entry) return undefined;
+    const songs = findSongsForImport(entry.tracks, library);
+    return songs.length > 0 ? new Set(songs.map(s => s.file)) : undefined;
+  }, [playlistFilterId, importHistory, library]);
+
+  const playlistTotalMinutes = useMemo<number>(() => {
+    if (!playlistFilterId) return 0;
+    const entry = importHistory.find(e => e.id === playlistFilterId);
+    if (!entry) return 0;
+    const songs = findSongsForImport(entry.tracks, library);
+    return songs.reduce((s, t) => s + (t.duration ?? 210), 0) / 60;
+  }, [playlistFilterId, importHistory, library]);
+
+  const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
+  // The only pill enabled in playlist mode: smallest duration that fits the playlist
+  const minViablePill = useMemo<number | null>(() => {
+    if (!playlistFilterId || playlistTotalMinutes <= 0) return null;
+    return SET_DURATIONS.find(d => d >= playlistTotalMinutes) ?? 180;
+  }, [playlistFilterId, playlistTotalMinutes]);
+
+  // Auto-select effect wired below after setPrefs is available from useSetGenerator
 
   const {
     prefs,
@@ -188,10 +262,10 @@ function AppInner() {
     setGeneratedSet,
     autoRegen,
     setAutoRegen,
+    anchored,
+    setAnchored,
     swapModal,
     setSwapModal,
-    swapVisibleCount,
-    setSwapVisibleCount,
     availableGenres,
     genreGroups,
     availableTags,
@@ -207,13 +281,22 @@ function AppInner() {
     handleRemoveTrack,
     handleReorderTrack,
     handleUpdateTrack,
-  } = useSetGenerator(library, setLibrary);
+    handleLoadToSet,
+    handleAppendTracks,
+  } = useSetGenerator(library, setLibrary, playlistFilterFiles);
 
   // Wire setGeneratedSet into the bridge ref so useLibrary can reset the set on new analysis
-  onNewAnalysisRef.current = () => setGeneratedSet([]);
+  onNewAnalysisRef.current = () => { setGeneratedSet([]); setAnchored(false); };
+
+  // Auto-select the min viable duration pill when playlist mode activates or playlist changes
+  useEffect(() => {
+    if (minViablePill !== null) {
+      setPrefs(p => p.setDuration !== minViablePill ? { ...p, setDuration: minViablePill } : p);
+    }
+  }, [minViablePill, setPrefs]);
 
   const handleLoadHistoryEntry = useCallback((entry: HistoryEntry) => {
-    setPrefs(entry.prefs);
+    setPrefs({ ...entry.prefs, addedTimeFilter: entry.prefs.addedTimeFilter ?? 'all' });
     setCurve(entry.curve);
     setGeneratedSet(entry.tracks);
     setAutoRegen(true);
@@ -233,26 +316,25 @@ function AppInner() {
     handleRenameEntry,
   } = useSpotifyExport({ generatedSet, prefs, curve, playlistsFolder, setHistory });
 
-  const {
-    importHistory,
-    setImportHistory,
-    expandedImportId,
-    setExpandedImportId,
-    importUrl,
-    setImportUrl,
-    importStatus,
-    setPendingImportUrl,
-    spotifyPlaylistPicker,
-    setSpotifyPlaylistPicker,
-    loadingSpotifyPlaylists,
-    setLoadingSpotifyPlaylists,
-    openStoreLinkKey,
-    setOpenStoreLinkKey,
-    storeLinkRef,
-    runImport,
-    handleImport,
-    handleBrowseSpotifyPlaylists,
-  } = useSpotifyImport({ library, setHistory });
+  const handleExportImportM3U = useCallback(async (entry: import("./types").ImportEntry) => {
+    const songs = findSongsForImport(entry.tracks, library);
+    if (songs.length === 0) return;
+    const setTracks = songs.map((s, i) => ({ ...s, slot: i, targetEnergy: s.energy, harmonicWarning: false }));
+    const filename = `${entry.name.replace(/[^a-z0-9_\-. ]/gi, '_')}.m3u`;
+    if (playlistsFolder) {
+      await exportM3UToServer(setTracks, filename);
+    } else {
+      downloadM3U(setTracks, filename);
+    }
+  }, [library, playlistsFolder, exportM3UToServer]);
+
+  const handleLoadImportToSet = useCallback((entry: import("./types").ImportEntry) => {
+    const songs = findSongsForImport(entry.tracks, library);
+    if (songs.length === 0) return;
+    handleLoadToSet(songs);
+    setPlaylistFilterId(entry.id);
+    setActiveTab('Generator');
+  }, [library, handleLoadToSet, setPlaylistFilterId]);
 
   const loadSettings = useCallback(() => {
     apiFetch('/api/settings')
@@ -327,16 +409,6 @@ function AppInner() {
     })();
   }, []);
 
-  const progressPercent =
-    analysisProgress.total > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (analysisProgress.completed / analysisProgress.total) * 100,
-          ),
-        )
-      : 0;
-
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
       {/* Header */}
@@ -368,17 +440,38 @@ function AppInner() {
                 {error}
               </span>
             )}
-            {isAnalyzing && (
-              <div className="hidden sm:flex items-center gap-2 min-w-[180px]">
-                <div className="w-28 h-1.5 rounded-full bg-[#1f2937] overflow-hidden">
-                  <div
-                    className="h-full bg-[#7c3aed] transition-all"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-                <span className="text-[10px] text-[#94a3b8] tabular-nums">
-                  {analysisProgress.completed}/{analysisProgress.total}
-                </span>
+            {analysisQueue.length > 0 && (
+              <div className="hidden sm:flex flex-col gap-1">
+                {analysisQueue.slice(0, 3).map((item) => {
+                  const isAI = item.status === 'analyzing' && enrichmentStatus !== null;
+                  const pct = isAI
+                    ? (enrichmentStatus!.total > 0 ? Math.round((enrichmentStatus!.completed / enrichmentStatus!.total) * 100) : 100)
+                    : (item.total > 0 ? Math.min(100, Math.round((item.completed / item.total) * 100)) : 0);
+                  return (
+                    <div key={item.playlistName} className="flex items-center gap-1.5">
+                      <div className="w-24 h-1.5 rounded-full bg-[#1f2937] overflow-hidden flex-shrink-0">
+                        <div
+                          className={`h-full transition-all ${isAI ? 'bg-[#22c55e]' : item.status === 'analyzing' ? 'bg-[#7c3aed]' : 'bg-[#334155]'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className={`text-[10px] tabular-nums truncate max-w-[80px] ${isAI ? 'text-[#22c55e]' : item.status === 'analyzing' ? 'text-[#94a3b8]' : 'text-[#475569]'}`}>
+                        {isAI
+                          ? (enrichmentStatus!.total > 0 ? `AI ${enrichmentStatus!.completed}/${enrichmentStatus!.total}` : 'AI…')
+                          : item.status === 'queued'
+                            ? item.playlistName
+                            : `${item.completed}/${item.total}`}
+                      </span>
+                      <button
+                        onClick={() => cancelQueueItem(item.playlistName)}
+                        aria-label={`Cancel ${item.playlistName}`}
+                        className="text-[10px] text-[#475569] hover:text-red-400 transition-colors cursor-pointer leading-none flex-shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
             <div className="relative">
@@ -501,13 +594,13 @@ function AppInner() {
             <div className="relative" ref={analyzeMenuRef}>
               <button
                 onClick={() => setAnalyzeMenuOpen(o => !o)}
-                disabled={isAnalyzing || loadingPlaylists}
+                disabled={loadingPlaylists}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isAnalyzing ? "Analyzing…" : loadingPlaylists ? "Loading…" : "Analyze"}
+                {loadingPlaylists ? "Loading…" : "Analyze"}
                 <span className="text-[10px]">▾</span>
               </button>
-              {analyzeMenuOpen && !isAnalyzing && !loadingPlaylists && (
+              {analyzeMenuOpen && !loadingPlaylists && (
                 <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
                   {navigator.userAgent.toLowerCase().includes("electron") && (
                     <button
@@ -591,50 +684,10 @@ function AppInner() {
         </div>
       )}
 
-      {activeTab === "Generator" && library.length === 0 && (
-        <div className="px-2 pt-6">
-          <div className="rounded-lg border border-[#2a2a3a] bg-[#12121a] px-5 py-4">
-            {navigator.userAgent.toLowerCase().includes("electron") ? (
-              <>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={folderPath}
-                    onChange={e => setFolderPath(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') void runFolderAnalysis(folderPath) }}
-                    placeholder="/path/to/music folder"
-                    className="flex-1 rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
-                  />
-                  <button
-                    onClick={() => void runFolderAnalysis(folderPath)}
-                    disabled={isAnalyzing || !folderPath.trim()}
-                    className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isAnalyzing ? 'Analyzing…' : 'Analyze Folder'}
-                  </button>
-                </div>
-                <p className="text-xs text-[#475569] mt-2">
-                  Or{" "}
-                  <button
-                    onClick={openPlaylistPicker}
-                    className="text-[#7c3aed] hover:underline cursor-pointer bg-transparent border-none p-0"
-                  >
-                    Analyze Apple Music
-                  </button>
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-[#94a3b8]">
-                Use the <span className="text-[#e2e8f0] font-medium">Analyze</span> menu above to import a playlist file or upload a folder.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
 
       {activeTab === "Generator" && (
         <main className="px-2 py-6">
-          <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-stretch gap-4">
 
             {/* ── LEFT SIDEBAR ── */}
             <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4">
@@ -701,6 +754,27 @@ function AppInner() {
                     {/* Expanded filter pills */}
                     {filtersOpen && (
                       <div className={`px-4 pb-4 flex flex-col gap-4 ${activeFilterCount === 0 ? 'border-t border-[#1e1e2e] pt-4' : 'pt-2'}`}>
+                        <div>
+                          <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">Added</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(['all', '30d', '90d', '120d', 'year'] as const).map(opt => {
+                              const label = opt === 'all' ? 'All' : opt === '30d' ? 'Last 30d' : opt === '90d' ? 'Last 90d' : opt === '120d' ? 'Last 120d' : 'This Year';
+                              const active = (prefs.addedTimeFilter ?? 'all') === opt;
+                              return (
+                                <button key={opt} type="button"
+                                  onClick={() => setPrefs(p => ({ ...p, addedTimeFilter: opt }))}
+                                  className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                  style={{
+                                    backgroundColor: active ? '#7c3aed' : 'transparent',
+                                    color: active ? '#fff' : '#a78bfa',
+                                    borderColor: active ? '#7c3aed' : '#4c1d95',
+                                  }}>
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                         {genreGroups.length > 0 && (
                           <div>
                             <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">Genre</span>
@@ -780,32 +854,99 @@ function AppInner() {
                 );
               })()}
 
+              {/* Card 2.5: Source — visible when there are imported playlists */}
+              {importHistory.length > 0 && (
+                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">Source</span>
+                    <div className="flex gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => { setPlaylistFilterId(null); setSourceDropdownOpen(false); }}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                        style={{ backgroundColor: !playlistFilterId ? '#7c3aed' : 'transparent', color: !playlistFilterId ? '#fff' : '#64748b', borderColor: !playlistFilterId ? '#7c3aed' : '#2a2a3a' }}
+                      >
+                        Full Library
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSourceDropdownOpen(true)}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border truncate max-w-[200px]"
+                        style={{ backgroundColor: playlistFilterId ? '#7c3aed' : 'transparent', color: playlistFilterId ? '#fff' : '#64748b', borderColor: playlistFilterId ? '#7c3aed' : '#2a2a3a' }}
+                        title={playlistFilterId ? (importHistory.find(e => e.id === playlistFilterId)?.name ?? 'Playlist') : 'Generate from an imported playlist'}
+                      >
+                        {playlistFilterId
+                          ? (importHistory.find(e => e.id === playlistFilterId)?.name ?? 'Playlist')
+                          : 'From Playlist'}
+                      </button>
+                    </div>
+                  </div>
+                  {sourceDropdownOpen && (
+                    <select
+                      value={playlistFilterId ?? ''}
+                      onChange={e => { setPlaylistFilterId(e.target.value || null); setSourceDropdownOpen(false); }}
+                      onBlur={() => setSourceDropdownOpen(false)}
+                      className="w-full bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-3 py-1.5 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] transition-colors"
+                    >
+                      <option value="">— select a playlist —</option>
+                      {importHistory.map(entry => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.name} · {entry.tracks.length} tracks
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
               {/* Card 3: Duration + Actions */}
+              {(() => {
+                const FALLBACK_DURATION = 210;
+                const GAP = 10;
+                const setTotalSeconds = generatedSet.reduce((s, t) => s + (t.duration ?? FALLBACK_DURATION) + GAP, 0);
+                const setTotalMinutes = setTotalSeconds / 60;
+                return (
               <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">Duration</span>
                   <div className="flex gap-1.5 flex-wrap">
-                    {[30, 45, 60, 90, 120, 180].map(min => (
-                      <button key={min} type="button"
-                        onClick={() => setPrefs(p => ({ ...p, setDuration: min }))}
-                        className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
-                        style={{ backgroundColor: prefs.setDuration === min ? '#7c3aed' : 'transparent', color: prefs.setDuration === min ? '#fff' : '#64748b', borderColor: prefs.setDuration === min ? '#7c3aed' : '#2a2a3a' }}
-                      >
-                        {min}m
-                      </button>
-                    ))}
+                    {SET_DURATIONS.map(min => {
+                      const active = prefs.setDuration === min;
+                      const tooShort = minViablePill === null && generatedSet.length > 0 && min < setTotalMinutes;
+                      // In playlist mode: only the min viable pill is enabled
+                      const lockedByPlaylist = minViablePill !== null && min !== minViablePill;
+                      const disabled = tooShort || lockedByPlaylist;
+                      const title = tooShort
+                        ? `Current set is ~${Math.ceil(setTotalMinutes)}m — select a longer duration`
+                        : lockedByPlaylist
+                        ? min < (minViablePill ?? 0)
+                          ? `Playlist is ~${Math.ceil(playlistTotalMinutes)}m — too short`
+                          : `Use ${minViablePill}m to match the playlist length`
+                        : undefined;
+                      return (
+                        <button key={min} type="button"
+                          onClick={() => { if (!disabled) setPrefs(p => ({ ...p, setDuration: min })); }}
+                          disabled={disabled}
+                          title={title}
+                          className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border disabled:opacity-30 disabled:cursor-not-allowed"
+                          style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#64748b', borderColor: active ? '#7c3aed' : '#2a2a3a' }}
+                        >
+                          {min}m
+                        </button>
+                      );
+                    })}
                   </div>
                   {filteredTrackCount > 0 && (
                     <span className="text-[10px] text-[#475569]">≈ {filteredTrackCount} tracks</span>
                   )}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={handleGenerate} disabled={library.length === 0} title="Generate a new set"
+                  <button onClick={handleGenerate} disabled={anchored || library.length === 0} title={anchored ? 'Set is anchored' : 'Generate a new set'}
                     className="flex items-center justify-center gap-2 bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-md transition-colors cursor-pointer">
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
                     Generate
                   </button>
-                  <button onClick={handleRegenerate} disabled={library.length === 0} title="Different mix from the same tracks"
+                  <button onClick={handleRegenerate} disabled={anchored || library.length === 0} title={anchored ? 'Set is anchored' : 'Different mix from the same tracks'}
                     className="flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#e2e8f0] text-sm font-medium py-2.5 rounded-md transition-colors cursor-pointer">
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -813,8 +954,8 @@ function AppInner() {
                     </svg>
                     Shuffle
                   </button>
-                  <button onClick={handleGenerateNew} disabled={!canGenerateNew}
-                    title={canGenerateNew ? 'Generate from tracks not in the current set' : 'Not enough tracks outside the current set'}
+                  <button onClick={handleGenerateNew} disabled={anchored || !canGenerateNew}
+                    title={anchored ? 'Set is anchored' : canGenerateNew ? 'Generate from tracks not in the current set' : 'Not enough tracks outside the current set'}
                     className="flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#e2e8f0] text-sm font-medium py-2.5 rounded-md transition-colors cursor-pointer">
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
@@ -823,15 +964,46 @@ function AppInner() {
                     New tracks
                   </button>
                 </div>
+                {anchored && generatedSet.length > 0 && (
+                  <button
+                    onClick={handleAppendTracks}
+                    disabled={library.length === 0}
+                    title="Generate more tracks and append them to the current set"
+                    className="w-full flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#a78bfa] text-sm font-medium py-2 rounded-md transition-colors cursor-pointer"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Append tracks
+                  </button>
+                )}
               </div>
+                );
+              })()}
             </div>
 
             {/* ── RIGHT: Generated Set ── */}
-            <div className="flex-1 min-w-0">
-              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-4">
-                  Generated Set
-                </h2>
+            <div className="flex-1 min-w-0 flex flex-col">
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex flex-col flex-1">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
+                    Generated Set
+                  </h2>
+                  {generatedSet.length > 0 && (
+                    <button
+                      onClick={() => setAnchored(a => !a)}
+                      title={anchored ? 'Anchored — generate buttons are locked. Click to unlock.' : 'Anchor this set — prevent generate buttons from replacing it'}
+                      className={`transition-colors cursor-pointer ${anchored ? 'text-[#7c3aed]' : 'text-[#475569] hover:text-[#94a3b8]'}`}
+                      aria-label="Anchor set"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="5" r="3"/>
+                        <line x1="12" y1="8" x2="12" y2="21"/>
+                        <path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
                 <SetTracklist
                   tracks={generatedSet}
                   prefs={prefs}
@@ -955,41 +1127,87 @@ function AppInner() {
                 const inLibraryCount = entry.tracks.filter(
                   (t) => t.inLibrary,
                 ).length;
+                const fuzzyCount = entry.tracks.filter(
+                  (t) => t.inLibrary && t.matchConfidence === 'partial',
+                ).length;
 
                 return (
                   <div
                     key={entry.id}
                     className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden"
                   >
-                    <button
-                      onClick={() =>
-                        setExpandedImportId(isExpanded ? null : entry.id)
-                      }
-                      className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-[#e2e8f0] truncate">
-                          {entry.name}
+                    <div className="flex items-center">
+                      <button
+                        onClick={() =>
+                          setExpandedImportId(isExpanded ? null : entry.id)
+                        }
+                        className="flex-1 min-w-0 flex items-center gap-3 px-5 py-4 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-[#e2e8f0] truncate">
+                            {entry.name}
+                          </div>
+                          <div className="text-xs text-[#475569] mt-0.5">
+                            {label}
+                          </div>
                         </div>
-                        <div className="text-xs text-[#475569] mt-0.5">
-                          {label}
+                        <div className="shrink-0 flex items-center gap-3">
+                          <span className="text-xs text-[#94a3b8]">
+                            <span className="text-[#7c3aed] font-medium">
+                              {inLibraryCount}
+                            </span>
+                            <span className="text-[#475569]">
+                              {" "}
+                              / {entry.tracks.length} in library
+                            </span>
+                            {fuzzyCount > 0 && (
+                              <span className="ml-1.5 text-yellow-500/80" title={`${fuzzyCount} track${fuzzyCount > 1 ? 's' : ''} matched by title/artist (not exact)`}>
+                                ~{fuzzyCount}
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[#475569] text-xs">
+                            {isExpanded ? "▲" : "▼"}
+                          </span>
                         </div>
-                      </div>
-                      <div className="shrink-0 flex items-center gap-3">
-                        <span className="text-xs text-[#94a3b8]">
-                          <span className="text-[#7c3aed] font-medium">
-                            {inLibraryCount}
-                          </span>
-                          <span className="text-[#475569]">
-                            {" "}
-                            / {entry.tracks.length} in library
-                          </span>
-                        </span>
-                        <span className="text-[#475569] text-xs">
-                          {isExpanded ? "▲" : "▼"}
-                        </span>
-                      </div>
-                    </button>
+                      </button>
+                      <button
+                        onClick={() => handleLoadImportToSet(entry)}
+                        disabled={inLibraryCount === 0}
+                        aria-label="Load to generator"
+                        title={inLibraryCount === 0 ? 'No matched tracks to load' : `Load ${inLibraryCount} matched track${inLibraryCount !== 1 ? 's' : ''} into the generator`}
+                        className="shrink-0 px-3 py-4 text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#7c3aed] disabled:hover:text-[#475569]"
+                      >
+                        →&nbsp;Set
+                      </button>
+                      <button
+                        onClick={() => handleExportImportM3U(entry)}
+                        disabled={inLibraryCount !== entry.tracks.length || entry.tracks.length === 0}
+                        aria-label="Export to M3U"
+                        title={inLibraryCount !== entry.tracks.length ? `${entry.tracks.length - inLibraryCount} track(s) missing from library` : 'Export to M3U'}
+                        className="shrink-0 px-3 py-4 text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#22c55e] disabled:hover:text-[#475569]"
+                      >
+                        M3U↓
+                      </button>
+                      <button
+                        onClick={() => void reloadEntry(entry)}
+                        aria-label="Reload from Spotify"
+                        title="Reload from Spotify"
+                        className="shrink-0 px-3 py-4 text-[#475569] hover:text-[#7c3aed] transition-colors cursor-pointer"
+                      >
+                        ↻
+                      </button>
+                      <button
+                        onClick={() => {
+                          setImportHistory(prev => prev.filter(e => e.id !== entry.id));
+                          if (expandedImportId === entry.id) setExpandedImportId(null);
+                        }}
+                        aria-label="Remove playlist"
+                        className="shrink-0 px-4 py-4 text-[#475569] hover:text-red-400 transition-colors cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
 
                     {isExpanded && (
                       <div className="border-t border-[#1e1e2e]">
@@ -1012,14 +1230,16 @@ function AppInner() {
                                 className={`group border-t border-[#1e1e2e] ${
                                   track.unavailable
                                     ? "opacity-40"
-                                    : track.inLibrary
-                                      ? "hover:bg-[#0d0d14]"
-                                      : "bg-red-950/20 hover:bg-red-950/30"
+                                    : !track.inLibrary
+                                      ? "bg-red-950/20 hover:bg-red-950/30"
+                                      : track.matchConfidence === 'partial'
+                                        ? "bg-yellow-950/20 hover:bg-yellow-950/30"
+                                        : "hover:bg-[#0d0d14]"
                                 }`}
                               >
                                 <td className="py-2.5 pl-5 pr-2 w-10">
                                   <span
-                                    className={`group-hover:hidden text-xs tabular-nums ${track.inLibrary ? "text-[#475569]" : "text-red-500/60"}`}
+                                    className={`group-hover:hidden text-xs tabular-nums ${!track.inLibrary ? "text-red-500/60" : track.matchConfidence === 'partial' ? "text-yellow-500/60" : "text-[#475569]"}`}
                                   >
                                     {idx + 1}
                                   </span>
@@ -1065,30 +1285,27 @@ function AppInner() {
                                 </td>
                                 <td className="py-2.5 px-2">
                                   <div
-                                    className={`text-sm truncate max-w-xs ${track.unavailable ? "text-[#475569] italic" : track.inLibrary ? "text-[#e2e8f0]" : "text-red-400"}`}
+                                    className={`text-sm ${track.unavailable ? "text-[#475569] italic" : !track.inLibrary ? "text-red-400" : track.matchConfidence === 'partial' ? "text-yellow-300/90" : "text-[#22c55e]/90"}`}
                                   >
                                     {track.title}
                                   </div>
                                   {track.artist && (
                                     <div
-                                      className={`text-[11px] truncate ${track.inLibrary ? "text-[#475569]" : "text-red-500/70"}`}
+                                      className={`text-[11px] ${!track.inLibrary ? "text-red-500/70" : track.matchConfidence === 'partial' ? "text-yellow-500/70" : "text-[#22c55e]/50"}`}
                                     >
                                       {track.artist}
                                     </div>
                                   )}
                                 </td>
                                 <td className="py-2.5 px-2 pr-5">
-                                  {track.inLibrary || track.unavailable
+                                  {(track.inLibrary && track.matchConfidence !== 'partial') || track.unavailable
                                     ? null
                                     : (() => {
                                         const key = `${entry.id}-${track.spotifyId}-${idx}`;
                                         const primaryArtist = track.artist
                                           ? track.artist.split(/\s*[,&]\s*/)[0].trim()
                                           : '';
-                                        // Normalize title: replace filename-style " - " separator with space
-                                        // so "Different Circles - Nicson Remix" → "Different Circles Nicson Remix"
                                         const normalizedTitle = track.title.replace(/\s+-\s+/g, ' ');
-                                        // Base title: strip remix/mix/edit/dub/instrumental suffix for Bandcamp
                                         const baseTitle = track.title
                                           .replace(/\s+-\s+.*?(remix|mix|edit|dub|instrumental|rework|bootleg|flip|version|vip)\s*$/i, '')
                                           .replace(/\s+\(.*?(remix|mix|edit|dub|instrumental|rework|bootleg|flip|version|vip)\s*\)\s*$/i, '')
@@ -1097,82 +1314,159 @@ function AppInner() {
                                           [primaryArtist, normalizedTitle].filter(Boolean).join(' '),
                                         );
                                         const qTitle = encodeURIComponent(baseTitle);
+                                        const isSearchOpen = manualMatchKey === key;
+                                        const searchResults = isSearchOpen && manualMatchQuery.trim()
+                                          ? library
+                                              .filter(s => {
+                                                const q = manualMatchQuery.toLowerCase();
+                                                return (
+                                                  s.title.toLowerCase().includes(q) ||
+                                                  (s.artist ?? '').toLowerCase().includes(q)
+                                                );
+                                              })
+                                              .slice(0, 8)
+                                          : [];
                                         return (
-                                          <div
-                                            ref={
-                                              openStoreLinkKey === key
-                                                ? storeLinkRef
-                                                : null
-                                            }
-                                            className="relative inline-block"
-                                          >
-                                            <button
-                                              onClick={() =>
-                                                setOpenStoreLinkKey(
-                                                  openStoreLinkKey === key
-                                                    ? null
-                                                    : key,
-                                                )
-                                              }
-                                              className="text-[#475569] hover:text-[#7c3aed] transition-colors cursor-pointer"
-                                              title="Find this track"
+                                          <div className="flex items-center gap-1.5">
+                                            {/* Store links button */}
+                                            <div
+                                              ref={openStoreLinkKey === key ? storeLinkRef : null}
+                                              className="relative inline-block"
                                             >
-                                              <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                width="18"
-                                                height="18"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
+                                              <button
+                                                onClick={() =>
+                                                  setOpenStoreLinkKey(
+                                                    openStoreLinkKey === key ? null : key,
+                                                  )
+                                                }
+                                                className="text-[#475569] hover:text-[#7c3aed] transition-colors cursor-pointer"
+                                                title="Find this track"
                                               >
-                                                {/* Shopping cart */}
-                                                <circle cx="8" cy="21" r="1" fill="currentColor" stroke="none" />
-                                                <circle cx="19" cy="21" r="1" fill="currentColor" stroke="none" />
-                                                <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
-                                                {/* Music note inside cart */}
-                                                <path d="M11 16v-5l5-1.3v5" strokeWidth="1.5" />
-                                                <circle cx="11" cy="16" r="1.1" fill="currentColor" stroke="none" />
-                                                <circle cx="16" cy="14.7" r="1.1" fill="currentColor" stroke="none" />
-                                              </svg>
-                                            </button>
-                                            {openStoreLinkKey === key && (
-                                              <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
-                                                <div className="px-4 py-2 text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1e1e2e]">Find on…</div>
-                                                <a
-                                                  href={`https://www.beatport.com/search/tracks?q=${qFull}`}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  onClick={() => setOpenStoreLinkKey(null)}
-                                                  className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                                <svg
+                                                  xmlns="http://www.w3.org/2000/svg"
+                                                  width="16"
+                                                  height="16"
+                                                  viewBox="0 0 24 24"
+                                                  fill="none"
+                                                  stroke="currentColor"
+                                                  strokeWidth="2"
+                                                  strokeLinecap="round"
+                                                  strokeLinejoin="round"
                                                 >
-                                                  <img src="https://www.google.com/s2/favicons?domain=beatport.com&sz=16" width="14" height="14" className="rounded-sm flex-shrink-0" alt="" />
-                                                  Beatport
-                                                </a>
-                                                <a
-                                                  href={`https://bandcamp.com/search?q=${qTitle}&item_type=t`}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  onClick={() => setOpenStoreLinkKey(null)}
-                                                  className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
-                                                >
-                                                  <img src="https://www.google.com/s2/favicons?domain=bandcamp.com&sz=16" width="14" height="14" className="rounded-sm flex-shrink-0" alt="" />
-                                                  Bandcamp
-                                                </a>
-                                                <a
-                                                  href={`https://www.traxsource.com/search?term=${qFull}`}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  onClick={() => setOpenStoreLinkKey(null)}
-                                                  className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
-                                                >
-                                                  <img src="https://www.google.com/s2/favicons?domain=traxsource.com&sz=16" width="14" height="14" className="rounded-sm flex-shrink-0" alt="" />
-                                                  Traxsource
-                                                </a>
-                                              </div>
-                                            )}
+                                                  <circle cx="8" cy="21" r="1" fill="currentColor" stroke="none" />
+                                                  <circle cx="19" cy="21" r="1" fill="currentColor" stroke="none" />
+                                                  <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+                                                  <path d="M11 16v-5l5-1.3v5" strokeWidth="1.5" />
+                                                  <circle cx="11" cy="16" r="1.1" fill="currentColor" stroke="none" />
+                                                  <circle cx="16" cy="14.7" r="1.1" fill="currentColor" stroke="none" />
+                                                </svg>
+                                              </button>
+                                              {openStoreLinkKey === key && (
+                                                <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                                                  <div className="px-4 py-2 text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1e1e2e]">Find on…</div>
+                                                  <a
+                                                    href={`https://www.beatport.com/search/tracks?q=${qFull}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={() => setOpenStoreLinkKey(null)}
+                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                                  >
+                                                    <img src="https://www.google.com/s2/favicons?domain=beatport.com&sz=16" width="14" height="14" className="rounded-sm flex-shrink-0" alt="" />
+                                                    Beatport
+                                                  </a>
+                                                  <a
+                                                    href={`https://bandcamp.com/search?q=${qTitle}&item_type=t`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={() => setOpenStoreLinkKey(null)}
+                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                                  >
+                                                    <img src="https://www.google.com/s2/favicons?domain=bandcamp.com&sz=16" width="14" height="14" className="rounded-sm flex-shrink-0" alt="" />
+                                                    Bandcamp
+                                                  </a>
+                                                  <a
+                                                    href={`https://www.traxsource.com/search?term=${qFull}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={() => setOpenStoreLinkKey(null)}
+                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                                  >
+                                                    <img src="https://www.google.com/s2/favicons?domain=traxsource.com&sz=16" width="14" height="14" className="rounded-sm flex-shrink-0" alt="" />
+                                                    Traxsource
+                                                  </a>
+                                                </div>
+                                              )}
+                                            </div>
+                                            {/* Manual library search button */}
+                                            <div
+                                              ref={isSearchOpen ? manualSearchRef : null}
+                                              className="relative inline-block"
+                                            >
+                                              <button
+                                                onClick={() => {
+                                                  if (isSearchOpen) {
+                                                    setManualMatchKey(null);
+                                                    setManualMatchQuery('');
+                                                  } else {
+                                                    setManualMatchKey(key);
+                                                    setManualMatchQuery('');
+                                                    setOpenStoreLinkKey(null);
+                                                  }
+                                                }}
+                                                className={`transition-colors cursor-pointer ${isSearchOpen ? 'text-[#7c3aed]' : 'text-[#475569] hover:text-[#7c3aed]'}`}
+                                                title="Search in library"
+                                                aria-label="Search in library"
+                                              >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                  <circle cx="11" cy="11" r="8" />
+                                                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                                </svg>
+                                              </button>
+                                              {isSearchOpen && (
+                                                <div className="absolute right-0 bottom-full mb-1 z-20 w-64 rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-xl overflow-hidden">
+                                                  <input
+                                                    autoFocus
+                                                    type="text"
+                                                    value={manualMatchQuery}
+                                                    onChange={e => setManualMatchQuery(e.target.value)}
+                                                    onKeyDown={e => { if (e.key === 'Escape') { setManualMatchKey(null); setManualMatchQuery(''); } }}
+                                                    placeholder="Search library…"
+                                                    className="w-full bg-transparent px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#475569] focus:outline-none border-b border-[#1e1e2e]"
+                                                  />
+                                                  {searchResults.length > 0 ? (
+                                                    <div className="max-h-48 overflow-y-auto">
+                                                      {searchResults.map(song => (
+                                                        <button
+                                                          key={song.file}
+                                                          onClick={() => {
+                                                            setImportHistory(prev => prev.map(e => e.id === entry.id
+                                                              ? {
+                                                                  ...e,
+                                                                  tracks: e.tracks.map((t, i) => i === idx
+                                                                    ? { ...t, inLibrary: true, matchConfidence: 'exact' as const, manualMatchFile: song.file }
+                                                                    : t
+                                                                  ),
+                                                                }
+                                                              : e
+                                                            ));
+                                                            setManualMatchKey(null);
+                                                            setManualMatchQuery('');
+                                                          }}
+                                                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#1a1a2e] transition-colors border-t border-[#1e1e2e] first:border-t-0 cursor-pointer"
+                                                        >
+                                                          <div className="text-[#e2e8f0] truncate">{song.title}</div>
+                                                          <div className="text-[#475569] truncate">{song.artist}</div>
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                  ) : manualMatchQuery.trim() ? (
+                                                    <div className="px-3 py-2.5 text-xs text-[#475569]">No results</div>
+                                                  ) : (
+                                                    <div className="px-3 py-2.5 text-xs text-[#475569]">Type to search your library…</div>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
                                           </div>
                                         );
                                       })()}
@@ -1260,7 +1554,7 @@ function AppInner() {
       {playlistPicker && (
         <div
           className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-          onClick={() => setPlaylistPicker(null)}
+          onClick={() => { setPlaylistPicker(null); setPlaylistSearch(''); }}
         >
           <div
             className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#12121a] p-4"
@@ -1272,39 +1566,56 @@ function AppInner() {
               </h3>
               <button
                 className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
-                onClick={() => setPlaylistPicker(null)}
+                onClick={() => { setPlaylistPicker(null); setPlaylistSearch(''); }}
               >
                 Close
               </button>
             </div>
+            {playlistPicker.length > 0 && (
+              <input
+                type="text"
+                placeholder="Search playlists…"
+                value={playlistSearch}
+                onChange={(e) => setPlaylistSearch(e.target.value)}
+                autoFocus
+                className="w-full mb-3 px-3 py-2 text-sm rounded-md border border-[#2a2a3a] bg-[#0d0d14] text-[#e2e8f0] placeholder-[#475569] focus:outline-none focus:border-[#7c3aed] transition-colors"
+              />
+            )}
             {playlistPicker.length === 0 ? (
               <p className="text-sm text-[#94a3b8] py-4">
                 No playlists found in Apple Music.
               </p>
-            ) : (
-              <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto">
-                {playlistPicker.map((playlist) => {
-                  const imported = analyzedApplePlaylists.has(playlist.name);
-                  return (
-                    <button
-                      key={playlist.name}
-                      onClick={() => runAppleMusicAnalysis(playlist.name)}
-                      className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2.5 hover:border-[#7c3aed] transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-[#e2e8f0]">{playlist.name}</span>
-                        {imported && (
-                          <span className="text-[11px] font-semibold text-[#22c55e] flex-shrink-0">✓</span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-[#475569] mt-0.5">
-                        {playlist.count} track{playlist.count === 1 ? "" : "s"}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            ) : (() => {
+              const filtered = playlistPicker.filter(p =>
+                p.name.toLowerCase().includes(playlistSearch.toLowerCase())
+              );
+              return filtered.length === 0 ? (
+                <p className="text-sm text-[#94a3b8] py-4 text-center">No playlists match "{playlistSearch}".</p>
+              ) : (
+                <div className="flex flex-col gap-1 max-h-[55vh] overflow-y-auto">
+                  {filtered.map((playlist) => {
+                    const imported = analyzedApplePlaylists.has(playlist.name);
+                    return (
+                      <button
+                        key={playlist.name}
+                        onClick={() => runAppleMusicAnalysis(playlist.name)}
+                        className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2.5 hover:border-[#7c3aed] transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-[#e2e8f0]">{playlist.name}</span>
+                          {imported && (
+                            <span className="text-[11px] font-semibold text-[#22c55e] flex-shrink-0">✓</span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-[#475569] mt-0.5">
+                          {playlist.count} track{playlist.count === 1 ? "" : "s"}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1312,74 +1623,45 @@ function AppInner() {
       {swapModal && (
         <div
           className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-          onClick={() => {
-            setSwapModal(null);
-            setSwapVisibleCount(5);
-          }}
+          onClick={() => setSwapModal(null)}
         >
           <div
-            className="w-full max-w-2xl rounded-xl border border-[#2a2a3a] bg-[#12121a] p-4"
+            className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#12121a] p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-[#e2e8f0]">
-                Swap Suggestions
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+                Best replacements
               </h3>
               <button
-                className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
-                onClick={() => {
-                  setSwapModal(null);
-                  setSwapVisibleCount(5);
-                }}
+                className="text-xs text-[#475569] hover:text-[#e2e8f0] cursor-pointer transition-colors"
+                onClick={() => setSwapModal(null)}
               >
-                Close
+                ✕
               </button>
             </div>
 
             {swapModal.suggestions.length === 0 ? (
-              <div className="text-sm text-[#94a3b8] py-6">
-                No fitting suggestions found for this slot with current set
-                constraints.
-              </div>
+              <p className="text-sm text-[#475569] py-4 text-center">
+                No other tracks in your library fit this slot well enough.
+              </p>
             ) : (
-              <>
-                <div className="flex flex-col gap-2 max-h-[55vh] overflow-y-auto">
-                  {swapModal.suggestions
-                    .slice(0, swapVisibleCount)
-                    .map(({ song, score }) => (
-                      <button
-                        key={song.file}
-                        onClick={() => applySwapSuggestion(song)}
-                        className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2 hover:border-[#7c3aed] transition-colors cursor-pointer"
-                      >
-                        <div className="text-sm text-[#e2e8f0] truncate">
-                          {song.title} - {song.artist}
-                        </div>
-                        <div className="text-[11px] text-[#94a3b8] mt-1">
-                          {song.camelot} • {Math.round(song.bpm)} BPM •{" "}
-                          {Math.round(song.energy * 100)}% energy •{" "}
-                          {song.duration != null ? `${Math.floor(song.duration / 60)}:${String(Math.round(song.duration % 60)).padStart(2, '0')}` : '—'}{" "}
-                          • relevance {Math.round(score * 100)}%
-                        </div>
-                      </button>
-                    ))}
-                </div>
-
-                {swapVisibleCount < swapModal.suggestions.length && (
-                  <div className="mt-3 flex justify-center">
-                    <button
-                      onClick={() =>
-                        setSwapVisibleCount((count) =>
-                          Math.min(count + 5, swapModal.suggestions.length),
-                        )
-                      }
-                      className="px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                    >
-                      More
-                    </button>
-                  </div>
-                )}
-              </>
+              <div className="flex flex-col divide-y divide-[#1e1e2e]">
+                {swapModal.suggestions.map(({ song }) => (
+                  <button
+                    key={song.file}
+                    onClick={() => applySwapSuggestion(song)}
+                    className="w-full text-left px-1 py-3 hover:bg-[#0d0d14] transition-colors cursor-pointer group"
+                  >
+                    <div className="text-sm font-medium text-[#e2e8f0] truncate group-hover:text-white">
+                      {song.title}
+                    </div>
+                    <div className="text-xs text-[#64748b] truncate mt-0.5">
+                      {song.artist}
+                    </div>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -1572,6 +1854,7 @@ function AppInner() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onSaved={() => { loadSettings(); setLibrary([]); setGeneratedSet([]); }}
+        onDatabaseCleared={() => setAnalyzedApplePlaylists(new Set())}
       />
 
       {m3uSavedPath && (

@@ -186,6 +186,7 @@ export function generateSet(
     // 4. Within the energy neighbourhood, score by harmonic + BPM + affinity
     let bestSong = energyNeighbours[0];
     let bestScore = -Infinity;
+    let bestReasons: string[] = [];
 
     for (const song of energyNeighbours) {
       const harmonicScore =
@@ -207,9 +208,8 @@ export function generateSet(
       const boostBonus = slopeRising && prevCamelot !== null && isCamelotClockwise(prevCamelot, song.camelot) ? 0.08 : 0;
       // Familiarity: small bonus for tracks the DJ knows well; slight penalty for overplayed ones.
       // Max contribution: (1.0 - 0.5) * 0.06 = +0.03; min: (0.3 - 0.5) * 0.06 = -0.012
-      const famBonus = options?.history
-        ? (familiarityScore(computePlayStats(options.history, song.file).playCount) - 0.5) * 0.06
-        : 0;
+      const playCount = options?.history ? computePlayStats(options.history, song.file).playCount : 0;
+      const famBonus = options?.history ? (familiarityScore(playCount) - 0.5) * 0.06 : 0;
       const jitter = options?.jitter ? Math.random() * options.jitter : 0;
       const wH = options?.weights?.harmonicWeight   ?? 0.55;
       const wB = options?.weights?.bpmWeight        ?? 0.25;
@@ -218,6 +218,27 @@ export function generateSet(
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;
+        // Build human-readable breakdown for this winning candidate
+        const reasons: string[] = [];
+        if (prevCamelot !== null) {
+          const label = harmonicScore >= 1.0 ? '✓ perfect' : harmonicScore >= 0.75 ? '✓ compatible' : harmonicScore >= 0.5 ? '~ energy boost' : '✗ jump';
+          reasons.push(`key ${prevCamelot}→${song.camelot} ${label}`);
+        }
+        reasons.push(`energy ${song.energy.toFixed(2)} → target ${targetEnergy.toFixed(2)}`);
+        if (prevBpm !== null) {
+          const delta = song.bpm - prevBpm;
+          reasons.push(`BPM ${song.bpm} (${delta >= 0 ? '+' : ''}${delta} from prev)`);
+        }
+        if (boostBonus > 0) reasons.push('↑ clockwise energy boost');
+        if (affinityBonus > 0) reasons.push('genre affinity ✓');
+        if (semBonus > 0) reasons.push('vibe match ✓');
+        if (tagBonus > 0) reasons.push('tag filter match ✓');
+        if (options?.history) {
+          if (playCount === 0) reasons.push('never played before');
+          else if (playCount >= 10) reasons.push(`played ${playCount}× (cooling down)`);
+          else reasons.push(`played ${playCount}× (familiar)`);
+        }
+        bestReasons = reasons;
       }
     }
 
@@ -234,6 +255,7 @@ export function generateSet(
       harmonicWarning: prevCamelot !== null
         ? isHarmonicWarning(prevCamelot, bestSong.camelot)
         : false,
+      selectionReason: bestReasons.length > 0 ? bestReasons : undefined,
     });
   }
 

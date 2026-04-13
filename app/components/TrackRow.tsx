@@ -82,6 +82,7 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showFitTooltip, setShowFitTooltip] = useState(false);
   const [showTags, setShowTags] = useState(false);
+  const [showReasons, setShowReasons] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -427,6 +428,16 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
                 ✦
               </button>
             )}
+            {track.selectionReason && track.selectionReason.length > 0 && (
+              <button
+                onClick={() => setShowReasons(s => !s)}
+                title="Why was this track chosen?"
+                aria-label="Toggle selection reasons"
+                className={`px-2 py-1 text-[11px] rounded-md border transition-colors cursor-pointer ${showReasons ? 'border-[#38bdf8] bg-[#38bdf822] text-[#7dd3fc]' : 'border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#38bdf8] hover:text-[#7dd3fc]'}`}
+              >
+                ⓘ
+              </button>
+            )}
             <button
               onClick={openEdit}
               title="Edit tags"
@@ -488,6 +499,22 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
                 <span className="text-[9px] uppercase tracking-widest text-[#334155]">Vocal</span>
                 <TagPill label={track.semanticTags.vocalType} type="vocal" />
               </div>
+            </div>
+          </td>
+        </tr>
+      )}
+
+      {/* Selection reason row */}
+      {showReasons && track.selectionReason && track.selectionReason.length > 0 && (
+        <tr className="border-b border-[#1e1e2e] bg-[#0a0a12]">
+          <td colSpan={totalCols} className="px-4 py-2">
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] uppercase tracking-widest text-[#38bdf8] mt-0.5 shrink-0">Why chosen</span>
+              <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                {track.selectionReason.map((reason, i) => (
+                  <li key={i} className="text-[11px] text-[#64748b]">{reason}</li>
+                ))}
+              </ul>
             </div>
           </td>
         </tr>

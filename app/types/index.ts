@@ -31,6 +31,7 @@ export interface SetTrack extends Song {
   slot: number;
   targetEnergy: number;
   harmonicWarning: boolean; // true if camelot transition is incompatible
+  locked?: boolean;         // true = preserved on regenerate
 }
 
 export interface CurvePoint {

@@ -128,17 +128,42 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     [playlistFilterFiles],
   );
 
+  /**
+   * Merge a freshly generated set with locked tracks from the previous set.
+   * Locked tracks keep their slot positions; fresh tracks fill the remaining slots.
+   */
+  const mergeWithLocked = useCallback((fresh: SetTrack[]): SetTrack[] => {
+    const locked = generatedSet.filter(t => t.locked);
+    if (locked.length === 0) return fresh;
+    // Build a combined list: locked tracks at their original positions, fresh tracks fill the rest
+    const result: (SetTrack | null)[] = Array(Math.max(fresh.length, locked.reduce((m, t) => Math.max(m, t.slot), 0) + 1)).fill(null);
+    for (const t of locked) if (t.slot < result.length) result[t.slot] = t;
+    const freshQueue = [...fresh.filter(f => !locked.some(l => l.file === f.file))];
+    for (let i = 0; i < result.length; i++) {
+      if (result[i] === null && freshQueue.length > 0) result[i] = freshQueue.shift()!;
+    }
+    const merged = result.filter((t): t is SetTrack => t !== null)
+      .map((t, i) => ({ ...t, slot: i }));
+    // Recompute harmonic warnings
+    return merged.map((t, i) => ({
+      ...t,
+      harmonicWarning: i > 0 ? isHarmonicWarning(merged[i - 1].camelot, t.camelot) : false,
+    }));
+  }, [generatedSet]);
+
   const handleGenerate = useCallback(() => {
     if (anchored) return;
-    runGenerate(library, prefs, curve);
-
-  }, [anchored, library, prefs, curve, runGenerate]);
+    const lockedFiles = new Set(generatedSet.filter(t => t.locked).map(t => t.file));
+    const fresh = generateSet(library, prefs, curve, { excludeFiles: lockedFiles, playlistFilterFiles });
+    setGeneratedSet(mergeWithLocked(fresh));
+  }, [anchored, library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles]);
 
   const handleRegenerate = useCallback(() => {
     if (anchored || library.length === 0) return;
-    setGeneratedSet(generateSet(library, prefs, curve, { jitter: 0.4, playlistFilterFiles }));
-
-  }, [anchored, library, prefs, curve, playlistFilterFiles]);
+    const lockedFiles = new Set(generatedSet.filter(t => t.locked).map(t => t.file));
+    const fresh = generateSet(library, prefs, curve, { jitter: 0.4, excludeFiles: lockedFiles, playlistFilterFiles });
+    setGeneratedSet(mergeWithLocked(fresh));
+  }, [anchored, library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles]);
 
   const handleGenerateNew = useCallback(() => {
     if (anchored || library.length === 0) return;
@@ -345,6 +370,10 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     });
   }, [library, prefs, curve, generatedSet, playlistFilterFiles]);
 
+  const handleToggleLock = useCallback((index: number) => {
+    setGeneratedSet(prev => prev.map((t, i) => i === index ? { ...t, locked: !t.locked } : t));
+  }, []);
+
   const handleRemoveTrack = useCallback((index: number) => {
     setGeneratedSet((prev) => {
       if (index < 0 || index >= prev.length) return prev;
@@ -422,6 +451,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     buildSwapSuggestions,
     handleSwapTrack,
     applySwapSuggestion,
+    handleToggleLock,
     handleRemoveTrack,
     handleReorderTrack,
     handleUpdateTrack,

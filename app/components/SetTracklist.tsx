@@ -87,6 +87,7 @@ interface Props {
   prefs: DJPreferences;
   libraryLoaded: boolean;
   onSwapTrack: (index: number) => void;
+  onToggleLock: (index: number) => void;
   onRemoveTrack: (index: number) => void;
   onReorderTrack: (fromIdx: number, toIdx: number) => void;
   onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
@@ -101,7 +102,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
@@ -378,6 +379,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
                       visibleColumns={visibleColumns}
                       totalCols={totalCols}
                       onSwap={() => onSwapTrack(idx)}
+                      onToggleLock={() => onToggleLock(idx)}
                       onRemove={() => onRemoveTrack(idx)}
                       onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}
                       onDragStart={() => setDraggingIdx(idx)}

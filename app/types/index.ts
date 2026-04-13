@@ -80,6 +80,13 @@ export interface DJPreferences {
   addedTimeFilter: AddedTimeFilter;
 }
 
+export interface PlayStats {
+  playCount:      number;   // how many times this track appeared in any saved set
+  lastPlayed:     string;   // ISO date of most recent set containing this track
+  avgSetPosition: number;   // 0–1, average slot / (setLength - 1)
+  setTypes:       string[]; // venueTypes from sets where this track appeared
+}
+
 export interface ScoringWeights {
   harmonicWeight:   number; // default 0.55
   bpmWeight:        number; // default 0.25

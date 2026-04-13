@@ -287,7 +287,7 @@ function AppInner() {
     handleUpdateTrack,
     handleLoadToSet,
     handleAppendTracks,
-  } = useSetGenerator(library, setLibrary, playlistFilterFiles);
+  } = useSetGenerator(library, setLibrary, playlistFilterFiles, history);
 
   // Wire setGeneratedSet into the bridge ref so useLibrary can reset the set on new analysis
   onNewAnalysisRef.current = () => { setGeneratedSet([]); };

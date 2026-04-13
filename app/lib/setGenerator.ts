@@ -1,5 +1,6 @@
-import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, SetPhase, TagFilters, ScoringWeights } from '../types';
+import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, SetPhase, TagFilters, ScoringWeights, HistoryEntry } from '../types';
 import { camelotHarmonyScore, isHarmonicWarning, isCamelotClockwise } from './camelot';
+import { computePlayStats, familiarityScore } from './historyStats';
 import { sampleCurve } from './curveInterpolation';
 import { matchesGenrePref } from './genreUtils';
 
@@ -104,6 +105,8 @@ export interface GenerateOptions {
   maxDurationSeconds?: number;
   /** scoring weight overrides — defaults reproduce existing behaviour */
   weights?: ScoringWeights;
+  /** set history used to compute per-track familiarity scores */
+  history?: HistoryEntry[];
 }
 
 export function generateSet(
@@ -202,11 +205,16 @@ export function generateSet(
       // Clockwise Camelot move bonus: on rising curve slopes, prefer tracks that
       // step forward on the wheel (energy boost direction per MixedInKey).
       const boostBonus = slopeRising && prevCamelot !== null && isCamelotClockwise(prevCamelot, song.camelot) ? 0.08 : 0;
+      // Familiarity: small bonus for tracks the DJ knows well; slight penalty for overplayed ones.
+      // Max contribution: (1.0 - 0.5) * 0.06 = +0.03; min: (0.3 - 0.5) * 0.06 = -0.012
+      const famBonus = options?.history
+        ? (familiarityScore(computePlayStats(options.history, song.file).playCount) - 0.5) * 0.06
+        : 0;
       const jitter = options?.jitter ? Math.random() * options.jitter : 0;
       const wH = options?.weights?.harmonicWeight   ?? 0.55;
       const wB = options?.weights?.bpmWeight        ?? 0.25;
       const wT = options?.weights?.transitionWeight ?? 0.10;
-      const score = harmonicScore * wH + bpmScore * wB + transitionScore * wT + affinityBonus + semBonus + tagBonus + boostBonus + jitter;
+      const score = harmonicScore * wH + bpmScore * wB + transitionScore * wT + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + jitter;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;

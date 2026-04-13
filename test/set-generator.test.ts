@@ -157,6 +157,47 @@ describe('slope-aware clockwise bonus', () => {
   })
 })
 
+// ─── Phase 6: selectionReason ─────────────────────────────────────────────────
+
+describe('selectionReason', () => {
+  it('populates selectionReason on every SetTrack', () => {
+    const songs = Array.from({ length: 5 }, (_, i) =>
+      makeSong({ file: `track${i}.mp3`, camelot: '8B', energy: 0.5 + i * 0.05 })
+    )
+    const set = generateSet(songs, defaultPrefs, flatCurve)
+    for (const track of set) {
+      expect(track.selectionReason).toBeDefined()
+      expect(Array.isArray(track.selectionReason)).toBe(true)
+    }
+  })
+
+  it('includes energy info in selectionReason', () => {
+    const songs = [makeSong({ file: 'a.mp3', energy: 0.5 })]
+    const set = generateSet(songs, { ...defaultPrefs, setDuration: 10 }, flatCurve)
+    const reasons = set[0].selectionReason ?? []
+    expect(reasons.some(r => r.includes('energy'))).toBe(true)
+  })
+
+  it('includes harmonic info when a previous track exists', () => {
+    const songs = [
+      makeSong({ file: 'first.mp3', camelot: '8B', energy: 0.5 }),
+      makeSong({ file: 'second.mp3', camelot: '9B', energy: 0.5 }),
+    ]
+    const set = generateSet(songs, { ...defaultPrefs, setDuration: 15 }, flatCurve)
+    if (set.length >= 2) {
+      const reasons = set[1].selectionReason ?? []
+      expect(reasons.some(r => r.includes('key'))).toBe(true)
+    }
+  })
+
+  it('first track has no key transition reason (no previous track)', () => {
+    const songs = [makeSong({ file: 'first.mp3', camelot: '8B', energy: 0.5 })]
+    const set = generateSet(songs, { ...defaultPrefs, setDuration: 10 }, flatCurve)
+    const reasons = set[0].selectionReason ?? []
+    expect(reasons.some(r => r.includes('key'))).toBe(false)
+  })
+})
+
 // ─── Phase 2: energyProfile transition score ──────────────────────────────────
 
 describe('energyProfile transition score', () => {

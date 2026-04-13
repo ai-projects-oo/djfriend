@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import type { SetTrack, DJPreferences } from '../types';
 import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
+import SetCardExport from './SetCardExport';
 import { matchesGenrePref } from '../lib/genreUtils';
 import { getAffinityKey, genreAffinityBonus } from '../lib/setGenerator';
 
@@ -103,6 +104,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [cardOpen, setCardOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadVisibleColumns);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
@@ -179,6 +181,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
   }
 
   return (
+    <>
     <div className="flex flex-col gap-4">
       {/* Stats bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
@@ -277,6 +280,12 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
                   className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
                   Export as M3U
+                </button>
+                <button
+                  onClick={() => { setCardOpen(true); setExportOpen(false); }}
+                  className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                >
+                  Export as Image
                 </button>
                 <button
                   onClick={() => { onExportSpotify?.(); setExportOpen(false); }}
@@ -380,5 +389,10 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
         </div>
       </div>
     </div>
+
+    {cardOpen && (
+      <SetCardExport tracks={tracks} onClose={() => setCardOpen(false)} />
+    )}
+    </>
   );
 }

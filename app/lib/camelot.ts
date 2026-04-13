@@ -1,6 +1,13 @@
 /**
  * Camelot Wheel compatibility logic.
  * A Camelot key looks like "5B" or "11A" — a number 1–12 and a letter A or B.
+ *
+ * Compatible moves (MixedInKey system):
+ *   perfect      — same key (8A → 8A)
+ *   compatible   — ±1 same letter (7A/9A) or same number other letter (8B)
+ *   energyBoost  — ±1 with letter switch / diagonal (7B, 9B from 8A)
+ *                  Creates a perfect-fifth energy shift; use for intentional lifts
+ *   incompatible — everything else
  */
 
 export type CamelotCompatibility = 'perfect' | 'compatible' | 'energyBoost' | 'incompatible';
@@ -25,44 +32,54 @@ export function getCamelotCompatibility(
 
   const sameNum = a.num === b.num;
   const sameLetter = a.letter === b.letter;
+  const diff = Math.abs(a.num - b.num);
+  const wrappedDiff = Math.min(diff, 12 - diff);
 
-  // Perfect match: identical key
+  // Perfect: identical key
   if (sameNum && sameLetter) return 'perfect';
 
-  // Energy boost: same number, different letter (relative major/minor swap)
-  if (sameNum && !sameLetter) return 'energyBoost';
+  // Compatible: ±1 same letter (smooth energy flow)
+  if (sameLetter && wrappedDiff === 1) return 'compatible';
 
-  // Compatible: ±1 position on the wheel, same letter
-  if (sameLetter) {
-    const diff = Math.abs(a.num - b.num);
-    // Wrap-around: 12 and 1 are adjacent
-    const wrappedDiff = Math.min(diff, 12 - diff);
-    if (wrappedDiff === 1) return 'compatible';
-  }
+  // Compatible: same number, other letter (relative major/minor swap)
+  if (sameNum && !sameLetter) return 'compatible';
+
+  // Energy boost: ±1 with letter switch (diagonal — perfect fifth relationship)
+  // Clockwise (+1) lifts energy; counterclockwise (-1) softens it.
+  if (!sameLetter && wrappedDiff === 1) return 'energyBoost';
 
   return 'incompatible';
 }
 
 /**
  * Returns a numeric harmony score for the transition.
- * perfect/compatible → 1.0
- * energyBoost → 0.5
- * incompatible → 0.0
+ *   perfect / compatible → 1.0
+ *   energyBoost         → 0.75  (valid but adds tension)
+ *   incompatible        → 0.0
  */
 export function camelotHarmonyScore(from: string, to: string): number {
-  const compat = getCamelotCompatibility(from, to);
-  switch (compat) {
-    case 'perfect':
-      return 1.0;
-    case 'compatible':
-      return 1.0;
-    case 'energyBoost':
-      return 0.5;
-    case 'incompatible':
-      return 0.0;
+  switch (getCamelotCompatibility(from, to)) {
+    case 'perfect':      return 1.0;
+    case 'compatible':   return 1.0;
+    case 'energyBoost':  return 0.75;
+    case 'incompatible': return 0.0;
   }
 }
 
+/** Only flag as a warning when there is zero harmonic relationship. */
 export function isHarmonicWarning(from: string, to: string): boolean {
   return getCamelotCompatibility(from, to) === 'incompatible';
+}
+
+/**
+ * Returns true when `to` is exactly one step clockwise from `from` on the
+ * Camelot wheel (number increases by 1, wrapping 12→1), regardless of letter.
+ * Used by the set generator to reward clockwise moves during rising energy slopes.
+ */
+export function isCamelotClockwise(from: string, to: string): boolean {
+  const a = parseCamelot(from);
+  const b = parseCamelot(to);
+  if (!a || !b) return false;
+  const next = a.num === 12 ? 1 : a.num + 1;
+  return b.num === next;
 }

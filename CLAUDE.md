@@ -54,32 +54,30 @@ npm run lint               # ESLint
 git checkout main && git checkout -b sprint_XX
 ```
 
-### During development — USE PARALLEL AGENTS
-- Use **custom project agents** from `.claude/agents/` — NOT generic built-in agents:
-  - `developer-core` → `src/`
-  - `developer-ui` → `app/components/`, `app/hooks/`, `app/lib/`, `app/types/`
-  - `developer-infra` → `electron/`, `render.yaml`, `package.json`, build scripts
-- **ALWAYS** launch independent tasks as parallel agents with `isolation: "worktree"`
-- Multiple features → multiple parallel agents, NOT one-by-one
-- After pulling files from a worktree agent, immediately clean up:
+### During development
+- Use **Grep + offset reads** instead of reading large files whole (`App.tsx` etc.)
+- Use **parallel worktree agents** only for genuinely independent, large tasks that span different directory owners (e.g. `src/` + `app/` simultaneously). Single-owner changes: edit inline.
+- If worktree agents are used, clean up after pulling changes:
   ```bash
-  rm -rf .claude/worktrees/agent-XXXX && git worktree prune && git branch -D worktree-agent-XXXX
+  git worktree prune && git branch -D worktree-agent-XXXX
   ```
 
 ### Before merging to main (ALL steps required, in order)
-0. **Commit all uncommitted changes** — `git add -A && git status`, commit if anything staged
+0. **Commit all uncommitted changes**
 1. **`npm run build`** — 0 TypeScript errors
 2. **`npm run lint`** — 0 new lint errors
-3. **Write tests** — for all new business logic, state, edge cases
+3. **Write tests** — for all new business logic and edge cases
 4. **`npm test`** — all tests must pass
-5. **Launch ONE combined review agent** (using `code-reviewer` from `.claude/agents/`) that checks: code quality, edge cases, null safety, error handling, non-negotiables
-6. **Fix ALL issues** found by review agent — on the sprint branch, not after merge
-7. **Re-run tests** — confirm fixes didn't break anything
-8. **Commit everything** on sprint branch as "Sprint X validation fixes"
-9. **Tell user:** run `npm run electron:dev` in another terminal to test the desktop build
-10. **Ask user: "Ready to merge?"** — wait for approval before merging
-11. **Merge** — `git checkout main && git merge sprint_XX --no-ff && git push`
+5. **Self-review** — inline, check non-negotiables:
+   - `decodeAudioData` once per file in `src/analyzer.ts`
+   - Rate-limiter present on all Spotify calls
+   - `results.json` keys additive only
+   - Energy neighbourhood pre-filter intact (`top K = max(5, ceil(15% of pool))`)
+   - `app/lib/` functions remain pure (no localStorage, no IPC)
+6. **Fix any issues** found — on the sprint branch, not after merge
+7. **Commit** sprint branch as "Sprint X validation fixes" if fixes were needed
+8. **Tell user:** run `npm run electron:dev` in another terminal to test the desktop build
+9. **Ask user: "Ready to merge?"** — wait for approval
+10. **Merge** — `git checkout main && git merge sprint_XX --no-ff && git push`
 
-**NEVER:** merge with known issues, fix on main after merge, skip tests, skip review agent, commit directly to main, merge without user approval, work sequentially when parallelism is possible.
-
-Do NOT skip any step. Do NOT ask the user to remind you. Execute all steps automatically.
+**NEVER:** merge with known issues, fix on main after merge, skip tests, commit directly to main, merge without user approval.

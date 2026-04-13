@@ -203,6 +203,8 @@ function AppInner() {
   const [playlistFilterId, setPlaylistFilterId] = useState<string | null>(null);
   // Controls visibility of the playlist picker select element in the Source card
   const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
+  // Visual-only loading state for the Generate CTA button
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // useSpotifyImport first so we have importHistory before calling useSetGenerator
   const {
@@ -260,8 +262,6 @@ function AppInner() {
     setCurve,
     generatedSet,
     setGeneratedSet,
-    autoRegen,
-    setAutoRegen,
     anchored,
     setAnchored,
     swapModal,
@@ -299,9 +299,8 @@ function AppInner() {
     setPrefs({ ...entry.prefs, addedTimeFilter: entry.prefs.addedTimeFilter ?? 'all' });
     setCurve(entry.curve);
     setGeneratedSet(entry.tracks);
-    setAutoRegen(true);
     setActiveTab("Generator");
-  }, [setPrefs, setCurve, setGeneratedSet, setAutoRegen]);
+  }, [setPrefs, setCurve, setGeneratedSet]);
 
   const {
     spotifyExportStatus,
@@ -698,11 +697,7 @@ function AppInner() {
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
                     Energy Curve
                   </h2>
-                  {autoRegen && (
-                    <span className="text-[10px] text-[#475569] bg-[#0d0d14] border border-[#1e1e2e] px-2 py-0.5 rounded">
-                      Live
-                    </span>
-                  )}
+
                 </div>
                 <EnergyCurveEditor points={curve} onChange={handleCurveChange} />
               </div>
@@ -940,15 +935,63 @@ function AppInner() {
                     <span className="text-[10px] text-[#475569]">≈ {filteredTrackCount} tracks</span>
                   )}
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <button onClick={handleGenerate} disabled={anchored || library.length === 0} title={anchored ? 'Set is anchored' : 'Generate a new set'}
-                    className="flex items-center justify-center gap-2 bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-md transition-colors cursor-pointer">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-                    Generate
-                  </button>
+                {/* Primary CTA — Generate */}
+                <button
+                  onClick={() => {
+                    if (anchored || library.length === 0 || isGenerating) return;
+                    setIsGenerating(true);
+                    setTimeout(() => {
+                      handleGenerate();
+                      setIsGenerating(false);
+                    }, 0);
+                  }}
+                  disabled={anchored || library.length === 0 || isGenerating}
+                  title={anchored ? 'Set is anchored' : 'Generate a new set'}
+                  aria-label="Generate set"
+                  className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
+                  style={{
+                    background: isGenerating
+                      ? 'linear-gradient(135deg, #6d28d9, #5b21b6)'
+                      : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                    padding: '12px 16px',
+                    fontSize: '0.95rem',
+                    fontWeight: 700,
+                    boxShadow: isGenerating ? 'none' : undefined,
+                  }}
+                  onMouseEnter={e => {
+                    if (!e.currentTarget.disabled) {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #8b5cf6, #7c3aed)';
+                      e.currentTarget.style.boxShadow = '0 0 20px rgba(124,58,237,0.4)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = isGenerating
+                      ? 'linear-gradient(135deg, #6d28d9, #5b21b6)'
+                      : 'linear-gradient(135deg, #7c3aed, #6d28d9)';
+                    e.currentTarget.style.boxShadow = '';
+                  }}
+                >
+                  {isGenerating ? (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" className="animate-pulse">
+                        <polygon points="5,3 19,12 5,21"/>
+                      </svg>
+                      <span className="animate-pulse">Generating…</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5,3 19,12 5,21"/>
+                      </svg>
+                      Generate
+                    </>
+                  )}
+                </button>
+                {/* Secondary actions — subordinate ghost buttons */}
+                <div className="flex gap-2">
                   <button onClick={handleRegenerate} disabled={anchored || library.length === 0} title={anchored ? 'Set is anchored' : 'Different mix from the same tracks'}
-                    className="flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#e2e8f0] text-sm font-medium py-2.5 rounded-md transition-colors cursor-pointer">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    className="flex-1 flex items-center justify-center gap-1.5 border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#64748b] hover:text-[#94a3b8] text-xs font-medium py-1.5 rounded-md transition-all duration-200 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                     </svg>
@@ -956,8 +999,8 @@ function AppInner() {
                   </button>
                   <button onClick={handleGenerateNew} disabled={anchored || !canGenerateNew}
                     title={anchored ? 'Set is anchored' : canGenerateNew ? 'Generate from tracks not in the current set' : 'Not enough tracks outside the current set'}
-                    className="flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#e2e8f0] text-sm font-medium py-2.5 rounded-md transition-colors cursor-pointer">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    className="flex-1 flex items-center justify-center gap-1.5 border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#64748b] hover:text-[#94a3b8] text-xs font-medium py-1.5 rounded-md transition-all duration-200 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
                       <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
                     </svg>

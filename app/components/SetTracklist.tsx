@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { SetTrack, DJPreferences } from '../types';
 import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
@@ -12,6 +12,37 @@ export interface FitInfo {
   reasons: string[];
 }
 
+// ─── Column definitions ────────────────────────────────────────────────────────
+
+export type ColumnKey = 'time' | 'genre' | 'year' | 'comment';
+
+const OPTIONAL_COLUMNS: { key: ColumnKey; label: string }[] = [
+  { key: 'time',    label: 'Time' },
+  { key: 'genre',   label: 'Genre' },
+  { key: 'year',    label: 'Year' },
+  { key: 'comment', label: 'Comments' },
+];
+
+const LS_KEY = 'djfriend:visibleColumns';
+const DEFAULT_VISIBLE: ColumnKey[] = ['time', 'genre'];
+
+function loadVisibleColumns(): Set<ColumnKey> {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as ColumnKey[];
+      if (Array.isArray(parsed)) return new Set(parsed);
+    }
+  } catch { /* ignore */ }
+  return new Set(DEFAULT_VISIBLE);
+}
+
+function saveVisibleColumns(cols: Set<ColumnKey>) {
+  localStorage.setItem(LS_KEY, JSON.stringify(Array.from(cols)));
+}
+
+// ─── Fit scoring ───────────────────────────────────────────────────────────────
+
 function computeFit(track: SetTrack, prevTrack: SetTrack | null, prefs: DJPreferences): FitInfo {
   const reasons: string[] = [];
   let worst: FitLevel = 'good';
@@ -22,29 +53,24 @@ function computeFit(track: SetTrack, prevTrack: SetTrack | null, prefs: DJPrefer
     else if (worst !== 'bad') worst = 'warn';
   }
 
-  // Harmonic clash
   if (track.harmonicWarning) {
     flag('bad', 'Harmonic clash with previous track');
   }
 
-  // Energy vs target
   const eDelta = Math.abs(track.energy - track.targetEnergy);
   if (eDelta > 0.35) flag('bad', `Energy ${(eDelta * 100).toFixed(0)}% off target`);
   else if (eDelta > 0.20) flag('warn', `Energy ${(eDelta * 100).toFixed(0)}% off target`);
 
-  // BPM jump from previous
   if (prevTrack && track.bpm > 0 && prevTrack.bpm > 0) {
     const bDelta = Math.abs(track.bpm - prevTrack.bpm);
     if (bDelta > 20) flag('bad', `BPM jump of ${bDelta.toFixed(0)} from previous`);
     else if (bDelta > 12) flag('warn', `BPM jump of ${bDelta.toFixed(0)} from previous`);
   }
 
-  // Genre filter mismatch
   if (prefs.genre !== 'Any' && !matchesGenrePref(track, prefs.genre)) {
     flag('warn', `Genre doesn't match filter (${prefs.genre.replace('~', '')})`);
   }
 
-  // Venue/phase affinity
   const affinityKey = getAffinityKey(prefs.venueType, prefs.setPhase);
   if (affinityKey && genreAffinityBonus(track, affinityKey) === 0) {
     flag('warn', `Genre doesn't suit ${prefs.venueType} · ${prefs.setPhase}`);
@@ -52,6 +78,8 @@ function computeFit(track: SetTrack, prevTrack: SetTrack | null, prefs: DJPrefer
 
   return { level: worst, reasons };
 }
+
+// ─── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   tracks: SetTrack[];
@@ -70,23 +98,50 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
   return Math.round(totalSecs / 60);
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadVisibleColumns);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+  const columnsDropdownRef = useRef<HTMLDivElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
+  function toggleColumn(key: ColumnKey) {
+    setVisibleColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      saveVisibleColumns(next);
+      return next;
+    });
+  }
+
+  // Close export dropdown on outside click
   useEffect(() => {
     if (!exportOpen) return;
     function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(e.target as Node)) {
         setExportOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [exportOpen]);
+
+  // Close columns dropdown on outside click
+  useEffect(() => {
+    if (!columnsOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (columnsDropdownRef.current && !columnsDropdownRef.current.contains(e.target as Node)) {
+        setColumnsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [columnsOpen]);
 
   if (tracks.length === 0) {
     return (
@@ -109,6 +164,9 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
   const warnFitCount = tracks.filter((t, i) =>
     computeFit(t, i > 0 ? tracks[i - 1] : null, prefs).level === 'warn'
   ).length;
+
+  // Total column count for colSpan calculations
+  const totalCols = 6 + visibleColumns.size; // 6 mandatory + optional
 
   function scrollToFirstWarning() {
     const el = tableContainerRef.current?.querySelector('[data-warning="true"]');
@@ -166,32 +224,70 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
           )}
         </div>
 
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setExportOpen((o) => !o)}
-            className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-sm text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-          >
-            <span>↓</span>
-            Export
-            <span className="text-[10px]">▾</span>
-          </button>
-          {exportOpen && (
-            <div className="absolute right-0 top-full mt-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
-              <button
-                onClick={() => { downloadM3U(tracks); onExport?.(); setExportOpen(false); }}
-                className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-              >
-                Export as M3U
-              </button>
-              <button
-                onClick={() => { onExportSpotify?.(); setExportOpen(false); }}
-                className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
-              >
-                <span className="flex-1">Export to Spotify</span>
-                <span className="text-[10px] font-semibold bg-[#7c3aed22] text-[#a78bfa] border border-[#7c3aed44] px-1.5 py-0.5 rounded uppercase tracking-wide">Pro</span>
-              </button>
-            </div>
-          )}
+        <div className="flex items-center gap-2">
+          {/* Column chooser */}
+          <div className="relative" ref={columnsDropdownRef}>
+            <button
+              onClick={() => setColumnsOpen((o) => !o)}
+              className="flex items-center gap-2 px-3 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-sm text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+              title="Show/hide columns"
+            >
+              ⊞
+              <span className="text-[10px]">▾</span>
+            </button>
+            {columnsOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden py-1">
+                {OPTIONAL_COLUMNS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => toggleColumn(key)}
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    <span
+                      className="w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 text-[9px]"
+                      style={{
+                        borderColor: visibleColumns.has(key) ? '#7c3aed' : '#2a2a3a',
+                        backgroundColor: visibleColumns.has(key) ? '#7c3aed' : 'transparent',
+                        color: '#fff',
+                      }}
+                    >
+                      {visibleColumns.has(key) ? '✓' : ''}
+                    </span>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Export */}
+          <div className="relative" ref={exportDropdownRef}>
+            <button
+              onClick={() => setExportOpen((o) => !o)}
+              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-sm text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+            >
+              <span>↓</span>
+              Export
+              <span className="text-[10px]">▾</span>
+            </button>
+            {exportOpen && (
+              <div className="absolute right-0 top-full mt-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                <button
+                  onClick={() => { downloadM3U(tracks); onExport?.(); setExportOpen(false); }}
+                  className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                >
+                  Export as M3U
+                </button>
+                <button
+                  onClick={() => { onExportSpotify?.(); setExportOpen(false); }}
+                  className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                >
+                  <span className="flex-1">Export to Spotify</span>
+                  <span className="text-[10px] font-semibold bg-[#7c3aed22] text-[#a78bfa] border border-[#7c3aed44] px-1.5 py-0.5 rounded uppercase tracking-wide">Pro</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -203,38 +299,82 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
               <tr className="bg-[#0d0d14] border-b border-[#1e1e2e]">
                 <th className="py-2 pl-4 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">#</th>
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Track</th>
-                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">Time</th>
+                {visibleColumns.has('time') && (
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">Time</th>
+                )}
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">BPM</th>
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Key</th>
-                <th className="py-2 px-2 pr-4 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Energy</th>
-                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider hidden xl:table-cell">Genre</th>
+                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Energy</th>
+                {visibleColumns.has('genre') && (
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Genre</th>
+                )}
+                {visibleColumns.has('year') && (
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Year</th>
+                )}
+                {visibleColumns.has('comment') && (
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Comments</th>
+                )}
                 <th className="py-2 pl-2 pr-4 text-right text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {tracks.map((track, idx) => (
-                <TrackRow
-                  key={track.file}
-                  track={track}
-                  index={idx}
-                  fitInfo={computeFit(track, idx > 0 ? tracks[idx - 1] : null, prefs)}
-                  onSwap={() => onSwapTrack(idx)}
-                  onRemove={() => onRemoveTrack(idx)}
-                  onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}
-                  onDragStart={() => setDraggingIdx(idx)}
-                  onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
-                  onDragOver={(e) => { e.preventDefault(); if (draggingIdx !== null && draggingIdx !== idx) setDragOverIdx(idx); }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (draggingIdx !== null && draggingIdx !== idx) {
-                      onReorderTrack(draggingIdx, idx);
-                    }
-                    setDraggingIdx(null);
-                    setDragOverIdx(null);
-                  }}
-                  isDragOver={dragOverIdx === idx}
-                />
-              ))}
+              {tracks.map((track, idx) => {
+                const prevTrack = idx > 0 ? tracks[idx - 1] : null;
+                const bpmDelta = prevTrack && track.bpm > 0 && prevTrack.bpm > 0
+                  ? Math.abs(track.bpm - prevTrack.bpm)
+                  : 0;
+                const bpmDir = prevTrack && track.bpm > 0 && prevTrack.bpm > 0
+                  ? (track.bpm >= prevTrack.bpm ? '▲' : '▼')
+                  : '';
+                const bpmDeltaColor = bpmDelta <= 8 ? '#475569' : bpmDelta <= 15 ? '#f59e0b' : '#ef4444';
+
+                return (
+                  <React.Fragment key={track.file}>
+                    {bpmDelta > 0 && (
+                      <tr>
+                        <td
+                          colSpan={totalCols}
+                          className="text-center"
+                          style={{ height: '16px', padding: '0', lineHeight: '16px' }}
+                        >
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              color: bpmDeltaColor,
+                              fontVariantNumeric: 'tabular-nums',
+                              letterSpacing: '0.02em',
+                            }}
+                          >
+                            {bpmDir}{Math.round(bpmDelta)} BPM
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                    <TrackRow
+                      track={track}
+                      index={idx}
+                      fitInfo={computeFit(track, prevTrack, prefs)}
+                      visibleColumns={visibleColumns}
+                      totalCols={totalCols}
+                      onSwap={() => onSwapTrack(idx)}
+                      onRemove={() => onRemoveTrack(idx)}
+                      onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}
+                      onDragStart={() => setDraggingIdx(idx)}
+                      onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
+                      onDragOver={(e) => { e.preventDefault(); if (draggingIdx !== null && draggingIdx !== idx) setDragOverIdx(idx); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggingIdx !== null && draggingIdx !== idx) {
+                          onReorderTrack(draggingIdx, idx);
+                        }
+                        setDraggingIdx(null);
+                        setDragOverIdx(null);
+                      }}
+                      isDragOver={dragOverIdx === idx}
+                    />
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

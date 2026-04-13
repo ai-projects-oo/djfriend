@@ -2,12 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { RefreshCcw, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { SetTrack } from '../types';
 import { parseCamelot } from '../lib/camelot';
-import type { FitInfo } from './SetTracklist';
+import { camelotColor } from '../lib/camelotColors';
+import type { FitInfo, ColumnKey } from './SetTracklist';
 
 interface Props {
   track: SetTrack;
   index: number;
   fitInfo?: FitInfo;
+  visibleColumns: Set<ColumnKey>;
+  totalCols: number;
   onSwap: () => void;
   onRemove: () => void;
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
@@ -19,11 +22,6 @@ interface Props {
   isDragOver?: boolean;
 }
 
-const CAMELOT_COLORS: Record<string, string> = {
-  A: '#06b6d4',
-  B: '#7c3aed',
-};
-
 const KEY_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B']
 const CAMELOT_MAJOR = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B']
 const CAMELOT_MINOR = ['5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A']
@@ -33,14 +31,9 @@ for (let i = 0; i < 12; i++) {
   CAMELOT_TO_KEY[CAMELOT_MINOR[i].toLowerCase()] = `${KEY_NAMES[i]} Minor`
 }
 
-function camelotBadgeColor(camelot: string): string {
-  const letter = camelot.slice(-1).toUpperCase();
-  return CAMELOT_COLORS[letter] ?? '#6b7280';
-}
-
 function energyBarColor(energy: number): string {
-  if (energy < 0.4) return '#22c55e';
-  if (energy < 0.7) return '#eab308';
+  if (energy < 0.4) return '#3b82f6';
+  if (energy < 0.7) return '#a855f7';
   return '#ef4444';
 }
 
@@ -50,14 +43,17 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function getCompatibleKeys(camelot: string): string[] {
+function getCompatibleKeys(camelot: string): { standard: string[]; boost: string[] } {
   const parsed = parseCamelot(camelot);
-  if (!parsed) return [];
+  if (!parsed) return { standard: [], boost: [] };
   const { num, letter } = parsed;
   const other = letter === 'A' ? 'B' : 'A';
   const prev = num === 1 ? 12 : num - 1;
   const next = num === 12 ? 1 : num + 1;
-  return [`${prev}${letter}`, `${next}${letter}`, `${num}${other}`];
+  return {
+    standard: [`${prev}${letter}`, `${next}${letter}`, `${num}${other}`],
+    boost:    [`${next}${other}`, `${prev}${other}`],
+  };
 }
 
 const TAG_COLORS: Record<string, { bg: string; text: string }> = {
@@ -80,7 +76,7 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, visibleColumns, totalCols, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
   const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showFitTooltip, setShowFitTooltip] = useState(false);
@@ -111,12 +107,8 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
   const isLocal = Boolean(track.filePath);
   const isMp3 = track.filePath?.toLowerCase().endsWith('.mp3') ?? false;
 
-  const energyDelta = track.energy - track.targetEnergy;
-  const absDelta = Math.abs(energyDelta);
-  const deltaColor = absDelta <= 0.05 ? '#22c55e' : absDelta <= 0.15 ? '#eab308' : '#f97316';
-  const deltaSign = energyDelta >= 0 ? '+' : '';
 
-  const compatibleKeys = getCompatibleKeys(track.camelot);
+  const { standard: compatibleKeys, boost: boostKeys } = getCompatibleKeys(track.camelot);
 
   function openEdit() {
     setEditTitle(track.title);
@@ -202,24 +194,28 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
       >
         {/* # */}
         <td className="py-3 pl-4 pr-2 w-10">
-          <div className="relative flex items-center gap-1.5">
-            <span
-              className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
-              title="Drag to reorder"
-            >
-              {index + 1}
-            </span>
-            <button
-              onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
-              className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-              title="Play in Apple Music"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            </button>
+          <div className="flex flex-col items-center gap-1">
+            {/* Number / play toggle */}
+            <div className="relative w-5 h-4 flex items-center justify-center">
+              <span
+                className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
+                title="Drag to reorder"
+              >
+                {index + 1}
+              </span>
+              <button
+                onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+                className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+                title="Play in Apple Music"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </button>
+            </div>
+            {/* Fit dot — always visible when there's an issue */}
             {fitInfo && fitInfo.level !== 'good' && (
-              <div className="relative flex-shrink-0">
+              <div className="relative">
                 <span
-                  className="cursor-help text-[8px] leading-none select-none"
+                  className="cursor-help text-[8px] leading-none select-none block"
                   style={{ color: fitInfo.level === 'bad' ? '#ef4444' : '#f59e0b' }}
                   onMouseEnter={() => setShowFitTooltip(true)}
                   onMouseLeave={() => setShowFitTooltip(false)}
@@ -227,7 +223,7 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
                   ●
                 </span>
                 {showFitTooltip && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none"
+                  <div className="absolute top-full left-0 mt-1 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none"
                     style={{ borderColor: fitInfo.level === 'bad' ? '#ef444466' : '#f59e0b66' }}
                   >
                     <p className="text-[10px] font-semibold mb-1.5"
@@ -278,10 +274,12 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
           </div>
         </td>
 
-        {/* Duration */}
-        <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
-          {track.duration != null ? formatDuration(track.duration) : '—'}
-        </td>
+        {/* Duration — optional */}
+        {visibleColumns.has('time') && (
+          <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
+            {track.duration != null ? formatDuration(track.duration) : '—'}
+          </td>
+        )}
 
         {/* BPM */}
         <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
@@ -294,7 +292,7 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
             {track.camelot ? (
               <span
                 className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold cursor-help"
-                style={{ backgroundColor: camelotBadgeColor(track.camelot) + '33', color: camelotBadgeColor(track.camelot), border: `1px solid ${camelotBadgeColor(track.camelot)}66` }}
+                style={{ backgroundColor: camelotColor(track.camelot) + '26', color: camelotColor(track.camelot), border: `1px solid ${camelotColor(track.camelot)}66` }}
                 onMouseEnter={() => setShowKeyTooltip(true)}
                 onMouseLeave={() => setShowKeyTooltip(false)}
               >
@@ -310,51 +308,90 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
               </button>
             )}
             {showKeyTooltip && track.camelot && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap">
-                {compatibleKeys.length > 0
-                  ? `Compatible: ${compatibleKeys.join(', ')}`
-                  : track.camelot}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1">
+                {compatibleKeys.length > 0 && (
+                  <span><span className="text-[#64748b]">Compatible: </span>{compatibleKeys.join(', ')}</span>
+                )}
+                {boostKeys.length > 0 && (
+                  <span><span className="text-[#f59e0b]">Energy boost: </span><span className="text-[#fbbf24]">{boostKeys.join(', ')}</span></span>
+                )}
               </div>
             )}
           </div>
         </td>
 
-        {/* Energy bar + delta */}
+        {/* Energy bar + decimal */}
         <td className="py-3 px-2 pr-4">
           <div className="flex items-center gap-2">
-            <div className="w-16 h-2 rounded-full bg-[#1e1e2e] overflow-hidden flex-shrink-0">
+            {/* Bar container: 56px wide, 4px tall, with target tick overlay */}
+            <div
+              className="relative flex-shrink-0 rounded-full bg-[#1e1e2e]"
+              style={{ width: 56, height: 4 }}
+              title={`Energy: ${track.energy.toFixed(2)} · Target: ${track.targetEnergy.toFixed(2)}`}
+            >
+              {/* Filled portion */}
               <div
                 className="h-full rounded-full transition-all"
-                style={{ width: `${(track.energy * 100).toFixed(1)}%`, backgroundColor: barColor }}
+                style={{
+                  width: `${Math.min(track.energy * 100, 100).toFixed(1)}%`,
+                  backgroundColor: barColor,
+                }}
+              />
+              {/* Target energy tick: 1px wide, 6px tall, centred vertically on the 4px bar */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{
+                  left: `${Math.min(Math.max(track.targetEnergy * 100, 0), 100).toFixed(1)}%`,
+                  width: 1,
+                  height: 6,
+                  backgroundColor: 'rgba(255,255,255,0.4)',
+                  transform: 'translate(-50%, -50%)',
+                }}
               />
             </div>
-            <span className="text-[10px] text-[#475569] tabular-nums w-8">
-              {(track.energy * 100).toFixed(0)}%
-            </span>
-            <span
-              className="text-[10px] tabular-nums w-9 hidden xl:inline"
-              style={{ color: deltaColor }}
-              title={`Target: ${(track.targetEnergy * 100).toFixed(0)}%`}
-            >
-              {deltaSign}{(energyDelta * 100).toFixed(0)}%
+            {/* Decimal value */}
+            <span className="text-[10px] text-[#64748b] tabular-nums">
+              {track.energy.toFixed(2)}
             </span>
           </div>
         </td>
 
-        {/* Genre */}
-        <td className="py-3 px-2 hidden xl:table-cell">
-          {track.genres && track.genres.length > 0 ? (
-            <span
-              className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
-              title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
-            >
-              {track.genres.slice(0, 2).join(' · ')}
-              {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
-            </span>
-          ) : (
-            <span className="text-[10px] text-[#2a2a3a]">—</span>
-          )}
-        </td>
+        {/* Genre — optional */}
+        {visibleColumns.has('genre') && (
+          <td className="py-3 px-2">
+            {track.genres && track.genres.length > 0 ? (
+              <span
+                className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
+                title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
+              >
+                {track.genres.slice(0, 2).join(' · ')}
+                {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
+              </span>
+            ) : (
+              <span className="text-[10px] text-[#2a2a3a]">—</span>
+            )}
+          </td>
+        )}
+
+        {/* Year — optional */}
+        {visibleColumns.has('year') && (
+          <td className="py-3 px-2 text-[#475569] text-xs tabular-nums">
+            {track.year ?? <span className="text-[#2a2a3a]">—</span>}
+          </td>
+        )}
+
+        {/* Comments — optional */}
+        {visibleColumns.has('comment') && (
+          <td className="py-3 px-2 max-w-[180px]">
+            {track.comment ? (
+              <span className="text-[10px] text-[#475569] truncate block" title={track.comment}>
+                {track.comment}
+              </span>
+            ) : (
+              <span className="text-[10px] text-[#2a2a3a]">—</span>
+            )}
+          </td>
+        )}
 
         {/* Actions */}
         <td className="py-3 pl-2 pr-4 text-right">
@@ -400,7 +437,7 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
       {/* AI tags row */}
       {showTags && track.semanticTags && (
         <tr className="border-b border-[#1e1e2e] bg-[#0a0a12]">
-          <td colSpan={8} className="px-4 py-2.5">
+          <td colSpan={totalCols} className="px-4 py-2.5">
             <div className="flex flex-wrap gap-x-4 gap-y-2">
               {track.semanticTags.vibeTags.length > 0 && (
                 <div className="flex items-center gap-1.5">

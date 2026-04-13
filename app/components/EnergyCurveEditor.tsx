@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { CurvePoint, ArcPreset } from '../types';
+import type { CurvePoint, ArcPreset, SetTrack } from '../types';
 import { buildSvgPath, sampleCurve } from '../lib/curveInterpolation';
 
 const SVG_HEIGHT = 180;
@@ -26,9 +26,10 @@ export const DEFAULT_CURVE: CurvePoint[] = [
 interface Props {
   points: CurvePoint[];
   onChange: (points: CurvePoint[]) => void;
+  setTracks?: SetTrack[]; // overlay actual track energies as dots
 }
 
-export default function EnergyCurveEditor({ points, onChange }: Props) {
+export default function EnergyCurveEditor({ points, onChange, setTracks }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgWidth, setSvgWidth] = useState(600);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
@@ -258,6 +259,32 @@ export default function EnergyCurveEditor({ points, onChange }: Props) {
               )}
             </g>
           ))}
+
+          {/* Actual track energy overlay dots */}
+          {setTracks && setTracks.length > 1 && setTracks.map((t, i) => {
+            const xPos = i / (setTracks.length - 1);
+            const cx = toSvgX(xPos);
+            const cy = toSvgY(t.energy);
+            const targetCy = toSvgY(t.targetEnergy);
+            const delta = Math.abs(t.energy - t.targetEnergy);
+            const dotColor = delta <= 0.15 ? '#22c55e' : delta <= 0.30 ? '#f59e0b' : '#ef4444';
+            return (
+              <g key={t.file}>
+                {/* Vertical line from target to actual */}
+                <line x1={cx} y1={targetCy} x2={cx} y2={cy} stroke={dotColor} strokeWidth={1} strokeOpacity={0.3} />
+                {/* Actual energy dot */}
+                <circle
+                  cx={cx} cy={cy} r={t.locked ? 4 : 3}
+                  fill={dotColor}
+                  fillOpacity={0.85}
+                  stroke={t.locked ? '#f59e0b' : dotColor}
+                  strokeWidth={t.locked ? 1.5 : 0}
+                >
+                  <title>{t.title} — E:{t.energy.toFixed(2)} target:{t.targetEnergy.toFixed(2)}{t.locked ? ' 🔒' : ''}</title>
+                </circle>
+              </g>
+            );
+          })}
 
           {/* X-axis labels */}
           <text x={toSvgX(0)} y={SVG_HEIGHT - 4} textAnchor="start" fill="#475569" fontSize={10}>0%</text>

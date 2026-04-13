@@ -12,6 +12,7 @@ interface Props {
   visibleColumns: Set<ColumnKey>;
   totalCols: number;
   onSwap: () => void;
+  onToggleLock: () => void;
   onRemove: () => void;
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
   // drag-to-reorder
@@ -76,7 +77,7 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, visibleColumns, totalCols, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, visibleColumns, totalCols, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
   const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showFitTooltip, setShowFitTooltip] = useState(false);
@@ -182,7 +183,7 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
   return (
     <>
       <tr
-        className={`border-b border-[#1e1e2e] group ${swapFlash ? 'bg-green-900/20' : 'hover:bg-[#12121a]'} ${isDragOver ? 'border-t-2 border-t-[#7c3aed]' : ''}`}
+        className={`border-b border-[#1e1e2e] group ${swapFlash ? 'bg-green-900/20' : track.locked ? 'bg-[#f59e0b08]' : 'hover:bg-[#12121a]'} ${isDragOver ? 'border-t-2 border-t-[#7c3aed]' : ''}`}
         style={rowStyle}
         data-warning={track.harmonicWarning ? 'true' : undefined}
         data-fit={fitInfo && fitInfo.level !== 'good' ? fitInfo.level : undefined}
@@ -407,6 +408,15 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
         {/* Actions */}
         <td className="py-3 pl-2 pr-4 text-right">
           <div className="flex items-center justify-end gap-1">
+            {/* Lock / unlock */}
+            <button
+              onClick={onToggleLock}
+              title={track.locked ? 'Unlock track (will be replaced on regenerate)' : 'Lock track (preserve on regenerate)'}
+              aria-label={track.locked ? 'Unlock track' : 'Lock track'}
+              className={`px-2 py-1 text-[11px] rounded-md border transition-colors cursor-pointer ${track.locked ? 'border-[#f59e0b] bg-[#f59e0b1a] text-[#fbbf24]' : 'border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#f59e0b] hover:text-[#f59e0b]'}`}
+            >
+              {track.locked ? '🔒' : '🔓'}
+            </button>
             {track.semanticTags && (
               <button
                 onClick={() => setShowTags(s => !s)}

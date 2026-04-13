@@ -279,6 +279,7 @@ function AppInner() {
     handleCurveChange,
     handleSwapTrack,
     applySwapSuggestion,
+    handleToggleLock,
     handleRemoveTrack,
     handleReorderTrack,
     handleUpdateTrack,
@@ -712,7 +713,7 @@ function AppInner() {
                   </h2>
 
                 </div>
-                <EnergyCurveEditor points={curve} onChange={handleCurveChange} />
+                <EnergyCurveEditor points={curve} onChange={handleCurveChange} setTracks={generatedSet.length > 0 ? generatedSet : undefined} />
               </div>
 
               {/* Card 2: Filters (only when tag data exists) */}
@@ -1065,6 +1066,7 @@ function AppInner() {
                   prefs={prefs}
                   libraryLoaded={library.length > 0}
                   onSwapTrack={handleSwapTrack}
+                  onToggleLock={handleToggleLock}
                   onRemoveTrack={handleRemoveTrack}
                   onReorderTrack={handleReorderTrack}
                   onUpdateTrack={handleUpdateTrack}

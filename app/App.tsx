@@ -5,6 +5,7 @@ import type {
 import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
 import SettingsModal from "./components/SettingsModal";
+import AIPlannerPanel from "./components/AIPlannerPanel";
 import HistoryTab from "./components/HistoryTab";
 import { genreMatchesUmbrella, TAG_GROUPS } from "./lib/genreUtils";
 import {
@@ -116,6 +117,8 @@ function AppInner() {
   );
   const historyExportRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [hasGroqKey, setHasGroqKey] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(() =>
     localStorage.getItem('djfriend-onboarding-dismissed') === 'true'
   );
@@ -263,6 +266,7 @@ function AppInner() {
     setCurve,
     generatedSet,
     setGeneratedSet,
+    setScoringWeights,
     swapModal,
     setSwapModal,
     availableGenres,
@@ -294,6 +298,15 @@ function AppInner() {
       setPrefs(p => p.setDuration !== minViablePill ? { ...p, setDuration: minViablePill } : p);
     }
   }, [minViablePill, setPrefs]);
+
+  const handleApplyPlan = useCallback((plan: import('./types').SetPlan) => {
+    setCurve(plan.curve);
+    setScoringWeights(plan.scoringWeights);
+    if (plan.venueType) setPrefs(p => ({ ...p, venueType: plan.venueType as import('./types').VenueType }));
+    if (plan.genre) setPrefs(p => ({ ...p, genre: plan.genre! }));
+    if (plan.setDuration) setPrefs(p => ({ ...p, setDuration: plan.setDuration! }));
+    setChatOpen(false);
+  }, [setCurve, setScoringWeights, setPrefs]);
 
   const handleLoadHistoryEntry = useCallback((entry: HistoryEntry) => {
     setPrefs({ ...entry.prefs, addedTimeFilter: entry.prefs.addedTimeFilter ?? 'all' });
@@ -337,10 +350,11 @@ function AppInner() {
 
   const loadSettings = useCallback(() => {
     apiFetch('/api/settings')
-      .then(r => r.json() as Promise<{ musicFolder?: string; playlistsFolder?: string }>)
+      .then(r => r.json() as Promise<{ musicFolder?: string; playlistsFolder?: string; hasGroqKey?: boolean }>)
       .then(d => {
         if (d.musicFolder) setFolderPath(prev => prev || d.musicFolder!)
         if (d.playlistsFolder !== undefined) setPlaylistsFolder(d.playlistsFolder)
+        if (d.hasGroqKey !== undefined) setHasGroqKey(d.hasGroqKey)
       })
       .catch(() => {})
   }, [setFolderPath]);
@@ -486,6 +500,18 @@ function AppInner() {
               </div>
             )}
             <div className="relative">
+              {hasGroqKey && (
+                <button
+                  onClick={() => setChatOpen(o => !o)}
+                  title="AI Set Planner"
+                  aria-label="AI Set Planner"
+                  className={`p-1.5 transition-colors cursor-pointer ${chatOpen ? 'text-[#7c3aed]' : 'text-[#475569] hover:text-[#94a3b8]'}`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={() => { setSettingsOpen(true); if (!onboardingDismissed) { setOnboardingDismissed(true); localStorage.setItem('djfriend-onboarding-dismissed', 'true'); } }}
                 title="Settings"
@@ -1923,6 +1949,14 @@ function AppInner() {
           </div>
         </div>
       )}
+
+      <AIPlannerPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        availableGenres={availableGenres}
+        librarySize={library.length}
+        onApplyPlan={handleApplyPlan}
+      />
 
       <SettingsModal
         open={settingsOpen}

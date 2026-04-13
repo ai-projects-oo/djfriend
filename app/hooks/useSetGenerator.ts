@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from "react";
-import type { Song, SetTrack, DJPreferences, CurvePoint } from "../types";
+import type { Song, SetTrack, DJPreferences, CurvePoint, ScoringWeights } from "../types";
 import { DEFAULT_PREFS, matchesGenrePref, genreMatchesUmbrella, TAG_GROUPS, BEATPORT_UMBRELLAS } from "../lib/genreUtils";
 import { clamp } from "../lib/genreUtils";
 import { DEFAULT_CURVE } from "../components/EnergyCurveEditor";
@@ -21,6 +21,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const [prefs, setPrefs] = useState<DJPreferences>(DEFAULT_PREFS);
   const [curve, setCurve] = useState<CurvePoint[]>(DEFAULT_CURVE);
   const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
+  const [scoringWeights, setScoringWeights] = useState<ScoringWeights | undefined>(undefined);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [swapModal, setSwapModal] = useState<{
     index: number;
@@ -122,9 +123,9 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const runGenerate = useCallback(
     (songs: Song[], p: DJPreferences, c: CurvePoint[], extraOpts?: { jitter?: number; excludeFiles?: Set<string> }) => {
       if (songs.length === 0) return;
-      setGeneratedSet(generateSet(songs, p, c, { ...extraOpts, playlistFilterFiles }));
+      setGeneratedSet(generateSet(songs, p, c, { ...extraOpts, playlistFilterFiles, weights: scoringWeights }));
     },
-    [playlistFilterFiles],
+    [playlistFilterFiles, scoringWeights],
   );
 
   /**
@@ -152,23 +153,22 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   const handleGenerate = useCallback(() => {
     const lockedFiles = new Set(generatedSet.filter(t => t.locked).map(t => t.file));
-    const fresh = generateSet(library, prefs, curve, { excludeFiles: lockedFiles, playlistFilterFiles });
+    const fresh = generateSet(library, prefs, curve, { excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights });
     setGeneratedSet(mergeWithLocked(fresh));
-  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles]);
+  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights]);
 
   const handleRegenerate = useCallback(() => {
     if (library.length === 0) return;
     const lockedFiles = new Set(generatedSet.filter(t => t.locked).map(t => t.file));
-    const fresh = generateSet(library, prefs, curve, { jitter: 0.4, excludeFiles: lockedFiles, playlistFilterFiles });
+    const fresh = generateSet(library, prefs, curve, { jitter: 0.4, excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights });
     setGeneratedSet(mergeWithLocked(fresh));
-  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles]);
+  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights]);
 
   const handleGenerateNew = useCallback(() => {
     if (library.length === 0) return;
     const excludeFiles = new Set(generatedSet.map(t => t.file));
-    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15, playlistFilterFiles }));
-
-  }, [library, prefs, curve, generatedSet, playlistFilterFiles]);
+    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15, playlistFilterFiles, weights: scoringWeights }));
+  }, [library, prefs, curve, generatedSet, playlistFilterFiles, scoringWeights]);
 
   const selectGenre = useCallback((genre: string) => {
     if (genre === 'Any') {
@@ -354,6 +354,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
       jitter: 0.15,
       playlistFilterFiles,
       maxDurationSeconds: remainingSeconds,
+      weights: scoringWeights,
     });
     if (appended.length === 0) return;
     setGeneratedSet(prev => {
@@ -364,7 +365,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
         harmonicWarning: i > 0 ? isHarmonicWarning(combined[i - 1].camelot, track.camelot) : false,
       }));
     });
-  }, [library, prefs, curve, generatedSet, playlistFilterFiles]);
+  }, [library, prefs, curve, generatedSet, playlistFilterFiles, scoringWeights]);
 
   const handleToggleLock = useCallback((index: number) => {
     setGeneratedSet(prev => prev.map((t, i) => i === index ? { ...t, locked: !t.locked } : t));
@@ -427,6 +428,8 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     setCurve,
     generatedSet,
     setGeneratedSet,
+    scoringWeights,
+    setScoringWeights,
     debounceRef,
     swapModal,
     setSwapModal,

@@ -186,6 +186,96 @@ export async function analyzeTracksWithAI(
   return result
 }
 
+// ─── Phase 3: AI Venue Planner ────────────────────────────────────────────────
+
+export const PLANNER_SYSTEM_PROMPT = `You are an expert DJ set planner. Given a description of a gig, return a JSON object that describes how to configure the set generator.
+
+Return ONLY a JSON object with these fields:
+- "curve": array of 5 objects {x, y} where x goes 0, 0.25, 0.5, 0.75, 1.0 and y is 0–1 energy
+- "bpmMin": integer minimum BPM for the set (e.g. 124)
+- "bpmMax": integer maximum BPM for the set (e.g. 140)
+- "bpmTarget": integer ideal BPM for the peak (e.g. 132)
+- "scoringWeights": object with harmonicWeight (0–1), bpmWeight (0–1), transitionWeight (0–1) — three values that sum to ~1.0
+- "venueType": one of "Club", "Bar", "Festival", "Private event", "Corporate", "Wedding" (or omit if unclear)
+- "genre": primary genre string or "Any"
+- "setDuration": set length in minutes (integer, or omit if not specified)
+- "reasoning": one sentence explaining your choices
+
+Scoring weight guidance:
+- Club/festival: harmonicWeight 0.6, bpmWeight 0.3, transitionWeight 0.1
+- Bar/lounge: harmonicWeight 0.5, bpmWeight 0.2, transitionWeight 0.3
+- Wedding/corporate: harmonicWeight 0.4, bpmWeight 0.2, transitionWeight 0.4
+
+Curve presets:
+- Warm-up/opening: y values [0.2, 0.4, 0.6, 0.75, 0.85]
+- Peak time: y values [0.6, 0.8, 0.95, 0.85, 0.7]
+- Closing: y values [0.8, 0.7, 0.6, 0.4, 0.25]
+- All-night: y values [0.3, 0.6, 0.9, 0.75, 0.5]`
+
+export interface SetPlan {
+  curve:          Array<{ x: number; y: number }>
+  bpmMin:         number
+  bpmMax:         number
+  bpmTarget:      number
+  scoringWeights: { harmonicWeight: number; bpmWeight: number; transitionWeight: number }
+  venueType?:     string
+  genre?:         string
+  setDuration?:   number
+  reasoning:      string
+}
+
+export async function planSet(
+  prompt: string,
+  context: { availableGenres: string[]; librarySize: number },
+  apiKey: string
+): Promise<SetPlan> {
+  const client = getGroqClient(apiKey)
+  const completion = await client.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: PLANNER_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `Gig description: ${prompt}\n\nAvailable genres in library: ${context.availableGenres.slice(0, 20).join(', ') || 'unknown'}. Library size: ${context.librarySize} tracks.`,
+      },
+    ],
+  })
+
+  const raw = completion.choices[0]?.message?.content ?? '{}'
+  let parsed: unknown
+  try { parsed = JSON.parse(raw) } catch { parsed = {} }
+  const p = parsed as Record<string, unknown>
+
+  // Validate and normalise the response
+  const curve = Array.isArray(p.curve) && p.curve.length >= 2
+    ? (p.curve as Array<Record<string, unknown>>).map((pt, i, arr) => ({
+        x: typeof pt.x === 'number' ? pt.x : i / (arr.length - 1),
+        y: typeof pt.y === 'number' ? Math.max(0, Math.min(1, pt.y)) : 0.5,
+      }))
+    : [{ x: 0, y: 0.3 }, { x: 0.25, y: 0.6 }, { x: 0.5, y: 0.9 }, { x: 0.75, y: 0.7 }, { x: 1, y: 0.5 }]
+
+  const weights = (p.scoringWeights && typeof p.scoringWeights === 'object')
+    ? p.scoringWeights as Record<string, unknown>
+    : {}
+
+  return {
+    curve,
+    bpmMin:     typeof p.bpmMin === 'number'    ? Math.round(p.bpmMin)    : 120,
+    bpmMax:     typeof p.bpmMax === 'number'    ? Math.round(p.bpmMax)    : 145,
+    bpmTarget:  typeof p.bpmTarget === 'number' ? Math.round(p.bpmTarget) : 130,
+    scoringWeights: {
+      harmonicWeight:   typeof weights.harmonicWeight === 'number'   ? weights.harmonicWeight   : 0.55,
+      bpmWeight:        typeof weights.bpmWeight === 'number'        ? weights.bpmWeight        : 0.25,
+      transitionWeight: typeof weights.transitionWeight === 'number' ? weights.transitionWeight : 0.10,
+    },
+    venueType:   typeof p.venueType === 'string'   ? p.venueType   : undefined,
+    genre:       typeof p.genre === 'string'       ? p.genre       : undefined,
+    setDuration: typeof p.setDuration === 'number' ? Math.round(p.setDuration) : undefined,
+    reasoning:   typeof p.reasoning === 'string'   ? p.reasoning   : '',
+  }
+}
+
 export async function enrichTracks(
   resultsMap: Record<string, EnrichableTrack>,
   apiKey: string,

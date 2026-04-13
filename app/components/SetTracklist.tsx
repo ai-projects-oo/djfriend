@@ -276,6 +276,18 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
             {exportOpen && (
               <div className="absolute right-0 top-full mt-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
                 <button
+                  onClick={() => {
+                    const text = tracks.map((t, i) =>
+                      `${i + 1}. ${t.artist} — ${t.title}${t.bpm > 0 ? `  ${Math.round(t.bpm)} BPM` : ''}${t.camelot ? `  ${t.camelot}` : ''}`
+                    ).join('\n');
+                    void navigator.clipboard.writeText(text);
+                    setExportOpen(false);
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                >
+                  Copy as text
+                </button>
+                <button
                   onClick={() => { downloadM3U(tracks); onExport?.(); setExportOpen(false); }}
                   className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >

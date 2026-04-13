@@ -203,13 +203,24 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
               >
                 {index + 1}
               </span>
-              <button
-                onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
-                className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-                title="Play in Apple Music"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              </button>
+              <div className="hidden group-hover:flex items-center gap-1">
+                <button
+                  onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+                  className="flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+                  title="Play in Apple Music"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </button>
+                {track.filePath && (
+                  <button
+                    onClick={() => void fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath }) })}
+                    className="flex items-center justify-center text-[#475569] hover:text-[#94a3b8] cursor-pointer transition-colors"
+                    title="Reveal in Finder"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  </button>
+                )}
+              </div>
             </div>
             {/* Fit dot — always visible when there's an issue */}
             {fitInfo && fitInfo.level !== 'good' && (

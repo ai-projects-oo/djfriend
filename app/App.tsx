@@ -263,8 +263,6 @@ function AppInner() {
     setCurve,
     generatedSet,
     setGeneratedSet,
-    anchored,
-    setAnchored,
     swapModal,
     setSwapModal,
     availableGenres,
@@ -288,7 +286,7 @@ function AppInner() {
   } = useSetGenerator(library, setLibrary, playlistFilterFiles);
 
   // Wire setGeneratedSet into the bridge ref so useLibrary can reset the set on new analysis
-  onNewAnalysisRef.current = () => { setGeneratedSet([]); setAnchored(false); };
+  onNewAnalysisRef.current = () => { setGeneratedSet([]); };
 
   // Auto-select the min viable duration pill when playlist mode activates or playlist changes
   useEffect(() => {
@@ -952,15 +950,15 @@ function AppInner() {
                 {/* Primary CTA — Generate */}
                 <button
                   onClick={() => {
-                    if (anchored || library.length === 0 || isGenerating) return;
+                    if (library.length === 0 || isGenerating) return;
                     setIsGenerating(true);
                     setTimeout(() => {
                       handleGenerate();
                       setIsGenerating(false);
                     }, 0);
                   }}
-                  disabled={anchored || library.length === 0 || isGenerating}
-                  title={anchored ? 'Set is anchored' : 'Generate a new set'}
+                  disabled={library.length === 0 || isGenerating}
+                  title="Generate a new set"
                   aria-label="Generate set"
                   className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
                   style={{
@@ -1003,7 +1001,7 @@ function AppInner() {
                 </button>
                 {/* Secondary actions — subordinate ghost buttons */}
                 <div className="flex gap-2">
-                  <button onClick={handleRegenerate} disabled={anchored || library.length === 0} title={anchored ? 'Set is anchored' : 'Different mix from the same tracks'}
+                  <button onClick={handleRegenerate} disabled={library.length === 0} title="Different mix from the same tracks"
                     className="flex-1 flex items-center justify-center gap-1.5 border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#64748b] hover:text-[#94a3b8] text-xs font-medium py-1.5 rounded-md transition-all duration-200 cursor-pointer">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -1011,8 +1009,8 @@ function AppInner() {
                     </svg>
                     Shuffle
                   </button>
-                  <button onClick={handleGenerateNew} disabled={anchored || !canGenerateNew}
-                    title={anchored ? 'Set is anchored' : canGenerateNew ? 'Generate from tracks not in the current set' : 'Not enough tracks outside the current set'}
+                  <button onClick={handleGenerateNew} disabled={!canGenerateNew}
+                    title={canGenerateNew ? 'Generate from tracks not in the current set' : 'Not enough tracks outside the current set'}
                     className="flex-1 flex items-center justify-center gap-1.5 border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#64748b] hover:text-[#94a3b8] text-xs font-medium py-1.5 rounded-md transition-all duration-200 cursor-pointer">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
@@ -1021,7 +1019,7 @@ function AppInner() {
                     New tracks
                   </button>
                 </div>
-                {anchored && generatedSet.length > 0 && (
+                {generatedSet.length > 0 && (
                   <button
                     onClick={handleAppendTracks}
                     disabled={library.length === 0}
@@ -1046,20 +1044,6 @@ function AppInner() {
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
                     Generated Set
                   </h2>
-                  {generatedSet.length > 0 && (
-                    <button
-                      onClick={() => setAnchored(a => !a)}
-                      title={anchored ? 'Anchored — generate buttons are locked. Click to unlock.' : 'Anchor this set — prevent generate buttons from replacing it'}
-                      className={`transition-colors cursor-pointer ${anchored ? 'text-[#7c3aed]' : 'text-[#475569] hover:text-[#94a3b8]'}`}
-                      aria-label="Anchor set"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="5" r="3"/>
-                        <line x1="12" y1="8" x2="12" y2="21"/>
-                        <path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
-                      </svg>
-                    </button>
-                  )}
                 </div>
                 <SetTracklist
                   tracks={generatedSet}

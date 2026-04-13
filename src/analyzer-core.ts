@@ -16,6 +16,8 @@ export interface LocalAudioFeatures {
   pitchClass: number; // 0–11 (matches Spotify pitch class, compatible with camelot.ts)
   mode: number;       // 1=major, 0=minor
   energy: number;     // 0–1 normalized via dBFS
+  year?: number;      // ID3 year tag
+  comment?: string;   // ID3 first comment frame
 }
 
 // Essentia's KeyExtractor returns key names using sharps/flats
@@ -126,10 +128,15 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     const decodeAudio = (require('audio-decode') as { default: (buf: Buffer) => Promise<AudioBuffer> }).default;
     // Read BPM tag before audio analysis — used to disambiguate ×2/÷2 detection errors
     let tagBpm: number | null = null;
+    let tagYear: number | undefined;
+    let tagComment: string | undefined;
     try {
       const mm = require('music-metadata') as typeof import('music-metadata');
       const meta = await mm.parseFile(filePath, { skipCovers: true, duration: false });
       if (meta.common.bpm && meta.common.bpm > 0) tagBpm = meta.common.bpm;
+      if (meta.common.year && meta.common.year > 0) tagYear = meta.common.year;
+      const rawComment = meta.common.comment;
+      if (rawComment && rawComment.length > 0) tagComment = rawComment[0].text ?? undefined;
     } catch { /* tag read failure is non-fatal */ }
 
     const fileBuffer = fs.readFileSync(filePath);
@@ -232,7 +239,7 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
 
     // Return raw BPM — callers apply genre-aware double-time correction once
     // genre data is available (see normalizeBpm in vite.config.ts / index.ts).
-    return { bpm, pitchClass, mode, energy };
+    return { bpm, pitchClass, mode, energy, year: tagYear, comment: tagComment };
   } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;

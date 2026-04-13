@@ -3,12 +3,14 @@ import { RefreshCcw, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { SetTrack } from '../types';
 import { parseCamelot } from '../lib/camelot';
 import { camelotColor } from '../lib/camelotColors';
-import type { FitInfo } from './SetTracklist';
+import type { FitInfo, ColumnKey } from './SetTracklist';
 
 interface Props {
   track: SetTrack;
   index: number;
   fitInfo?: FitInfo;
+  visibleColumns: Set<ColumnKey>;
+  totalCols: number;
   onSwap: () => void;
   onRemove: () => void;
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
@@ -74,7 +76,7 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, visibleColumns, totalCols, onSwap, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
   const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showFitTooltip, setShowFitTooltip] = useState(false);
@@ -272,10 +274,12 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
           </div>
         </td>
 
-        {/* Duration */}
-        <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
-          {track.duration != null ? formatDuration(track.duration) : '—'}
-        </td>
+        {/* Duration — optional */}
+        {visibleColumns.has('time') && (
+          <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
+            {track.duration != null ? formatDuration(track.duration) : '—'}
+          </td>
+        )}
 
         {/* BPM */}
         <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
@@ -352,20 +356,42 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
           </div>
         </td>
 
-        {/* Genre */}
-        <td className="py-3 px-2 hidden xl:table-cell">
-          {track.genres && track.genres.length > 0 ? (
-            <span
-              className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
-              title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
-            >
-              {track.genres.slice(0, 2).join(' · ')}
-              {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
-            </span>
-          ) : (
-            <span className="text-[10px] text-[#2a2a3a]">—</span>
-          )}
-        </td>
+        {/* Genre — optional */}
+        {visibleColumns.has('genre') && (
+          <td className="py-3 px-2">
+            {track.genres && track.genres.length > 0 ? (
+              <span
+                className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
+                title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
+              >
+                {track.genres.slice(0, 2).join(' · ')}
+                {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
+              </span>
+            ) : (
+              <span className="text-[10px] text-[#2a2a3a]">—</span>
+            )}
+          </td>
+        )}
+
+        {/* Year — optional */}
+        {visibleColumns.has('year') && (
+          <td className="py-3 px-2 text-[#475569] text-xs tabular-nums">
+            {track.year ?? <span className="text-[#2a2a3a]">—</span>}
+          </td>
+        )}
+
+        {/* Comments — optional */}
+        {visibleColumns.has('comment') && (
+          <td className="py-3 px-2 max-w-[180px]">
+            {track.comment ? (
+              <span className="text-[10px] text-[#475569] truncate block" title={track.comment}>
+                {track.comment}
+              </span>
+            ) : (
+              <span className="text-[10px] text-[#2a2a3a]">—</span>
+            )}
+          </td>
+        )}
 
         {/* Actions */}
         <td className="py-3 pl-2 pr-4 text-right">
@@ -411,7 +437,7 @@ export default function TrackRow({ track, index, fitInfo, onSwap, onRemove, onUp
       {/* AI tags row */}
       {showTags && track.semanticTags && (
         <tr className="border-b border-[#1e1e2e] bg-[#0a0a12]">
-          <td colSpan={8} className="px-4 py-2.5">
+          <td colSpan={totalCols} className="px-4 py-2.5">
             <div className="flex flex-wrap gap-x-4 gap-y-2">
               {track.semanticTags.vibeTags.length > 0 && (
                 <div className="flex items-center gap-1.5">

@@ -22,6 +22,8 @@ export interface Song {
   energy: number; // 0.0 – 1.0
   genres: string[];
   genresFromSpotify?: boolean; // true = genres from Spotify API (not final), absent/false = from ID3 tags
+  year?: number;               // ID3 year tag
+  comment?: string;            // ID3 comment tag (first COMM frame)
   semanticTags?: SemanticTags;
 }
 

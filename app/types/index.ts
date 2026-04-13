@@ -80,6 +80,30 @@ export interface DJPreferences {
   addedTimeFilter: AddedTimeFilter;
 }
 
+export interface ScoringWeights {
+  harmonicWeight:   number; // default 0.55
+  bpmWeight:        number; // default 0.25
+  transitionWeight: number; // default 0.10
+}
+
+export interface SetPlan {
+  curve:          CurvePoint[];
+  bpmMin:         number;
+  bpmMax:         number;
+  bpmTarget:      number;
+  scoringWeights: ScoringWeights;
+  venueType?:     VenueType;
+  genre?:         string;
+  setDuration?:   number;
+  reasoning:      string;
+}
+
+export interface ChatMessage {
+  role:    'user' | 'assistant';
+  content: string;
+  plan?:   SetPlan;
+}
+
 export interface HistoryEntry {
   id: string;
   name: string;

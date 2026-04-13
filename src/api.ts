@@ -11,7 +11,7 @@ import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
-import { enrichTracks, analyzeTracksWithAI } from './ai.js'
+import { enrichTracks, analyzeTracksWithAI, planSet } from './ai.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -811,5 +811,28 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       writeEvent({ type: 'done', enriched: toEnrich })
       res.end()
     } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Enrichment failed.' }); res.end() }
+  })
+
+  middlewares.use('/api/ai/plan-set', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const { groqApiKey } = readSettings()
+      if (!groqApiKey) {
+        res.statusCode = 400
+        res.end(JSON.stringify({ ok: false, error: 'Groq API key not configured. Open Settings to add it.' }))
+        return
+      }
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
+      if (!prompt) { res.statusCode = 400; res.end(JSON.stringify({ ok: false, error: 'prompt is required' })); return }
+      const availableGenres = Array.isArray(body.availableGenres) ? body.availableGenres as string[] : []
+      const librarySize = typeof body.librarySize === 'number' ? body.librarySize : 0
+      const plan = await planSet(prompt, { availableGenres, librarySize }, groqApiKey)
+      res.end(JSON.stringify({ ok: true, plan }))
+    } catch (err) {
+      res.statusCode = 500
+      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Planning failed.' }))
+    }
   })
 }

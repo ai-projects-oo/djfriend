@@ -1,4 +1,4 @@
-import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, SetPhase, TagFilters } from '../types';
+import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, SetPhase, TagFilters, ScoringWeights } from '../types';
 import { camelotHarmonyScore, isHarmonicWarning, isCamelotClockwise } from './camelot';
 import { sampleCurve } from './curveInterpolation';
 import { matchesGenrePref } from './genreUtils';
@@ -102,6 +102,8 @@ export interface GenerateOptions {
   playlistFilterFiles?: Set<string>;
   /** hard cap in seconds — stop adding tracks once cumulative duration would exceed this */
   maxDurationSeconds?: number;
+  /** scoring weight overrides — defaults reproduce existing behaviour */
+  weights?: ScoringWeights;
 }
 
 export function generateSet(
@@ -201,7 +203,10 @@ export function generateSet(
       // step forward on the wheel (energy boost direction per MixedInKey).
       const boostBonus = slopeRising && prevCamelot !== null && isCamelotClockwise(prevCamelot, song.camelot) ? 0.08 : 0;
       const jitter = options?.jitter ? Math.random() * options.jitter : 0;
-      const score = harmonicScore * 0.55 + bpmScore * 0.25 + transitionScore * 0.10 + affinityBonus + semBonus + tagBonus + boostBonus + jitter;
+      const wH = options?.weights?.harmonicWeight   ?? 0.55;
+      const wB = options?.weights?.bpmWeight        ?? 0.25;
+      const wT = options?.weights?.transitionWeight ?? 0.10;
+      const score = harmonicScore * wH + bpmScore * wB + transitionScore * wT + affinityBonus + semBonus + tagBonus + boostBonus + jitter;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;

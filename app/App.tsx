@@ -26,6 +26,7 @@ import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
 import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
+import { camelotColor } from "./lib/camelotColors";
 
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -426,6 +427,18 @@ function AppInner() {
                 )}
               </span>
             )}
+            {(() => {
+              const missing = library.filter(s => s.bpm <= 0 || !s.camelot);
+              if (missing.length === 0) return null;
+              return (
+                <span
+                  className="hidden sm:inline text-xs text-[#f59e0b] bg-[#f59e0b0d] border border-[#f59e0b33] px-2 py-0.5 rounded cursor-default"
+                  title={`${missing.length} track${missing.length === 1 ? '' : 's'} missing BPM or key — rescan to fix`}
+                >
+                  ⚠ {missing.length} incomplete
+                </span>
+              );
+            })()}
             {!navigator.userAgent.toLowerCase().includes("electron") && libraryName.includes("(imported)") && (
               <span className="hidden sm:inline text-xs text-[#64748b] italic">
                 BPM/key/energy are AI-estimated — not from audio analysis
@@ -1690,20 +1703,52 @@ function AppInner() {
               </p>
             ) : (
               <div className="flex flex-col divide-y divide-[#1e1e2e]">
-                {swapModal.suggestions.map(({ song }) => (
-                  <button
-                    key={song.file}
-                    onClick={() => applySwapSuggestion(song)}
-                    className="w-full text-left px-1 py-3 hover:bg-[#0d0d14] transition-colors cursor-pointer group"
-                  >
-                    <div className="text-sm font-medium text-[#e2e8f0] truncate group-hover:text-white">
-                      {song.title}
-                    </div>
-                    <div className="text-xs text-[#64748b] truncate mt-0.5">
-                      {song.artist}
-                    </div>
-                  </button>
-                ))}
+                {swapModal.suggestions.map(({ song, breakdown }) => {
+                  const color = camelotColor(song.camelot);
+                  const eDeltaSign = breakdown.energyDelta >= 0 ? '+' : '';
+                  const harmonicOk = (breakdown.harmonicPrev ?? 1) >= 0.75 && (breakdown.harmonicNext ?? 1) >= 0.75;
+                  const bpmOk = Math.abs(breakdown.bpmDeltaPrev ?? 0) <= 8 && Math.abs(breakdown.bpmDeltaNext ?? 0) <= 8;
+                  return (
+                    <button
+                      key={song.file}
+                      onClick={() => applySwapSuggestion(song)}
+                      className="w-full text-left px-2 py-3 hover:bg-[#0d0d14] transition-colors cursor-pointer group rounded-lg"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-[#e2e8f0] truncate group-hover:text-white">
+                            {song.title}
+                          </div>
+                          <div className="text-xs text-[#64748b] truncate mt-0.5">
+                            {song.artist}
+                          </div>
+                        </div>
+                        {/* Key badge */}
+                        {song.camelot && (
+                          <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold mt-0.5"
+                            style={{ backgroundColor: color + '26', color, border: `1px solid ${color}44` }}>
+                            {song.camelot}
+                          </span>
+                        )}
+                      </div>
+                      {/* Stats row */}
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className="text-[10px] tabular-nums" style={{ color: bpmOk ? '#475569' : '#f59e0b' }}>
+                          {song.bpm > 0 ? `${Math.round(song.bpm)} BPM` : '—'}
+                        </span>
+                        <span className="text-[10px] tabular-nums" style={{ color: Math.abs(breakdown.energyDelta) <= 0.2 ? '#475569' : '#f59e0b' }}>
+                          E {eDeltaSign}{(breakdown.energyDelta * 100).toFixed(0)}%
+                        </span>
+                        {/* Signal dots */}
+                        <div className="flex items-center gap-1 ml-auto">
+                          <span title="Harmonic fit" style={{ color: harmonicOk ? '#22c55e' : '#f59e0b', fontSize: 8 }}>♪</span>
+                          {breakdown.venueFit && <span title="Venue fit" style={{ color: '#22c55e', fontSize: 8 }}>✦</span>}
+                          {breakdown.tagOverlap && <span title="Shared vibe tags" style={{ color: '#a855f7', fontSize: 8 }}>●</span>}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

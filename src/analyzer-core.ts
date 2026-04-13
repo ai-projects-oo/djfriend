@@ -11,11 +11,21 @@ interface AudioBuffer {
   getChannelData(channel: number): Float32Array;
 }
 
+export interface EnergyProfile {
+  intro:        number;
+  body:         number;
+  peak:         number;
+  outro:        number;
+  variance:     number;
+  dropStrength: number;
+}
+
 export interface LocalAudioFeatures {
   bpm: number;
   pitchClass: number; // 0–11 (matches Spotify pitch class, compatible with camelot.ts)
   mode: number;       // 1=major, 0=minor
   energy: number;     // 0–1 normalized via dBFS
+  energyProfile?: EnergyProfile;
   year?: number;      // ID3 year tag
   comment?: string;   // ID3 first comment frame
 }
@@ -121,6 +131,62 @@ function correctBpmWithTag(detected: number, tagBpm: number | null): number {
   if (Math.abs(detected / tagBpm - 2) < 0.15) return Math.round((detected / 2) * 10) / 10;
   if (Math.abs(detected / tagBpm - 0.5) < 0.15) return Math.round((detected * 2) * 10) / 10;
   return detected;
+}
+
+/** Normalized RMS of a slice (same dBFS scale as overall energy). */
+function windowRms(data: Float32Array, start: number, end: number): number {
+  const len = end - start;
+  if (len <= 0) return 0;
+  let sum = 0;
+  for (let i = start; i < end; i += 4) sum += data[i] * data[i];
+  const rms = Math.sqrt(sum / Math.ceil(len / 4));
+  const db = 20 * Math.log10(Math.max(rms, 1e-9));
+  return Math.max(0, Math.min(1, 1 + db / 55));
+}
+
+/**
+ * Compute a 6-field energy micro-profile from already-decoded, already-resampled channelData.
+ * Uses 10-second windows so the values are resolution-independent of track length.
+ * Called once per file — reuses the same decoded buffer as BPM/key/energy analysis.
+ */
+export function computeEnergyProfile(channelData: Float32Array, sampleRate: number): EnergyProfile {
+  const WINDOW = Math.round(10 * sampleRate); // 10s windows
+  const totalSamples = channelData.length;
+
+  if (totalSamples < WINDOW) {
+    const v = windowRms(channelData, 0, totalSamples);
+    return { intro: v, body: v, peak: v, outro: v, variance: 0, dropStrength: 0 };
+  }
+
+  const windows: number[] = [];
+  for (let i = 0; i + WINDOW <= totalSamples; i += WINDOW) {
+    windows.push(windowRms(channelData, i, i + WINDOW));
+  }
+
+  const N = windows.length;
+  const avg = (arr: number[]) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+
+  // intro ≈ first 15%, outro ≈ last 15%, body ≈ middle 60%
+  const introEnd    = Math.max(1, Math.round(N * 0.15));
+  const outroStart  = Math.min(N - 1, Math.round(N * 0.85));
+  const bodyStart   = Math.round(N * 0.20);
+  const bodyEnd     = Math.max(bodyStart + 1, Math.round(N * 0.80));
+
+  const intro  = avg(windows.slice(0, introEnd));
+  const outro  = avg(windows.slice(outroStart));
+  const body   = avg(windows.slice(bodyStart, bodyEnd));
+  const peak   = Math.max(...windows);
+
+  const mean     = avg(windows);
+  const variance = Math.sqrt(windows.reduce((s, v) => s + (v - mean) ** 2, 0) / N);
+
+  let dropStrength = 0;
+  for (let i = 1; i < N; i++) {
+    const drop = windows[i - 1] - windows[i];
+    if (drop > dropStrength) dropStrength = drop;
+  }
+
+  return { intro, body, peak, outro, variance, dropStrength };
 }
 
 export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures | null> {
@@ -237,9 +303,11 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     const rmsScore = Math.max(0, Math.min(1, 1 + rmsDb / 55));
     const energy = Math.round((onsetScore * 0.6 + rmsScore * 0.4) * 1000) / 1000;
 
+    const energyProfile = computeEnergyProfile(channelData, 44100);
+
     // Return raw BPM — callers apply genre-aware double-time correction once
     // genre data is available (see normalizeBpm in vite.config.ts / index.ts).
-    return { bpm, pitchClass, mode, energy, year: tagYear, comment: tagComment };
+    return { bpm, pitchClass, mode, energy, energyProfile, year: tagYear, comment: tagComment };
   } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;

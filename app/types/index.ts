@@ -1,3 +1,12 @@
+export interface EnergyProfile {
+  intro:        number  // 0–1, avg normalized RMS of first ~15% of track
+  body:         number  // 0–1, avg normalized RMS of middle section
+  peak:         number  // 0–1, max normalized RMS window
+  outro:        number  // 0–1, avg normalized RMS of last ~15% of track
+  variance:     number  // std-dev of per-window RMS across full track
+  dropStrength: number  // 0–1, magnitude of the largest energy drop between windows
+}
+
 export interface SemanticTags {
   vibeTags: string[];        // e.g. ["euphoric", "driving"]
   moodTags: string[];        // e.g. ["dark", "uplifting"]
@@ -25,6 +34,7 @@ export interface Song {
   year?: number;               // ID3 year tag
   comment?: string;            // ID3 comment tag (first COMM frame)
   semanticTags?: SemanticTags;
+  energyProfile?: EnergyProfile;
 }
 
 export interface SetTrack extends Song {

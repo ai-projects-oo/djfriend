@@ -187,6 +187,13 @@ export function generateSet(
         prevCamelot !== null ? camelotHarmonyScore(prevCamelot, song.camelot) : 1.0;
       const bpmScore =
         prevBpm !== null ? 1 - clamp(Math.abs(song.bpm - prevBpm) / 20, 0, 1) : 1.0;
+      // Transition smoothness: match end of previous track to start of this track.
+      // Falls back to overall energy delta when energyProfile is absent (old scans).
+      const transitionScore = prevTrack !== null
+        ? (prevTrack.energyProfile && song.energyProfile
+            ? 1 - Math.abs(prevTrack.energyProfile.outro - song.energyProfile.intro)
+            : 1 - clamp(Math.abs(song.energy - prevTrack.energy) / 0.4, 0, 1))
+        : 1.0;
       const affinityBonus = genreAffinityBonus(song, affinityKey);
       const semBonus = semanticAffinityBonus(song, prefs.venueType, prefs.setPhase);
       const tagBonus = tagFilterBonus(song, prefs.tagFilters);
@@ -194,7 +201,7 @@ export function generateSet(
       // step forward on the wheel (energy boost direction per MixedInKey).
       const boostBonus = slopeRising && prevCamelot !== null && isCamelotClockwise(prevCamelot, song.camelot) ? 0.08 : 0;
       const jitter = options?.jitter ? Math.random() * options.jitter : 0;
-      const score = harmonicScore * 0.6 + bpmScore * 0.3 + affinityBonus + semBonus + tagBonus + boostBonus + jitter;
+      const score = harmonicScore * 0.55 + bpmScore * 0.25 + transitionScore * 0.10 + affinityBonus + semBonus + tagBonus + boostBonus + jitter;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;

@@ -28,6 +28,7 @@ import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
 import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
 import { camelotColor } from "./lib/camelotColors";
+import { findCrateGaps, setNeedsCrateSuggestions } from "./lib/crateBuilder";
 
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -1083,6 +1084,36 @@ function AppInner() {
                   onExport={handleExportM3U}
                   onExportSpotify={() => { void handleExportSpotify(); }}
                 />
+
+                {/* Crate Suggestions */}
+                {generatedSet.length > 0 && setNeedsCrateSuggestions(generatedSet) && (() => {
+                  const gaps = findCrateGaps(generatedSet, prefs);
+                  if (gaps.length === 0) return null;
+                  return (
+                    <div className="mt-4 rounded-xl border border-[#f59e0b33] bg-[#0d0a00] p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <span className="text-xs font-semibold uppercase tracking-widest text-[#f59e0b]">Crate Suggestions</span>
+                        <span className="text-[10px] text-[#78350f]">{gaps.length} gap{gaps.length !== 1 ? 's' : ''} found</span>
+                      </div>
+                      <ul className="space-y-2">
+                        {gaps.map((gap, i) => (
+                          <li key={i} className="flex items-start gap-3">
+                            <span className="text-[10px] text-[#78350f] shrink-0 mt-0.5 w-8 text-right">{Math.round(gap.setPosition * 100)}%</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-[#fbbf24] font-mono truncate">{gap.suggestedSearch}</p>
+                              <p className="text-[10px] text-[#78350f] mt-0.5">
+                                keys: {gap.camelotNeeded.join(', ')} · energy ≈{gap.targetEnergy.toFixed(2)} · {gap.bpmRange.min}–{gap.bpmRange.max} BPM
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

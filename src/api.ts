@@ -701,6 +701,23 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Playback failed' })) }
   })
 
+  middlewares.use('/api/reveal-in-finder', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    const body = await readJsonBody(req) as Record<string, unknown>
+    const filePath = typeof body.filePath === 'string' ? body.filePath : null
+    if (!filePath) { res.statusCode = 400; res.end(JSON.stringify({ error: 'filePath required' })); return }
+    try {
+      if (process.platform === 'darwin') {
+        await execFileAsync('open', ['-R', filePath])
+      } else if (process.platform === 'win32') {
+        await execFileAsync('explorer', [`/select,${filePath}`])
+      } else {
+        await execFileAsync('xdg-open', [path.dirname(filePath)])
+      }
+      res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ ok: true }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed' })) }
+  })
+
   middlewares.use('/api/apple-music-playlists', async (req, res, next) => {
     if (req.method !== 'GET') { next(); return }
     if (process.platform !== 'darwin') { res.end(JSON.stringify([])); return }

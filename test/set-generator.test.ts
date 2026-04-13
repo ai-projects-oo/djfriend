@@ -156,3 +156,40 @@ describe('slope-aware clockwise bonus', () => {
     expect(set.length).toBeGreaterThan(0)
   })
 })
+
+// ─── Phase 2: energyProfile transition score ──────────────────────────────────
+
+describe('energyProfile transition score', () => {
+  it('prefers a track whose intro matches the previous track outro', () => {
+    // prev track has a loud outro (0.9); candidate A has matching intro (0.9),
+    // candidate B has mismatching intro (0.2) — A should be preferred.
+    const songs = [
+      makeSong({ file: 'prev.mp3', camelot: '8B', energy: 0.7,
+        energyProfile: { intro: 0.5, body: 0.7, peak: 0.9, outro: 0.9, variance: 0.1, dropStrength: 0 } }),
+      makeSong({ file: 'match.mp3', camelot: '8B', energy: 0.7,
+        energyProfile: { intro: 0.9, body: 0.7, peak: 0.9, outro: 0.7, variance: 0.1, dropStrength: 0 } }),
+      makeSong({ file: 'mismatch.mp3', camelot: '8B', energy: 0.7,
+        energyProfile: { intro: 0.2, body: 0.7, peak: 0.8, outro: 0.5, variance: 0.1, dropStrength: 0 } }),
+    ]
+    const set = generateSet(songs, { ...defaultPrefs, setDuration: 15 }, flatCurve)
+    if (set.length >= 2) {
+      expect(set[1].file).toBe('match.mp3')
+    }
+  })
+
+  it('falls back gracefully when energyProfile is absent', () => {
+    // No energyProfile on any track — should not throw and should still produce a set
+    const songs = Array.from({ length: 5 }, (_, i) =>
+      makeSong({ file: `track${i}.mp3`, energy: 0.5 + i * 0.05 })
+    )
+    expect(() => generateSet(songs, defaultPrefs, flatCurve)).not.toThrow()
+    expect(generateSet(songs, defaultPrefs, flatCurve).length).toBeGreaterThan(0)
+  })
+
+  it('sets energyProfile on output SetTrack when input Song has it', () => {
+    const profile = { intro: 0.4, body: 0.7, peak: 0.9, outro: 0.6, variance: 0.1, dropStrength: 0.2 }
+    const songs = [makeSong({ file: 'a.mp3', energyProfile: profile })]
+    const set = generateSet(songs, { ...defaultPrefs, setDuration: 10 }, flatCurve)
+    expect(set[0].energyProfile).toEqual(profile)
+  })
+})

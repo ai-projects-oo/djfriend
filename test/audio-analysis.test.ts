@@ -50,6 +50,22 @@ describe('audio analysis (key + energy)', () => {
     it.skip('no mock audio files in test/mock_music — add real MP3s to enable', () => {})
     return
   }
+
+  // Files without the "[KEY] - [ENERGY] - title" convention get a smoke test instead
+  const unnamedFiles = mp3Files.filter(f => !extractCamelotFromFilename(f))
+  for (const file of unnamedFiles) {
+    it(`smoke: ${file} — analyzeAudio returns sane values`, async () => {
+      const features = await analyzeAudio(path.join(MOCK_DIR, file))
+      expect(features, 'analyzeAudio returned null').not.toBeNull()
+      expect(features!.bpm).toBeGreaterThan(60)
+      expect(features!.bpm).toBeLessThan(220)
+      expect(features!.energy).toBeGreaterThanOrEqual(0)
+      expect(features!.energy).toBeLessThanOrEqual(1)
+      const detected = toCamelot(features!.pitchClass, features!.mode)
+      expect(detected).not.toBeNull()
+    }, 30_000)
+  }
+
   for (const file of mp3Files) {
     const expectedCamelot = extractCamelotFromFilename(file)
     if (!expectedCamelot) continue

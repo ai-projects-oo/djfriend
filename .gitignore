@@ -22,6 +22,9 @@ release
 src/*.js
 .claude
 
+# Test audio files — real tracks for local testing, never committed
+test/mock_music/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -988,9 +988,19 @@ function AppInner() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">Duration</span>
                   <div className="flex gap-1.5 flex-wrap">
+                    {/* "Any" pill — unlimited mode */}
+                    <button type="button"
+                      onClick={() => setPrefs(p => ({ ...p, setDuration: null }))}
+                      disabled={minViablePill !== null}
+                      title={minViablePill !== null ? 'Not available in playlist mode' : undefined}
+                      className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border disabled:opacity-30 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: prefs.setDuration === null ? '#7c3aed' : 'transparent', color: prefs.setDuration === null ? '#fff' : '#64748b', borderColor: prefs.setDuration === null ? '#7c3aed' : '#2a2a3a' }}
+                    >
+                      Any
+                    </button>
                     {SET_DURATIONS.map(min => {
                       const active = prefs.setDuration === min;
-                      const tooShort = minViablePill === null && generatedSet.length > 0 && min < setTotalMinutes;
+                      const tooShort = minViablePill === null && generatedSet.length > 0 && prefs.setDuration !== null && min < setTotalMinutes;
                       // In playlist mode: only the min viable pill is enabled
                       const lockedByPlaylist = minViablePill !== null && min !== minViablePill;
                       const disabled = tooShort || lockedByPlaylist;

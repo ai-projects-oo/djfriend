@@ -153,13 +153,14 @@ export function generateSet(
   }
 
   const FALLBACK_DURATION = 210; // 3.5 min fallback when duration is absent
-  const budgetSeconds = options?.maxDurationSeconds ?? prefs.setDuration * 60;
+  const unlimited = prefs.setDuration === null && options?.maxDurationSeconds == null;
+  const budgetSeconds = options?.maxDurationSeconds ?? (prefs.setDuration != null ? prefs.setDuration * 60 : Infinity);
 
   // 1. Estimate track count from average duration (upper bound; actual loop stops on budget)
   const avgDuration =
     candidatePool.reduce((sum, s) => sum + (s.duration ?? FALLBACK_DURATION), 0) / candidatePool.length;
   const trackSlotDuration = avgDuration + GAP_SECONDS;
-  const estCount = Math.max(1, Math.floor(budgetSeconds / trackSlotDuration));
+  const estCount = unlimited ? candidatePool.length : Math.max(1, Math.floor(budgetSeconds / trackSlotDuration));
   const maxCount = Math.min(estCount, candidatePool.length);
 
   const affinityKey = getAffinityKey(prefs.venueType, prefs.setPhase);

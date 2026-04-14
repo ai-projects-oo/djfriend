@@ -19,6 +19,11 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [playlistsFolderStatus, setPlaylistsFolderStatus] = useState<PathStatus>('idle')
   const [groqKey, setGroqKey] = useState('')
   const [hasGroqKey, setHasGroqKey] = useState(false)
+  const [spotifyClientId, setSpotifyClientId] = useState('')
+  const [spotifyClientSecret, setSpotifyClientSecret] = useState('')
+  const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
+  const [savingSpotify, setSavingSpotify] = useState(false)
+  const [spotifySaved, setSpotifySaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savingGroq, setSavingGroq] = useState(false)
   const [groqSaved, setGroqSaved] = useState(false)
@@ -48,10 +53,12 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     setPlaylistsFolderStatus('idle')
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; playlistsFolder: string; hasGroqKey: boolean }) => {
+      .then((d: { musicFolder: string; playlistsFolder: string; hasGroqKey: boolean; spotifyClientId: string; hasSecret: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
         setPlaylistsFolder(d.playlistsFolder ?? '')
         setHasGroqKey(d.hasGroqKey ?? false)
+        setSpotifyClientId(d.spotifyClientId ?? '')
+        setHasSpotifySecret(d.hasSecret ?? false)
       })
       .catch(() => {})
   }, [open])
@@ -94,6 +101,30 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       setError('Failed to save Groq API key.')
     } finally {
       setSavingGroq(false)
+    }
+  }
+
+  async function saveSpotify() {
+    if (!spotifyClientId.trim()) return
+    setSavingSpotify(true)
+    setSpotifySaved(false)
+    try {
+      const body: Record<string, string> = { spotifyClientId: spotifyClientId.trim() }
+      if (spotifyClientSecret.trim()) body.spotifyClientSecret = spotifyClientSecret.trim()
+      const r = await apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) throw new Error('Save failed')
+      if (spotifyClientSecret.trim()) setHasSpotifySecret(true)
+      setSpotifyClientSecret('')
+      setSpotifySaved(true)
+      onSaved()
+    } catch {
+      setError('Failed to save Spotify credentials.')
+    } finally {
+      setSavingSpotify(false)
     }
   }
 
@@ -210,6 +241,58 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                 className="px-3 py-2 text-sm font-medium rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] disabled:opacity-40 transition-colors whitespace-nowrap"
               >
                 {savingGroq ? 'Saving…' : 'Save key'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 pt-5 border-t border-[#1e1e2e] space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">Spotify</h3>
+            {hasSpotifySecret && !spotifySaved && (
+              <span className="text-[10px] text-[#22c55e]">✓ connected</span>
+            )}
+            {spotifySaved && (
+              <span className="text-[10px] text-[#22c55e]">✓ saved</span>
+            )}
+          </div>
+          <p className="text-xs text-[#64748b] leading-relaxed">
+            Create an app at{' '}
+            <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-[#1db954] hover:underline">
+              developer.spotify.com
+            </a>{' '}
+            to enable playlist import &amp; export.
+          </p>
+          <div>
+            <label className="block text-xs text-[#64748b] mb-1.5">Client ID</label>
+            <input
+              type="text"
+              value={spotifyClientId}
+              onChange={e => { setSpotifyClientId(e.target.value); setSpotifySaved(false) }}
+              placeholder="Paste your Spotify Client ID"
+              className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#1db954] transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-[#64748b] mb-1.5">
+              Client Secret
+              {hasSpotifySecret && !spotifyClientSecret && <span className="ml-2 text-[#22c55e]">✓ saved</span>}
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={spotifyClientSecret}
+                onChange={e => { setSpotifyClientSecret(e.target.value); setSpotifySaved(false) }}
+                placeholder={hasSpotifySecret ? 'Enter new secret to replace' : 'Paste your Client Secret'}
+                className="flex-1 rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#1db954] transition-colors"
+                aria-label="Spotify Client Secret"
+              />
+              <button
+                onClick={saveSpotify}
+                disabled={savingSpotify || !spotifyClientId.trim()}
+                className="px-3 py-2 text-sm font-medium rounded-md bg-[#1db954] text-white hover:bg-[#17a349] disabled:opacity-40 transition-colors whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
+              >
+                {savingSpotify ? 'Saving…' : 'Connect'}
               </button>
             </div>
           </div>

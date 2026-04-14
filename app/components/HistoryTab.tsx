@@ -2,6 +2,7 @@ import type { HistoryEntry, SetTrack, CurvePoint } from "../types";
 import { camelotColor } from "../lib/camelotColors";
 import { buildSvgPath } from "../lib/curveInterpolation";
 import { downloadM3U } from "../lib/m3uExport";
+import { downloadRekordboxXml } from "../lib/rekordboxExport";
 import { ARC_PRESETS } from "./EnergyCurveEditor";
 
 interface HistoryTabProps {
@@ -15,7 +16,7 @@ interface HistoryTabProps {
   historyExportRef: React.RefObject<HTMLDivElement | null>;
   playlistsFolder: string;
   exportM3UToServer: (tracks: SetTrack[], filename: string) => Promise<boolean>;
-  startSpotifyExport: (tracks: SetTrack[], playlistName: string) => Promise<void>;
+  startSpotifyExport?: (tracks: SetTrack[], playlistName: string) => Promise<void>;
   handleRenameEntry: (id: string, newName: string) => void;
   onLoadEntry: (entry: HistoryEntry) => void;
 }
@@ -232,16 +233,24 @@ export default function HistoryTab({
                     </button>
                     <button
                       onClick={() => {
-                        void startSpotifyExport(
-                          entry.tracks,
-                          entry.name,
-                        );
+                        downloadRekordboxXml(entry.tracks, entry.name, `${entry.name}.xml`);
                         setOpenHistoryExportId(null);
                       }}
                       className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
                     >
-                      Export to Spotify
+                      Export to Rekordbox
                     </button>
+                    {startSpotifyExport && (
+                      <button
+                        onClick={() => {
+                          void startSpotifyExport(entry.tracks, entry.name);
+                          setOpenHistoryExportId(null);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                      >
+                        Export to Spotify
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

@@ -2,6 +2,7 @@ import type { HistoryEntry, SetTrack, CurvePoint } from "../types";
 import { camelotColor } from "../lib/camelotColors";
 import { buildSvgPath } from "../lib/curveInterpolation";
 import { downloadM3U } from "../lib/m3uExport";
+import { downloadRekordboxXml } from "../lib/rekordboxExport";
 import { ARC_PRESETS } from "./EnergyCurveEditor";
 
 interface HistoryTabProps {
@@ -229,6 +230,15 @@ export default function HistoryTab({
                       className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                     >
                       Export as M3U
+                    </button>
+                    <button
+                      onClick={() => {
+                        downloadRekordboxXml(entry.tracks, entry.name, `${entry.name}.xml`);
+                        setOpenHistoryExportId(null);
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                    >
+                      Export to Rekordbox
                     </button>
                     <button
                       onClick={() => {

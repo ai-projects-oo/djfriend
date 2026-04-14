@@ -24,6 +24,7 @@ import {
   findSongsForImport,
 } from "./lib/spotifyImport";
 import { downloadM3U } from "./lib/m3uExport";
+import { downloadRekordboxXml } from "./lib/rekordboxExport";
 import { useLibrary } from "./hooks/useLibrary";
 import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
@@ -349,6 +350,14 @@ function AppInner() {
       downloadM3U(setTracks, filename);
     }
   }, [library, playlistsFolder, exportM3UToServer]);
+
+  const handleExportImportRekordbox = useCallback((entry: import("./types").ImportEntry) => {
+    const songs = findSongsForImport(entry.tracks, library);
+    if (songs.length === 0) return;
+    const setTracks = songs.map((s, i) => ({ ...s, slot: i, targetEnergy: s.energy, harmonicWarning: false }));
+    const filename = `${entry.name.replace(/[^a-z0-9_\-. ]/gi, '_')}.xml`;
+    downloadRekordboxXml(setTracks, entry.name, filename);
+  }, [library]);
 
   const handleLoadImportToSet = useCallback((entry: import("./types").ImportEntry) => {
     const songs = findSongsForImport(entry.tracks, library);
@@ -1368,6 +1377,15 @@ function AppInner() {
                         className="shrink-0 px-3 py-4 text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#22c55e] disabled:hover:text-[#475569]"
                       >
                         M3U↓
+                      </button>
+                      <button
+                        onClick={() => handleExportImportRekordbox(entry)}
+                        disabled={inLibraryCount !== entry.tracks.length || entry.tracks.length === 0}
+                        aria-label="Export to Rekordbox XML"
+                        title={inLibraryCount !== entry.tracks.length ? `${entry.tracks.length - inLibraryCount} track(s) missing from library` : 'Export to Rekordbox XML'}
+                        className="shrink-0 px-3 py-4 text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#f59e0b] disabled:hover:text-[#475569]"
+                      >
+                        RB↓
                       </button>
                       <button
                         onClick={() => void reloadEntry(entry)}

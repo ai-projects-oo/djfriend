@@ -70,7 +70,15 @@ export interface TagFilters {
   timeOfNightTags: string[];
 }
 
-export type AddedTimeFilter = 'all' | '30d' | '90d' | '120d' | 'year';
+export type DateField = 'dateAdded' | 'releaseYear';
+export type DateFilterPreset = 'all' | 'thisYear' | 'lastYear' | 'older' | 'range';
+
+export interface DateFilter {
+  field: DateField;
+  preset: DateFilterPreset;
+  rangeFrom?: number; // year integer, e.g. 2020
+  rangeTo?: number;   // year integer, e.g. 2023
+}
 
 export interface DJPreferences {
   setDuration: number; // minutes
@@ -78,7 +86,7 @@ export interface DJPreferences {
   setPhase: SetPhase;
   genre: string;
   tagFilters: TagFilters;
-  addedTimeFilter: AddedTimeFilter;
+  dateFilter: DateFilter;
 }
 
 export interface CrateGap {

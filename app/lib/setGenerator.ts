@@ -120,14 +120,25 @@ export function generateSet(
   const genreFilteredSongs = songs.filter((song) => matchesGenrePref(song, prefs.genre));
   let candidatePool = genreFilteredSongs.length > 0 ? genreFilteredSongs : songs;
 
-  // Date added filter — only applied when tracks actually have dateAdded set
-  const filter = prefs.addedTimeFilter ?? 'all';
-  if (filter !== 'all') {
-    const nowSec = Date.now() / 1000;
-    const cutoff = filter === 'year'
-      ? new Date(new Date().getFullYear(), 0, 1).getTime() / 1000
-      : nowSec - (filter === '30d' ? 30 : filter === '90d' ? 90 : 120) * 86400;
-    const dateFiltered = candidatePool.filter(s => s.dateAdded == null || s.dateAdded >= cutoff);
+  // Date filter — works on dateAdded (Unix seconds) or year (ID3 release year)
+  const df = prefs.dateFilter ?? { field: 'dateAdded' as const, preset: 'all' as const };
+  if (df.preset !== 'all') {
+    const currentYear = new Date().getFullYear();
+    const dateFiltered = candidatePool.filter(s => {
+      const year = df.field === 'releaseYear'
+        ? s.year
+        : s.dateAdded != null ? new Date(s.dateAdded * 1000).getFullYear() : undefined;
+      if (year == null) return true; // no data → include
+      if (df.preset === 'thisYear') return year === currentYear;
+      if (df.preset === 'lastYear') return year === currentYear - 1;
+      if (df.preset === 'older')    return year < currentYear - 1;
+      if (df.preset === 'range') {
+        const from = df.rangeFrom ?? 0;
+        const to   = df.rangeTo ?? currentYear;
+        return year >= from && year <= to;
+      }
+      return true;
+    });
     if (dateFiltered.length > 0) candidatePool = dateFiltered;
   }
 

@@ -9,7 +9,7 @@ const prefs: DJPreferences = {
   setPhase: 'Peak time',
   genre: 'Techno',
   tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] },
-  addedTimeFilter: 'all',
+  dateFilter: { field: 'dateAdded' as const, preset: 'all' as const },
 }
 
 function makeTrack(overrides: Partial<SetTrack> & { file: string }): SetTrack {

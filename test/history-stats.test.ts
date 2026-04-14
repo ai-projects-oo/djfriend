@@ -8,7 +8,7 @@ const basePart: Omit<DJPreferences, 'venueType'> = {
   setPhase: 'Peak time',
   genre: 'Any',
   tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] },
-  addedTimeFilter: 'all',
+  dateFilter: { field: 'dateAdded' as const, preset: 'all' as const },
 }
 
 function makeTrack(file: string, slot: number): SetTrack {

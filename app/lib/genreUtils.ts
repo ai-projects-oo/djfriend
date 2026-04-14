@@ -86,7 +86,7 @@ export const DEFAULT_PREFS: DJPreferences = {
   setPhase: "Peak time",
   genre: "Any",
   tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] },
-  addedTimeFilter: 'all',
+  dateFilter: { field: 'dateAdded' as const, preset: 'all' as const },
 };
 
 export function isValidSong(obj: unknown): obj is Song {

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type {
   HistoryEntry,
+  DJPreferences,
 } from "./types";
 import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
@@ -310,7 +311,13 @@ function AppInner() {
   }, [setCurve, setScoringWeights, setPrefs]);
 
   const handleLoadHistoryEntry = useCallback((entry: HistoryEntry) => {
-    setPrefs({ ...entry.prefs, addedTimeFilter: entry.prefs.addedTimeFilter ?? 'all' });
+    // Migrate old history entries that used addedTimeFilter instead of dateFilter
+    const migratedPrefs: DJPreferences = {
+      ...entry.prefs,
+      dateFilter: entry.prefs.dateFilter ?? { field: 'dateAdded', preset: 'all' },
+    };
+    delete (migratedPrefs as unknown as Record<string, unknown>)['addedTimeFilter'];
+    setPrefs(migratedPrefs);
     setCurve(entry.curve);
     setGeneratedSet(entry.tracks);
     setActiveTab("Generator");
@@ -789,14 +796,31 @@ function AppInner() {
                     {filtersOpen && (
                       <div className={`px-4 pb-4 flex flex-col gap-4 ${activeFilterCount === 0 ? 'border-t border-[#1e1e2e] pt-4' : 'pt-2'}`}>
                         <div>
-                          <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">Added</span>
+                          {/* Field selector toggle */}
+                          <div className="flex items-center gap-1 mb-2">
+                            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Date</span>
+                            <div className="ml-2 flex rounded overflow-hidden border border-[#4c1d95]">
+                              {(['dateAdded', 'releaseYear'] as const).map(f => {
+                                const active = (prefs.dateFilter?.field ?? 'dateAdded') === f;
+                                return (
+                                  <button key={f} type="button"
+                                    onClick={() => setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { preset: 'all' }), field: f } }))}
+                                    className="px-2 py-0.5 text-[10px] font-medium transition-all cursor-pointer"
+                                    style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#a78bfa' }}>
+                                    {f === 'dateAdded' ? 'Date Added' : 'Release Year'}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          {/* Preset pills */}
                           <div className="flex flex-wrap gap-1.5">
-                            {(['all', '30d', '90d', '120d', 'year'] as const).map(opt => {
-                              const label = opt === 'all' ? 'All' : opt === '30d' ? 'Last 30d' : opt === '90d' ? 'Last 90d' : opt === '120d' ? 'Last 120d' : 'This Year';
-                              const active = (prefs.addedTimeFilter ?? 'all') === opt;
+                            {(['all', 'thisYear', 'lastYear', 'older', 'range'] as const).map(opt => {
+                              const label = opt === 'all' ? 'All' : opt === 'thisYear' ? 'This Year' : opt === 'lastYear' ? 'Last Year' : opt === 'older' ? 'Older' : 'Range';
+                              const active = (prefs.dateFilter?.preset ?? 'all') === opt;
                               return (
                                 <button key={opt} type="button"
-                                  onClick={() => setPrefs(p => ({ ...p, addedTimeFilter: opt }))}
+                                  onClick={() => setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { field: 'dateAdded' }), preset: opt } }))}
                                   className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
                                   style={{
                                     backgroundColor: active ? '#7c3aed' : 'transparent',
@@ -808,6 +832,26 @@ function AppInner() {
                               );
                             })}
                           </div>
+                          {/* Year range inputs — shown only when preset = range */}
+                          {(prefs.dateFilter?.preset ?? 'all') === 'range' && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <input
+                                type="number" min={1950} max={new Date().getFullYear()}
+                                placeholder="From"
+                                value={prefs.dateFilter?.rangeFrom ?? ''}
+                                onChange={e => setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { field: 'dateAdded', preset: 'range' }), rangeFrom: e.target.value ? parseInt(e.target.value) : undefined } }))}
+                                className="w-20 px-2 py-1 rounded text-xs bg-[#12121a] border border-[#4c1d95] text-[#a78bfa] focus:outline-none focus:border-[#7c3aed]"
+                              />
+                              <span className="text-[#4b5568] text-xs">–</span>
+                              <input
+                                type="number" min={1950} max={new Date().getFullYear()}
+                                placeholder="To"
+                                value={prefs.dateFilter?.rangeTo ?? ''}
+                                onChange={e => setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { field: 'dateAdded', preset: 'range' }), rangeTo: e.target.value ? parseInt(e.target.value) : undefined } }))}
+                                className="w-20 px-2 py-1 rounded text-xs bg-[#12121a] border border-[#4c1d95] text-[#a78bfa] focus:outline-none focus:border-[#7c3aed]"
+                              />
+                            </div>
+                          )}
                         </div>
                         {genreGroups.length > 0 && (
                           <div>

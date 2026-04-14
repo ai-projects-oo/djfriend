@@ -116,13 +116,14 @@ function AppInner() {
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(
     null,
   );
-  const [openHistoryExportId, setOpenHistoryExportId] = useState<string | null>(
-    null,
-  );
+  const [openHistoryExportId, setOpenHistoryExportId] = useState<string | null>(null);
   const historyExportRef = useRef<HTMLDivElement | null>(null);
+  const [openImportExportId, setOpenImportExportId] = useState<string | null>(null);
+  const importExportRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [hasGroqKey, setHasGroqKey] = useState(false);
+  const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(() =>
     localStorage.getItem('djfriend-onboarding-dismissed') === 'true'
   );
@@ -171,16 +172,23 @@ function AppInner() {
   useEffect(() => {
     if (!openHistoryExportId) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        historyExportRef.current &&
-        !historyExportRef.current.contains(e.target as Node)
-      ) {
+      if (historyExportRef.current && !historyExportRef.current.contains(e.target as Node))
         setOpenHistoryExportId(null);
-      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openHistoryExportId]);
+
+  // Click-outside for import history export dropdown
+  useEffect(() => {
+    if (!openImportExportId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (importExportRef.current && !importExportRef.current.contains(e.target as Node))
+        setOpenImportExportId(null);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openImportExportId]);
 
   // Stable ref used to bridge setGeneratedSet (from useSetGenerator) into useLibrary's onNewAnalysis callback
   const onNewAnalysisRef = useRef<(() => void) | undefined>(undefined);
@@ -369,11 +377,12 @@ function AppInner() {
 
   const loadSettings = useCallback(() => {
     apiFetch('/api/settings')
-      .then(r => r.json() as Promise<{ musicFolder?: string; playlistsFolder?: string; hasGroqKey?: boolean }>)
+      .then(r => r.json() as Promise<{ musicFolder?: string; playlistsFolder?: string; hasGroqKey?: boolean; hasSecret?: boolean }>)
       .then(d => {
         if (d.musicFolder) setFolderPath(prev => prev || d.musicFolder!)
         if (d.playlistsFolder !== undefined) setPlaylistsFolder(d.playlistsFolder)
         if (d.hasGroqKey !== undefined) setHasGroqKey(d.hasGroqKey)
+        if (d.hasSecret !== undefined) setHasSpotifyCredentials(d.hasSecret)
       })
       .catch(() => {})
   }, [setFolderPath]);
@@ -708,7 +717,7 @@ function AppInner() {
 
         {/* Tab nav */}
         <div className="px-2 flex gap-1">
-          {(["Generator", "History", "Import"] as const).map((tab) => (
+          {(["Generator", "History", ...(hasSpotifyCredentials ? (["Import"] as const) : ([] as const))] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1172,7 +1181,7 @@ function AppInner() {
                   onReorderTrack={handleReorderTrack}
                   onUpdateTrack={handleUpdateTrack}
                   onExport={handleExportM3U}
-                  onExportSpotify={() => { void handleExportSpotify(); }}
+                  onExportSpotify={hasSpotifyCredentials ? () => { void handleExportSpotify(); } : undefined}
                 />
 
                 {/* Crate Suggestions */}
@@ -1224,7 +1233,7 @@ function AppInner() {
             historyExportRef={historyExportRef}
             playlistsFolder={playlistsFolder}
             exportM3UToServer={exportM3UToServer}
-            startSpotifyExport={startSpotifyExport}
+            startSpotifyExport={hasSpotifyCredentials ? startSpotifyExport : undefined}
             handleRenameEntry={handleRenameEntry}
             onLoadEntry={handleLoadHistoryEntry}
           />
@@ -1369,24 +1378,29 @@ function AppInner() {
                       >
                         →&nbsp;Set
                       </button>
-                      <button
-                        onClick={() => handleExportImportM3U(entry)}
-                        disabled={inLibraryCount !== entry.tracks.length || entry.tracks.length === 0}
-                        aria-label="Export to M3U"
-                        title={inLibraryCount !== entry.tracks.length ? `${entry.tracks.length - inLibraryCount} track(s) missing from library` : 'Export to M3U'}
-                        className="shrink-0 px-3 py-4 text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#22c55e] disabled:hover:text-[#475569]"
-                      >
-                        M3U↓
-                      </button>
-                      <button
-                        onClick={() => handleExportImportRekordbox(entry)}
-                        disabled={inLibraryCount !== entry.tracks.length || entry.tracks.length === 0}
-                        aria-label="Export to Rekordbox XML"
-                        title={inLibraryCount !== entry.tracks.length ? `${entry.tracks.length - inLibraryCount} track(s) missing from library` : 'Export to Rekordbox XML'}
-                        className="shrink-0 px-3 py-4 text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#f59e0b] disabled:hover:text-[#475569]"
-                      >
-                        RB↓
-                      </button>
+                      {/* Import export dropdown */}
+                      <div className="relative shrink-0" ref={openImportExportId === entry.id ? importExportRef : null}>
+                        <button
+                          onClick={() => setOpenImportExportId(id => id === entry.id ? null : entry.id)}
+                          disabled={inLibraryCount === 0 || entry.tracks.length === 0}
+                          title={inLibraryCount !== entry.tracks.length ? `${entry.tracks.length - inLibraryCount} track(s) missing` : 'Export'}
+                          className="px-3 py-4 text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#a78bfa] disabled:hover:text-[#475569]"
+                        >
+                          Export <span className="text-[9px]">▾</span>
+                        </button>
+                        {openImportExportId === entry.id && (
+                          <div className="absolute right-0 bottom-full mb-1 z-20 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                            <button
+                              onClick={() => { void handleExportImportM3U(entry); setOpenImportExportId(null); }}
+                              className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                            >Export as M3U</button>
+                            <button
+                              onClick={() => { handleExportImportRekordbox(entry); setOpenImportExportId(null); }}
+                              className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                            >Export to Rekordbox</button>
+                          </div>
+                        )}
+                      </div>
                       <button
                         onClick={() => void reloadEntry(entry)}
                         aria-label="Reload from Spotify"

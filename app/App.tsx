@@ -7,6 +7,7 @@ import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
 import SettingsModal from "./components/SettingsModal";
 import AIPlannerPanel from "./components/AIPlannerPanel";
+import CalendarPicker from "./components/CalendarPicker";
 import HistoryTab from "./components/HistoryTab";
 import { genreMatchesUmbrella, TAG_GROUPS } from "./lib/genreUtils";
 import {
@@ -126,6 +127,7 @@ function AppInner() {
   );
   const [playlistsFolder, setPlaylistsFolder] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [dateCalendar, setDateCalendar] = useState<'from' | 'to' | null>(null);
   const [analyzeMenuOpen, setAnalyzeMenuOpen] = useState(false);
   const [playlistSearch, setPlaylistSearch] = useState('');
   const [manualMatchKey, setManualMatchKey] = useState<string | null>(null);
@@ -820,7 +822,7 @@ function AppInner() {
                               const active = (prefs.dateFilter?.preset ?? 'all') === opt;
                               return (
                                 <button key={opt} type="button"
-                                  onClick={() => setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { field: 'dateAdded' }), preset: opt } }))}
+                                  onClick={() => { if (opt !== 'range') setDateCalendar(null); setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { field: 'dateAdded' }), preset: opt } })); }}
                                   className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
                                   style={{
                                     backgroundColor: active ? '#7c3aed' : 'transparent',
@@ -832,24 +834,49 @@ function AppInner() {
                               );
                             })}
                           </div>
-                          {/* Year range inputs — shown only when preset = range */}
+                          {/* Calendar date range — shown only when preset = range */}
                           {(prefs.dateFilter?.preset ?? 'all') === 'range' && (
-                            <div className="flex items-center gap-2 mt-2">
-                              <input
-                                type="number" min={1950} max={new Date().getFullYear()}
-                                placeholder="From"
-                                value={prefs.dateFilter?.rangeFrom ?? ''}
-                                onChange={e => setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { field: 'dateAdded', preset: 'range' }), rangeFrom: e.target.value ? parseInt(e.target.value) : undefined } }))}
-                                className="w-20 px-2 py-1 rounded text-xs bg-[#12121a] border border-[#4c1d95] text-[#a78bfa] focus:outline-none focus:border-[#7c3aed]"
-                              />
-                              <span className="text-[#4b5568] text-xs">–</span>
-                              <input
-                                type="number" min={1950} max={new Date().getFullYear()}
-                                placeholder="To"
-                                value={prefs.dateFilter?.rangeTo ?? ''}
-                                onChange={e => setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { field: 'dateAdded', preset: 'range' }), rangeTo: e.target.value ? parseInt(e.target.value) : undefined } }))}
-                                className="w-20 px-2 py-1 rounded text-xs bg-[#12121a] border border-[#4c1d95] text-[#a78bfa] focus:outline-none focus:border-[#7c3aed]"
-                              />
+                            <div className="mt-2 space-y-1">
+                              {/* From */}
+                              <div>
+                                <button type="button"
+                                  onClick={() => setDateCalendar(c => c === 'from' ? null : 'from')}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-all cursor-pointer w-full"
+                                  style={{ backgroundColor: dateCalendar === 'from' ? '#1e1e2e' : 'transparent', borderColor: '#4c1d95', color: '#a78bfa' }}>
+                                  <span className="text-[#4b5568]">From</span>
+                                  <span>{prefs.dateFilter?.rangeFrom ?? 'Ever'}</span>
+                                </button>
+                                {dateCalendar === 'from' && (
+                                  <CalendarPicker
+                                    value={prefs.dateFilter?.rangeFrom}
+                                    clearLabel="Ever (no start limit)"
+                                    onConfirm={date => {
+                                      setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { field: 'dateAdded', preset: 'range' }), rangeFrom: date } }));
+                                      setDateCalendar(null);
+                                    }}
+                                  />
+                                )}
+                              </div>
+                              {/* To */}
+                              <div>
+                                <button type="button"
+                                  onClick={() => setDateCalendar(c => c === 'to' ? null : 'to')}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-all cursor-pointer w-full"
+                                  style={{ backgroundColor: dateCalendar === 'to' ? '#1e1e2e' : 'transparent', borderColor: '#4c1d95', color: '#a78bfa' }}>
+                                  <span className="text-[#4b5568]">To</span>
+                                  <span>{prefs.dateFilter?.rangeTo ?? 'Now'}</span>
+                                </button>
+                                {dateCalendar === 'to' && (
+                                  <CalendarPicker
+                                    value={prefs.dateFilter?.rangeTo}
+                                    clearLabel="Now (today)"
+                                    onConfirm={date => {
+                                      setPrefs(p => ({ ...p, dateFilter: { ...(p.dateFilter ?? { field: 'dateAdded', preset: 'range' }), rangeTo: date } }));
+                                      setDateCalendar(null);
+                                    }}
+                                  />
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>

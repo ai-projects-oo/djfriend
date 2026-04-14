@@ -133,9 +133,17 @@ export function generateSet(
       if (df.preset === 'lastYear') return year === currentYear - 1;
       if (df.preset === 'older')    return year < currentYear - 1;
       if (df.preset === 'range') {
-        const from = df.rangeFrom ?? 0;
-        const to   = df.rangeTo ?? currentYear;
-        return year >= from && year <= to;
+        if (df.field === 'releaseYear') {
+          const fromYear = df.rangeFrom ? new Date(df.rangeFrom).getFullYear() : 0;
+          const toYear   = df.rangeTo   ? new Date(df.rangeTo).getFullYear()   : currentYear;
+          return year != null ? (year >= fromYear && year <= toYear) : true;
+        } else {
+          if (s.dateAdded == null) return true;
+          const trackDate = new Date(s.dateAdded * 1000);
+          const fromDate  = df.rangeFrom ? new Date(df.rangeFrom + 'T00:00:00') : new Date(0);
+          const toDate    = df.rangeTo   ? new Date(df.rangeTo   + 'T23:59:59') : new Date();
+          return trackDate >= fromDate && trackDate <= toDate;
+        }
       }
       return true;
     });

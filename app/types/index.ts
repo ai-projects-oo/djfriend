@@ -76,8 +76,8 @@ export type DateFilterPreset = 'all' | 'thisYear' | 'lastYear' | 'older' | 'rang
 export interface DateFilter {
   field: DateField;
   preset: DateFilterPreset;
-  rangeFrom?: number; // year integer, e.g. 2020
-  rangeTo?: number;   // year integer, e.g. 2023
+  rangeFrom?: string; // ISO date YYYY-MM-DD; undefined = beginning of time ("Ever")
+  rangeTo?: string;   // ISO date YYYY-MM-DD; undefined = today ("Now")
 }
 
 export interface DJPreferences {

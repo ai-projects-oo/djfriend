@@ -39,11 +39,17 @@ function extractEnergyFromFilename(filename: string): number {
   return match ? parseInt(match[1], 10) / 10 : 0.6
 }
 
-const mp3Files = fs.readdirSync(MOCK_DIR).filter(f => f.endsWith('.mp3'))
+const mp3Files = fs.existsSync(MOCK_DIR)
+  ? fs.readdirSync(MOCK_DIR).filter(f => f.endsWith('.mp3'))
+  : []
 
 // ─── Key + energy detection ───────────────────────────────────────────────────
 
 describe('audio analysis (key + energy)', () => {
+  if (mp3Files.length === 0) {
+    it.skip('no mock audio files in test/mock_music — add real MP3s to enable', () => {})
+    return
+  }
   for (const file of mp3Files) {
     const expectedCamelot = extractCamelotFromFilename(file)
     if (!expectedCamelot) continue

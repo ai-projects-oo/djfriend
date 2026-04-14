@@ -113,6 +113,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     const pool = filtered.length > 0 ? filtered : library;
     if (pool.length === 0) return 0;
     const avgDur = pool.reduce((sum, s) => sum + (s.duration ?? FALLBACK_DURATION), 0) / pool.length;
+    if (prefs.setDuration === null) return pool.length; // unlimited — all tracks fit
     return Math.max(1, Math.floor((prefs.setDuration * 60) / (avgDur + GAP_SECONDS)));
   }, [library, prefs.genre, prefs.setDuration]);
 
@@ -345,7 +346,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     const FALLBACK_DURATION = 210;
     const GAP = 10;
     const currentSeconds = generatedSet.reduce((s, t) => s + (t.duration ?? FALLBACK_DURATION) + GAP, 0);
-    const budgetSeconds = prefs.setDuration * 60;
+    const budgetSeconds = prefs.setDuration != null ? prefs.setDuration * 60 : Infinity;
     const remainingSeconds = budgetSeconds - currentSeconds;
     if (remainingSeconds <= 0) return;
     const excludeFiles = new Set(generatedSet.map(t => t.file));

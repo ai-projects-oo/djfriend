@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import { createServer } from 'http'
 import path from 'path'
 import fs from 'fs'
@@ -36,7 +36,16 @@ async function startServer() {
   })
 }
 
+ipcMain.handle('select-folder', async () => {
+  if (!mainWindow) return null
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+  })
+  return result.canceled ? null : result.filePaths[0] ?? null
+})
+
 function createWindow() {
+  const preloadPath = path.join(__dirname, 'preload.js')
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -47,6 +56,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: preloadPath,
     },
   })
 

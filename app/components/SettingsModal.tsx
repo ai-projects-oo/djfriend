@@ -3,6 +3,59 @@ import { apiFetch } from '../lib/apiFetch'
 import { redirectToSpotifyLogin } from '../lib/spotifyExport'
 import { SpotifyIcon, RekordboxIcon, GroqIcon } from './Icons'
 
+type PathStatus = 'idle' | 'checking' | 'ok' | 'missing'
+
+interface FolderInputProps {
+  label: string
+  labelIcon?: React.ReactNode
+  value: string
+  status: PathStatus
+  placeholder: string
+  hint?: string
+  onChange: (v: string) => void
+  onBlur: () => void
+  onBrowse: () => Promise<void>
+}
+
+function FolderInput({ label, labelIcon, value, status, placeholder, hint, onChange, onBlur, onBrowse }: FolderInputProps) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="text-xs text-[#64748b] flex items-center gap-1.5">
+          {labelIcon}
+          {label}
+        </label>
+        {status === 'checking' && <span className="text-[10px] text-[#475569]">Checking…</span>}
+        {status === 'ok' && <span className="text-[10px] text-[#22c55e]">✓ Found</span>}
+        {status === 'missing' && <span className="text-[10px] text-[#ef4444]">Folder not found</span>}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onBlur={onBlur}
+          placeholder={placeholder}
+          className={`flex-1 rounded-md border bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none transition-colors ${
+            status === 'ok' ? 'border-[#22c55e]' :
+            status === 'missing' ? 'border-[#ef4444]' :
+            'border-[#2a2a3a] focus:border-[#7c3aed]'
+          }`}
+        />
+        <button
+          type="button"
+          onClick={() => void onBrowse()}
+          className="px-3 py-2 text-xs rounded-md border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] bg-[#12121a] transition-colors cursor-pointer whitespace-nowrap"
+          aria-label={`Browse for ${label}`}
+        >
+          Browse…
+        </button>
+      </div>
+      {hint && <p className="mt-1 text-[10px] text-[#475569]">{hint}</p>}
+    </div>
+  )
+}
+
 interface Props {
   open: boolean
   onClose: () => void
@@ -12,7 +65,6 @@ interface Props {
   onDatabaseCleared?: () => void
 }
 
-type PathStatus = 'idle' | 'checking' | 'ok' | 'missing'
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron')
 
@@ -161,51 +213,33 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               </div>
             )}
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs text-[#64748b]">Music library folder</label>
-                {musicFolderStatus === 'checking' && <span className="text-[10px] text-[#475569]">Checking…</span>}
-                {musicFolderStatus === 'ok' && <span className="text-[10px] text-[#22c55e]">✓ Found</span>}
-                {musicFolderStatus === 'missing' && <span className="text-[10px] text-[#ef4444]">Folder not found</span>}
-              </div>
-              <input
-                type="text"
-                value={musicFolder}
-                onChange={e => { setMusicFolder(e.target.value); setMusicFolderStatus('idle') }}
-                onBlur={() => void checkPath(musicFolder, setMusicFolderStatus)}
-                placeholder="/path/to/music"
-                className={`w-full rounded-md border bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none transition-colors ${
-                  musicFolderStatus === 'ok' ? 'border-[#22c55e]' :
-                  musicFolderStatus === 'missing' ? 'border-[#ef4444]' :
-                  'border-[#2a2a3a] focus:border-[#7c3aed]'
-                }`}
-              />
-            </div>
+            <FolderInput
+              label="Music library folder"
+              value={musicFolder}
+              status={musicFolderStatus}
+              placeholder="/path/to/music"
+              onChange={v => { setMusicFolder(v); setMusicFolderStatus('idle') }}
+              onBlur={() => void checkPath(musicFolder, setMusicFolderStatus)}
+              onBrowse={async () => {
+                const picked = await window.electronAPI?.selectFolder()
+                if (picked) { setMusicFolder(picked); void checkPath(picked, setMusicFolderStatus) }
+              }}
+            />
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs text-[#64748b] flex items-center gap-1.5">
-                  <RekordboxIcon size={12} className="opacity-60" />
-                  Rekordbox XML folder
-                </label>
-                {rekordboxFolderStatus === 'checking' && <span className="text-[10px] text-[#475569]">Checking…</span>}
-                {rekordboxFolderStatus === 'ok' && <span className="text-[10px] text-[#22c55e]">✓ Found</span>}
-                {rekordboxFolderStatus === 'missing' && <span className="text-[10px] text-[#ef4444]">Folder not found</span>}
-              </div>
-              <input
-                type="text"
-                value={rekordboxFolder}
-                onChange={e => { setRekordboxFolder(e.target.value); setRekordboxFolderStatus('idle') }}
-                onBlur={() => void checkPath(rekordboxFolder, setRekordboxFolderStatus)}
-                placeholder="/path/to/rekordbox/exports"
-                className={`w-full rounded-md border bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none transition-colors ${
-                  rekordboxFolderStatus === 'ok' ? 'border-[#22c55e]' :
-                  rekordboxFolderStatus === 'missing' ? 'border-[#ef4444]' :
-                  'border-[#2a2a3a] focus:border-[#7c3aed]'
-                }`}
-              />
-              <p className="mt-1 text-[10px] text-[#475569]">When set, Rekordbox XML exports save directly to this folder.</p>
-            </div>
+            <FolderInput
+              label="Rekordbox XML folder"
+              labelIcon={<RekordboxIcon size={12} className="opacity-60" />}
+              value={rekordboxFolder}
+              status={rekordboxFolderStatus}
+              placeholder="/path/to/rekordbox/exports"
+              hint="When set, Rekordbox XML exports save directly to this folder."
+              onChange={v => { setRekordboxFolder(v); setRekordboxFolderStatus('idle') }}
+              onBlur={() => void checkPath(rekordboxFolder, setRekordboxFolderStatus)}
+              onBrowse={async () => {
+                const picked = await window.electronAPI?.selectFolder()
+                if (picked) { setRekordboxFolder(picked); void checkPath(picked, setRekordboxFolderStatus) }
+              }}
+            />
           </div>
         )}
 

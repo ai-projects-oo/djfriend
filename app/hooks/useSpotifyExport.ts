@@ -32,12 +32,6 @@ export function useSpotifyExport({
 }: UseSpotifyExportParams) {
   const [spotifyExportStatus, setSpotifyExportStatus] =
     useState<SpotifyExportStatus | null>(null);
-  const [m3uSavedPath] = useState<string | null>(null);
-
-  const exportM3UToServer = useCallback(async (_tracks: SetTrack[], _filename: string): Promise<boolean> => {
-    return false; // M3U always browser-downloads now
-  }, []);
-
   const handleExportM3U = useCallback(async () => {
     if (generatedSet.length === 0) return;
     const now = new Date();
@@ -167,8 +161,6 @@ export function useSpotifyExport({
   return {
     spotifyExportStatus,
     setSpotifyExportStatus,
-    m3uSavedPath,
-    exportM3UToServer,
     handleExportM3U,
     startSpotifyExport,
     handleExportSpotify,

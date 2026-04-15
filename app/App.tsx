@@ -338,7 +338,6 @@ function AppInner() {
   const {
     spotifyExportStatus,
     setSpotifyExportStatus,
-    m3uSavedPath,
     handleExportM3U,
     startSpotifyExport,
     handleExportSpotify,
@@ -2111,11 +2110,6 @@ function AppInner() {
         onDatabaseCleared={() => setAnalyzedApplePlaylists(new Set())}
       />
 
-      {m3uSavedPath && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-[#1a1a2e] border border-[#7c3aed] text-[#e2e8f0] text-xs rounded-lg px-4 py-2.5 shadow-lg max-w-sm truncate">
-          Saved to {m3uSavedPath}
-        </div>
-      )}
     </div>
   );
 }

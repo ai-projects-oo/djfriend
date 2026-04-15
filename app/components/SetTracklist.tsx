@@ -4,6 +4,7 @@ import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
 import { downloadRekordboxXml } from '../lib/rekordboxExport';
 import SetCardExport from './SetCardExport';
+import { SpotifyIcon, RekordboxIcon, M3UIcon, CopyIcon, ImageIcon } from './Icons';
 import { matchesGenrePref } from '../lib/genreUtils';
 import { getAffinityKey, genreAffinityBonus } from '../lib/setGenerator';
 
@@ -87,6 +88,7 @@ interface Props {
   tracks: SetTrack[];
   prefs: DJPreferences;
   libraryLoaded: boolean;
+  showRekordboxExport?: boolean;
   onSwapTrack: (index: number) => void;
   onToggleLock: (index: number) => void;
   onRemoveTrack: (index: number) => void;
@@ -103,7 +105,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordboxExport, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
@@ -276,7 +278,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
               <span className="text-[10px]">▾</span>
             </button>
             {exportOpen && (
-              <div className="absolute right-0 top-full mt-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+              <div className="absolute right-0 top-full mt-1 z-10 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
                 <button
                   onClick={() => {
                     const text = tracks.map((t, i) =>
@@ -285,33 +287,40 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, onSwapTrack
                     void navigator.clipboard.writeText(text);
                     setExportOpen(false);
                   }}
-                  className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
+                  <CopyIcon size={14} className="shrink-0 opacity-60" />
                   Copy as text
                 </button>
                 <button
                   onClick={() => { downloadM3U(tracks); onExport?.(); setExportOpen(false); }}
-                  className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
+                  <M3UIcon size={14} className="shrink-0 opacity-60" />
                   Export as M3U
                 </button>
+                {showRekordboxExport && (
                 <button
                   onClick={() => { downloadRekordboxXml(tracks); onExport?.(); setExportOpen(false); }}
-                  className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
+                  <RekordboxIcon size={14} className="shrink-0 opacity-60" />
                   Export to Rekordbox
                 </button>
+                )}
                 <button
                   onClick={() => { setCardOpen(true); setExportOpen(false); }}
-                  className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
                 >
+                  <ImageIcon size={14} className="shrink-0 opacity-60" />
                   Export as Image
                 </button>
                 {onExportSpotify && (
                   <button
                     onClick={() => { onExportSpotify(); setExportOpen(false); }}
-                    className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
                   >
+                    <SpotifyIcon size={14} className="shrink-0 text-[#1db954]" />
                     Export to Spotify
                   </button>
                 )}

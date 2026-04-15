@@ -25,6 +25,7 @@ import {
 } from "./lib/spotifyImport";
 import { downloadM3U } from "./lib/m3uExport";
 import { downloadRekordboxXml } from "./lib/rekordboxExport";
+import { SpotifyIcon, RekordboxIcon, M3UIcon } from "./components/Icons";
 import { useLibrary } from "./hooks/useLibrary";
 import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
@@ -124,10 +125,10 @@ function AppInner() {
   const [chatOpen, setChatOpen] = useState(false);
   const [hasGroqKey, setHasGroqKey] = useState(false);
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
+  const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(() =>
     localStorage.getItem('djfriend-onboarding-dismissed') === 'true'
   );
-  const [playlistsFolder, setPlaylistsFolder] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [dateCalendar, setDateCalendar] = useState<'from' | 'to' | null>(null);
   const [analyzeMenuOpen, setAnalyzeMenuOpen] = useState(false);
@@ -338,26 +339,21 @@ function AppInner() {
     spotifyExportStatus,
     setSpotifyExportStatus,
     m3uSavedPath,
-    exportM3UToServer,
     handleExportM3U,
     startSpotifyExport,
     handleExportSpotify,
     handleToggleSpotifyMatch,
     handleConfirmSpotifyExport,
     handleRenameEntry,
-  } = useSpotifyExport({ generatedSet, prefs, curve, playlistsFolder, setHistory });
+  } = useSpotifyExport({ generatedSet, prefs, curve, setHistory });
 
   const handleExportImportM3U = useCallback(async (entry: import("./types").ImportEntry) => {
     const songs = findSongsForImport(entry.tracks, library);
     if (songs.length === 0) return;
     const setTracks = songs.map((s, i) => ({ ...s, slot: i, targetEnergy: s.energy, harmonicWarning: false }));
     const filename = `${entry.name.replace(/[^a-z0-9_\-. ]/gi, '_')}.m3u`;
-    if (playlistsFolder) {
-      await exportM3UToServer(setTracks, filename);
-    } else {
-      downloadM3U(setTracks, filename);
-    }
-  }, [library, playlistsFolder, exportM3UToServer]);
+    downloadM3U(setTracks, filename);
+  }, [library]);
 
   const handleExportImportRekordbox = useCallback((entry: import("./types").ImportEntry) => {
     const songs = findSongsForImport(entry.tracks, library);
@@ -377,12 +373,12 @@ function AppInner() {
 
   const loadSettings = useCallback(() => {
     apiFetch('/api/settings')
-      .then(r => r.json() as Promise<{ musicFolder?: string; playlistsFolder?: string; hasGroqKey?: boolean; hasSecret?: boolean }>)
+      .then(r => r.json() as Promise<{ musicFolder?: string; rekordboxFolder?: string; hasGroqKey?: boolean; hasSecret?: boolean }>)
       .then(d => {
         if (d.musicFolder) setFolderPath(prev => prev || d.musicFolder!)
-        if (d.playlistsFolder !== undefined) setPlaylistsFolder(d.playlistsFolder)
         if (d.hasGroqKey !== undefined) setHasGroqKey(d.hasGroqKey)
         if (d.hasSecret !== undefined) setHasSpotifyCredentials(d.hasSecret)
+        setHasRekordboxFolder(!!(d.rekordboxFolder && d.rekordboxFolder.trim()))
       })
       .catch(() => {})
   }, [setFolderPath]);
@@ -727,17 +723,20 @@ function AppInner() {
                   : "border-transparent text-[#475569] hover:text-[#94a3b8]"
               }`}
             >
-              {tab}
-              {tab === "History" && history.length > 0 && (
-                <span className="ml-1.5 text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                  {history.length}
-                </span>
-              )}
-              {tab === "Import" && importHistory.length > 0 && (
-                <span className="ml-1.5 text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                  {importHistory.length}
-                </span>
-              )}
+              <span className="flex items-center gap-1.5">
+                {tab === "Import" && <SpotifyIcon size={13} className="text-[#1db954]" />}
+                {tab}
+                {tab === "History" && history.length > 0 && (
+                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                    {history.length}
+                  </span>
+                )}
+                {tab === "Import" && importHistory.length > 0 && (
+                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                    {importHistory.length}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </div>
@@ -1175,6 +1174,7 @@ function AppInner() {
                   tracks={generatedSet}
                   prefs={prefs}
                   libraryLoaded={library.length > 0}
+                  showRekordboxExport={hasRekordboxFolder}
                   onSwapTrack={handleSwapTrack}
                   onToggleLock={handleToggleLock}
                   onRemoveTrack={handleRemoveTrack}
@@ -1231,8 +1231,7 @@ function AppInner() {
             openHistoryExportId={openHistoryExportId}
             setOpenHistoryExportId={setOpenHistoryExportId}
             historyExportRef={historyExportRef}
-            playlistsFolder={playlistsFolder}
-            exportM3UToServer={exportM3UToServer}
+            showRekordboxExport={hasRekordboxFolder}
             startSpotifyExport={hasSpotifyCredentials ? startSpotifyExport : undefined}
             handleRenameEntry={handleRenameEntry}
             onLoadEntry={handleLoadHistoryEntry}
@@ -1245,6 +1244,7 @@ function AppInner() {
           {/* Import input */}
           <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-5">
             <div className="flex items-center gap-2 mb-3">
+              <SpotifyIcon size={16} className="text-[#1db954] shrink-0" />
               <h2 className="text-sm font-semibold text-[#e2e8f0]">
                 Import Spotify Playlist
               </h2>
@@ -1389,15 +1389,17 @@ function AppInner() {
                           Export <span className="text-[9px]">▾</span>
                         </button>
                         {openImportExportId === entry.id && (
-                          <div className="absolute right-0 bottom-full mb-1 z-20 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                          <div className="absolute right-0 bottom-full mb-1 z-20 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
                             <button
                               onClick={() => { void handleExportImportM3U(entry); setOpenImportExportId(null); }}
-                              className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                            >Export as M3U</button>
+                              className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                            ><M3UIcon size={13} className="shrink-0 opacity-60" />Export as M3U</button>
+                            {hasRekordboxFolder && (
                             <button
                               onClick={() => { handleExportImportRekordbox(entry); setOpenImportExportId(null); }}
-                              className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
-                            >Export to Rekordbox</button>
+                              className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                            ><RekordboxIcon size={13} className="shrink-0 opacity-60" />Export to Rekordbox</button>
+                            )}
                           </div>
                         )}
                       </div>

@@ -140,6 +140,7 @@ function AppInner() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const rbFileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadFolderInputRef = useRef<HTMLInputElement | null>(null);
+  const sourceDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Persist history to localStorage
   useEffect(() => {
@@ -223,6 +224,16 @@ function AppInner() {
   const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
   // Visual-only loading state for the Generate CTA button
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Click-outside for source playlist dropdown
+  useEffect(() => {
+    if (!sourceDropdownOpen) return;
+    const handle = (e: MouseEvent) => {
+      if (sourceDropdownRef.current && !sourceDropdownRef.current.contains(e.target as Node)) setSourceDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [sourceDropdownOpen]);
 
   // useSpotifyImport first so we have importHistory before calling useSetGenerator
   const {
@@ -989,34 +1000,62 @@ function AppInner() {
                       >
                         Full Library
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setSourceDropdownOpen(true)}
-                        className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border truncate max-w-[200px]"
-                        style={{ backgroundColor: playlistFilterId ? '#7c3aed' : 'transparent', color: playlistFilterId ? '#fff' : '#64748b', borderColor: playlistFilterId ? '#7c3aed' : '#2a2a3a' }}
-                        title={playlistFilterId ? (importHistory.find(e => e.id === playlistFilterId)?.name ?? 'Playlist') : 'Generate from an imported playlist'}
-                      >
-                        {playlistFilterId
-                          ? (importHistory.find(e => e.id === playlistFilterId)?.name ?? 'Playlist')
-                          : 'From Playlist'}
-                      </button>
+                      <div className="relative" ref={sourceDropdownRef}>
+                        <button
+                          type="button"
+                          onClick={() => setSourceDropdownOpen(v => !v)}
+                          className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border truncate max-w-[200px] flex items-center gap-1"
+                          style={{ backgroundColor: playlistFilterId ? '#7c3aed' : 'transparent', color: playlistFilterId ? '#fff' : '#64748b', borderColor: playlistFilterId ? '#7c3aed' : '#2a2a3a' }}
+                          title={playlistFilterId ? (importHistory.find(e => e.id === playlistFilterId)?.name ?? 'Playlist') : 'Generate from an imported playlist'}
+                        >
+                          <span className="truncate max-w-[160px]">
+                            {playlistFilterId
+                              ? (importHistory.find(e => e.id === playlistFilterId)?.name ?? 'Playlist')
+                              : 'From Playlist'}
+                          </span>
+                          <svg className="w-3 h-3 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        {sourceDropdownOpen && (
+                          <div className="absolute left-0 top-full mt-1 z-30 bg-[#12121a] border border-[#2a2a3a] rounded-lg shadow-xl py-1 min-w-[220px] max-h-60 overflow-y-auto">
+                            <button
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-xs text-[#64748b] hover:bg-[#1e1e2e] transition-colors"
+                              onClick={() => { setPlaylistFilterId(null); setSourceDropdownOpen(false); }}
+                            >
+                              — Full Library (no filter) —
+                            </button>
+                            {importHistory.map(entry => {
+                              const inLib = entry.tracks.filter(t => t.inLibrary).length;
+                              const isSelected = playlistFilterId === entry.id;
+                              return (
+                                <button
+                                  key={entry.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center justify-between gap-2"
+                                  style={{ color: isSelected ? '#a78bfa' : '#e2e8f0', backgroundColor: isSelected ? '#1e1a2e' : undefined }}
+                                  onClick={() => { setPlaylistFilterId(entry.id); setSourceDropdownOpen(false); }}
+                                >
+                                  <span className="truncate">{entry.name}</span>
+                                  <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">{inLib}/{entry.tracks.length}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  {sourceDropdownOpen && (
-                    <select
-                      value={playlistFilterId ?? ''}
-                      onChange={e => { setPlaylistFilterId(e.target.value || null); setSourceDropdownOpen(false); }}
-                      onBlur={() => setSourceDropdownOpen(false)}
-                      className="w-full bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-3 py-1.5 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] transition-colors"
-                    >
-                      <option value="">— select a playlist —</option>
-                      {importHistory.map(entry => (
-                        <option key={entry.id} value={entry.id}>
-                          {entry.name} · {entry.tracks.length} tracks
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  {playlistFilterId && (() => {
+                    const entry = importHistory.find(e => e.id === playlistFilterId);
+                    if (!entry) return null;
+                    const inLib = entry.tracks.filter(t => t.inLibrary).length;
+                    return (
+                      <p className="text-[11px] text-[#64748b]">
+                        <span className="text-[#94a3b8] font-medium">{inLib}</span> of {entry.tracks.length} tracks matched in your library
+                        {inLib === 0 && <span className="text-[#f59e0b] ml-1">— no tracks found, add them first</span>}
+                      </p>
+                    );
+                  })()}
                 </div>
               )}
 

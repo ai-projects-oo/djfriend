@@ -22,6 +22,7 @@ export interface EnergyProfile {
 
 export interface LocalAudioFeatures {
   bpm: number;
+  tagBpm: number | null; // Raw ID3/metadata BPM tag — null if absent
   pitchClass: number; // 0–11 (matches Spotify pitch class, compatible with camelot.ts)
   mode: number;       // 1=major, 0=minor
   energy: number;     // 0–1 normalized via dBFS
@@ -305,9 +306,7 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
 
     const energyProfile = computeEnergyProfile(channelData, 44100);
 
-    // Return raw BPM — callers apply genre-aware double-time correction once
-    // genre data is available (see normalizeBpm in vite.config.ts / index.ts).
-    return { bpm, pitchClass, mode, energy, energyProfile, year: tagYear, comment: tagComment };
+    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, year: tagYear, comment: tagComment };
   } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;

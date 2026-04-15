@@ -65,6 +65,7 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
 
   const [library, setLibrary] = useState<Song[]>([]);
   const [libraryName, setLibraryName] = useState<string>("");
+  const [isInitializing, setIsInitializing] = useState(true); // true until the startup fetch resolves
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisQueue, setAnalysisQueueState] = useState<QueueItem[]>([]);
   const [enrichmentStatus, setEnrichmentStatus] = useState<{ completed: number; total: number } | null>(null);
@@ -97,6 +98,7 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
           setLibrary(songs);
           setLibraryName("results.json (auto-loaded)");
           setError(null);
+          setIsInitializing(false);
           return;
         }
         throw new Error("empty");
@@ -116,7 +118,8 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
               setError(null);
             }
           })
-          .catch(() => {});
+          .catch(() => {})
+          .finally(() => setIsInitializing(false));
       });
   }, []);
 
@@ -463,6 +466,7 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
     library,
     setLibrary,
     libraryName,
+    isInitializing,
     isAnalyzing,
     analysisProgress,
     enrichmentStatus,

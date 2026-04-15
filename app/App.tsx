@@ -201,6 +201,7 @@ function AppInner() {
     library,
     setLibrary,
     libraryName,
+    isInitializing,
     enrichmentStatus,
     analysisQueue,
     cancelQueueItem,
@@ -491,6 +492,19 @@ function AppInner() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
+      {/* Startup initialization overlay */}
+      {isInitializing && (
+        <div className="fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col items-center justify-center gap-6">
+          <img src="/icon.png" alt="DJFriend" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover' }} />
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-sm font-medium text-[#e2e8f0]">Initializing library…</p>
+            <p className="text-xs text-[#475569]">Loading tracks and matching imported playlists</p>
+          </div>
+          <div className="w-48 h-0.5 bg-[#1e1e2e] rounded-full overflow-hidden">
+            <div className="h-full bg-[#7c3aed] rounded-full animate-pulse w-full" />
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="border-b border-[#1e1e2e] bg-[#0a0a0f] sticky top-0 z-40 pt-6">
         <div className="px-2 h-14 flex items-center justify-between">
@@ -1153,7 +1167,7 @@ function AppInner() {
                       setIsGenerating(false);
                     }, 0);
                   }}
-                  disabled={library.length === 0 || isGenerating}
+                  disabled={isInitializing || library.length === 0 || isGenerating}
                   title="Generate a new set"
                   aria-label="Generate set"
                   className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
@@ -1197,7 +1211,7 @@ function AppInner() {
                 </button>
                 {/* Secondary actions — subordinate ghost buttons */}
                 <div className="flex gap-2">
-                  <button onClick={handleRegenerate} disabled={library.length === 0} title="Different mix from the same tracks"
+                  <button onClick={handleRegenerate} disabled={isInitializing || library.length === 0} title="Different mix from the same tracks"
                     className="flex-1 flex items-center justify-center gap-1.5 border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#64748b] hover:text-[#94a3b8] text-xs font-medium py-1.5 rounded-md transition-all duration-200 cursor-pointer">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -1218,7 +1232,7 @@ function AppInner() {
                 {generatedSet.length > 0 && (
                   <button
                     onClick={handleAppendTracks}
-                    disabled={library.length === 0}
+                    disabled={isInitializing || library.length === 0}
                     title="Generate more tracks and append them to the current set"
                     className="w-full flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#a78bfa] text-sm font-medium py-2 rounded-md transition-colors cursor-pointer"
                   >

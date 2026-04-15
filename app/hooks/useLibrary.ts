@@ -5,6 +5,7 @@ import { apiFetch } from "../lib/apiFetch";
 
 interface UseLibraryOptions {
   onNewAnalysis?: () => void;
+  onPlaylistImported?: (songs: Song[], label: string) => void;
 }
 
 type AnalysisEvent =
@@ -50,9 +51,11 @@ export interface QueueItem {
   total: number;
 }
 
-export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
+export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOptions = {}) {
   const onNewAnalysisRef = useRef(onNewAnalysis);
   useEffect(() => { onNewAnalysisRef.current = onNewAnalysis; }, [onNewAnalysis]);
+  const onPlaylistImportedRef = useRef(onPlaylistImported);
+  useEffect(() => { onPlaylistImportedRef.current = onPlaylistImported; }, [onPlaylistImported]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const isAnalyzingRef = useRef(false);
@@ -443,6 +446,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
           setLibrary(songs);
           setLibraryName(`${event.libraryName} (imported)`);
           setError(null);
+          onPlaylistImportedRef.current?.(songs, label);
         }
       }, controller.signal);
     } catch (err) {

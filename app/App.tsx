@@ -194,6 +194,8 @@ function AppInner() {
 
   // Stable ref used to bridge setGeneratedSet (from useSetGenerator) into useLibrary's onNewAnalysis callback
   const onNewAnalysisRef = useRef<(() => void) | undefined>(undefined);
+  // Stable ref used to bridge setImportHistory (from useSpotifyImport) into useLibrary's onPlaylistImported callback
+  const onPlaylistImportedRef = useRef<((songs: import('./types').Song[], label: string) => void) | undefined>(undefined);
 
   const {
     library,
@@ -216,7 +218,10 @@ function AppInner() {
     runRekordboxImport,
     runUploadAnalysis,
     runM3uWebImport,
-  } = useLibrary({ onNewAnalysis: () => onNewAnalysisRef.current?.() });
+  } = useLibrary({
+    onNewAnalysis: () => onNewAnalysisRef.current?.(),
+    onPlaylistImported: (songs, label) => onPlaylistImportedRef.current?.(songs, label),
+  });
 
   // Playlist filter — which import entry restricts the generator pool
   const [playlistFilterId, setPlaylistFilterId] = useState<string | null>(null);
@@ -257,6 +262,34 @@ function AppInner() {
     handleImport,
     handleBrowseSpotifyPlaylists,
   } = useSpotifyImport({ library, setHistory });
+
+  // Wire the playlist-imported callback now that setImportHistory is available
+  useEffect(() => {
+    onPlaylistImportedRef.current = (songs, label) => {
+      const entry: import('./types').ImportEntry = {
+        id: Date.now().toString(),
+        name: label,
+        timestamp: Date.now(),
+        playlistId: `local-${Date.now()}`,
+        tracks: songs.map(s => ({
+          spotifyId: s.spotifyId ?? s.file,
+          title: s.title,
+          artist: s.artist,
+          inLibrary: true,
+          matchConfidence: 'exact' as const,
+        })),
+      };
+      setImportHistory(prev => {
+        const exists = prev.findIndex(e => e.name === label);
+        if (exists >= 0) {
+          const next = [...prev];
+          next[exists] = entry;
+          return next;
+        }
+        return [entry, ...prev];
+      });
+    };
+  }, [setImportHistory]);
 
   // Derive the file set + duration for the active playlist filter (both memoized)
   const playlistFilterFiles = useMemo<Set<string> | undefined>(() => {
@@ -1846,21 +1879,25 @@ function AppInner() {
               ) : (
                 <div className="flex flex-col gap-1 max-h-[55vh] overflow-y-auto">
                   {filtered.map((playlist) => {
-                    const imported = analyzedApplePlaylists.has(playlist.name);
+                    const imported = analyzedApplePlaylists.has(playlist.name) || importHistory.some(e => e.name === playlist.name);
                     return (
                       <button
                         key={playlist.name}
                         onClick={() => runAppleMusicAnalysis(playlist.name)}
-                        className="w-full text-left rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-2.5 hover:border-[#7c3aed] transition-colors cursor-pointer"
+                        className="w-full text-left rounded-md border px-3 py-2.5 hover:border-[#7c3aed] transition-colors cursor-pointer"
+                        style={{ borderColor: imported ? '#16a34a' : '#2a2a3a', backgroundColor: imported ? '#0d1f13' : '#0d0d14' }}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm text-[#e2e8f0]">{playlist.name}</span>
                           {imported && (
-                            <span className="text-[11px] font-semibold text-[#22c55e] flex-shrink-0">✓</span>
+                            <svg className="w-4 h-4 text-[#22c55e] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
                           )}
                         </div>
                         <div className="text-[11px] text-[#475569] mt-0.5">
                           {playlist.count} track{playlist.count === 1 ? "" : "s"}
+                          {imported && <span className="text-[#16a34a] ml-1.5">· imported</span>}
                         </div>
                       </button>
                     );

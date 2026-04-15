@@ -340,7 +340,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'GET') {
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ spotifyClientId: s.spotifyClientId ?? '', hasSecret: !!s.spotifyClientSecret, musicFolder: s.musicFolder ?? '', playlistsFolder: s.playlistsFolder ?? '', hasGroqKey: !!s.groqApiKey }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', hasGroqKey: !!s.groqApiKey }))
       return
     }
     if (req.method === 'POST') {
@@ -349,7 +349,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (typeof body.spotifyClientId === 'string') updates.spotifyClientId = body.spotifyClientId.trim()
       if (typeof body.spotifyClientSecret === 'string' && body.spotifyClientSecret.trim()) updates.spotifyClientSecret = body.spotifyClientSecret.trim()
       if (typeof body.musicFolder === 'string') updates.musicFolder = body.musicFolder.trim()
-      if (typeof body.playlistsFolder === 'string') updates.playlistsFolder = body.playlistsFolder.trim()
+      if (typeof body.rekordboxFolder === 'string') updates.rekordboxFolder = body.rekordboxFolder.trim()
       if (typeof body.groqApiKey === 'string' && body.groqApiKey.trim()) updates.groqApiKey = body.groqApiKey.trim()
       writeSettings(updates)
       res.setHeader('Content-Type', 'application/json')
@@ -664,6 +664,19 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const filename = (body.filename ?? 'djfriend-set.m3u').replace(/[/\\?%*:|"<>]/g, '-')
     const outPath = path.join(playlistsFolder, filename)
     fs.mkdirSync(playlistsFolder, { recursive: true })
+    fs.writeFileSync(outPath, body.content ?? '', 'utf-8')
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: true, path: outPath }))
+  })
+
+  middlewares.use('/api/export-rekordbox-xml', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    const body = await readJsonBody(req) as { content?: string; filename?: string }
+    const { rekordboxFolder } = readSettings()
+    if (!rekordboxFolder) { res.statusCode = 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'rekordboxFolder not set in settings.' })); return }
+    const filename = (body.filename ?? 'djfriend-set.xml').replace(/[/\\?%*:|"<>]/g, '-')
+    const outPath = path.join(rekordboxFolder, filename)
+    fs.mkdirSync(rekordboxFolder, { recursive: true })
     fs.writeFileSync(outPath, body.content ?? '', 'utf-8')
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ ok: true, path: outPath }))

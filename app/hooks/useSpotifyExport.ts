@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
-import { apiFetch } from "../lib/apiFetch";
 import type { SetTrack, HistoryEntry, DJPreferences, CurvePoint } from "../types";
-import { generateM3U, downloadM3U } from "../lib/m3uExport";
+import { downloadM3U } from "../lib/m3uExport";
 import {
   getStoredToken,
   storePendingExport,
@@ -22,7 +21,6 @@ interface UseSpotifyExportParams {
   generatedSet: SetTrack[];
   prefs: DJPreferences;
   curve: CurvePoint[];
-  playlistsFolder: string;
   setHistory: React.Dispatch<React.SetStateAction<HistoryEntry[]>>;
 }
 
@@ -30,29 +28,14 @@ export function useSpotifyExport({
   generatedSet,
   prefs,
   curve,
-  playlistsFolder,
   setHistory,
 }: UseSpotifyExportParams) {
   const [spotifyExportStatus, setSpotifyExportStatus] =
     useState<SpotifyExportStatus | null>(null);
-  const [m3uSavedPath, setM3uSavedPath] = useState<string | null>(null);
+  const [m3uSavedPath] = useState<string | null>(null);
 
-  const exportM3UToServer = useCallback(async (tracks: SetTrack[], filename: string) => {
-    const content = generateM3U(tracks);
-    try {
-      const r = await apiFetch('/api/export-m3u', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, filename }),
-      });
-      const data = await r.json() as { ok?: boolean; path?: string; error?: string };
-      if (data.ok && data.path) {
-        setM3uSavedPath(data.path);
-        setTimeout(() => setM3uSavedPath(null), 4000);
-        return true;
-      }
-    } catch { /* fall through */ }
-    return false;
+  const exportM3UToServer = useCallback(async (_tracks: SetTrack[], _filename: string): Promise<boolean> => {
+    return false; // M3U always browser-downloads now
   }, []);
 
   const handleExportM3U = useCallback(async () => {
@@ -69,13 +52,8 @@ export function useSpotifyExport({
       curve: curve.map((p) => ({ ...p })),
     };
     setHistory((prev) => [entry, ...prev]);
-    if (playlistsFolder) {
-      const saved = await exportM3UToServer(generatedSet, `${name}.m3u`);
-      if (!saved) downloadM3U(generatedSet, `${name}.m3u`);
-    } else {
-      downloadM3U(generatedSet, `${name}.m3u`);
-    }
-  }, [generatedSet, prefs, curve, playlistsFolder, exportM3UToServer, setHistory]);
+    downloadM3U(generatedSet, `${name}.m3u`);
+  }, [generatedSet, prefs, curve, setHistory]);
 
   const startSpotifyExport = useCallback(
     async (tracks: SetTrack[], playlistName: string) => {

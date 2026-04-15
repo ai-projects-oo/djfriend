@@ -3,6 +3,8 @@ import { camelotColor } from "../lib/camelotColors";
 import { buildSvgPath } from "../lib/curveInterpolation";
 import { downloadM3U } from "../lib/m3uExport";
 import { downloadRekordboxXml } from "../lib/rekordboxExport";
+
+import { SpotifyIcon, RekordboxIcon, M3UIcon } from "./Icons";
 import { ARC_PRESETS } from "./EnergyCurveEditor";
 
 interface HistoryTabProps {
@@ -14,8 +16,7 @@ interface HistoryTabProps {
   openHistoryExportId: string | null;
   setOpenHistoryExportId: React.Dispatch<React.SetStateAction<string | null>>;
   historyExportRef: React.RefObject<HTMLDivElement | null>;
-  playlistsFolder: string;
-  exportM3UToServer: (tracks: SetTrack[], filename: string) => Promise<boolean>;
+  showRekordboxExport?: boolean;
   startSpotifyExport?: (tracks: SetTrack[], playlistName: string) => Promise<void>;
   handleRenameEntry: (id: string, newName: string) => void;
   onLoadEntry: (entry: HistoryEntry) => void;
@@ -40,8 +41,7 @@ export default function HistoryTab({
   openHistoryExportId,
   setOpenHistoryExportId,
   historyExportRef,
-  playlistsFolder,
-  exportM3UToServer,
+  showRekordboxExport,
   startSpotifyExport,
   handleRenameEntry,
   onLoadEntry,
@@ -215,39 +215,35 @@ export default function HistoryTab({
                   Export <span className="text-[9px]">▾</span>
                 </button>
                 {openHistoryExportId === entry.id && (
-                  <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                  <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
                     <button
-                      onClick={() => {
-                        if (playlistsFolder) {
-                          void exportM3UToServer(entry.tracks, `${entry.name}.m3u`).then(saved => {
-                            if (!saved) downloadM3U(entry.tracks, `${entry.name}.m3u`);
-                          });
-                        } else {
-                          downloadM3U(entry.tracks, `${entry.name}.m3u`);
-                        }
-                        setOpenHistoryExportId(null);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                      onClick={() => { downloadM3U(entry.tracks, `${entry.name}.m3u`); setOpenHistoryExportId(null); }}
+                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                     >
+                      <M3UIcon size={13} className="shrink-0 opacity-60" />
                       Export as M3U
                     </button>
+                    {showRekordboxExport && (
                     <button
                       onClick={() => {
                         downloadRekordboxXml(entry.tracks, entry.name, `${entry.name}.xml`);
                         setOpenHistoryExportId(null);
                       }}
-                      className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
                     >
+                      <RekordboxIcon size={13} className="shrink-0 opacity-60" />
                       Export to Rekordbox
                     </button>
+                    )}
                     {startSpotifyExport && (
                       <button
                         onClick={() => {
                           void startSpotifyExport(entry.tracks, entry.name);
                           setOpenHistoryExportId(null);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                        className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
                       >
+                        <SpotifyIcon size={13} className="shrink-0 text-[#1db954]" />
                         Export to Spotify
                       </button>
                     )}

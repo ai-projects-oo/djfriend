@@ -18,6 +18,7 @@ export interface Settings {
   spotifyClientSecret: string
   musicFolder: string
   playlistsFolder: string
+  rekordboxFolder?: string
   groqApiKey?: string
 }
 

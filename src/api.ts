@@ -216,7 +216,7 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
         const keyInfo = toCamelot(features.pitchClass, features.mode)
         if (!keyInfo) continue
         const finalGenres = track.localGenres.length > 0 ? track.localGenres : genres
-        resultsJson[relativeFilePath] = { filePath: relativeFilePath, file: relativeFilePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, finalGenres), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres: finalGenres, ...(track.localGenres.length === 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
+        resultsJson[relativeFilePath] = { filePath: relativeFilePath, file: relativeFilePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, finalGenres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres: finalGenres, ...(track.localGenres.length === 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
       } catch { /* skip */ }
     }
     writeEvent({ type: 'folder_done', folder: folderKey })
@@ -268,13 +268,13 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
       // Fallback: if local audio decode failed (e.g. FLAC), use Spotify audio features
       if (!features && match?.spotifyId) {
         const sf = await getAudioFeatures(match.spotifyId, token)
-        if (sf) features = { bpm: sf.bpm, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
+        if (sf) features = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
       }
       if (!features) continue
 
       const keyInfo = toCamelot(features.pitchClass, features.mode)
       if (!keyInfo) continue
-      resultsJson[key] = { filePath: track.filePath, file: track.filePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), ...(track.dateAdded != null ? { dateAdded: track.dateAdded } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
+      resultsJson[key] = { filePath: track.filePath, file: track.filePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), ...(track.dateAdded != null ? { dateAdded: track.dateAdded } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
     } catch { /* skip */ }
   }
   const { groqApiKey } = readSettings()
@@ -641,7 +641,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           const keyInfo = toCamelot(features.pitchClass, features.mode)
           if (!keyInfo) continue
           const genres = localGenres.length > 0 ? localGenres : spotifyGenres
-          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
+          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
         } catch { /* skip */ }
       }
       const { groqApiKey } = readSettings()

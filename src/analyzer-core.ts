@@ -226,11 +226,30 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     const e = getEssentia();
 
     // BPM — trust ID3 tag if present and in a valid DJ range (60–200).
-    // Only fall back to audio detection when no tag exists, then use the tag
-    // as a hint to correct ×2/÷2 octave errors in the detection result.
-    const bpm = (tagBpm && tagBpm >= 60 && tagBpm <= 200)
-      ? Math.round(tagBpm * 10) / 10
-      : correctBpmWithTag(detectBpm(grooveData.slice(0, 30 * 44100), 44100), tagBpm);
+    // For untagged tracks use Essentia RhythmExtractor2013 (accurate but slower);
+    // correctBpmWithTag then disambiguates ×2/÷2 octave errors against the tag hint.
+    let bpm: number;
+    if (tagBpm && tagBpm >= 60 && tagBpm <= 200) {
+      bpm = Math.round(tagBpm * 10) / 10;
+    } else {
+      let detectedBpm: number;
+      try {
+        const bpmVec = e.arrayToVector(grooveData.slice(0, 30 * 44100));
+        const rhythmResult = e.RhythmExtractor2013(bpmVec, 208, 'degara', 40) as { bpm: number };
+        bpmVec.delete();
+        detectedBpm = rhythmResult.bpm ?? 0;
+        // Fold into 60–175 DJ range
+        if (detectedBpm > 0) {
+          while (detectedBpm < 60) detectedBpm *= 2;
+          while (detectedBpm > 175) detectedBpm /= 2;
+        } else {
+          detectedBpm = detectBpm(grooveData.slice(0, 30 * 44100), 44100);
+        }
+      } catch {
+        detectedBpm = detectBpm(grooveData.slice(0, 30 * 44100), 44100);
+      }
+      bpm = correctBpmWithTag(Math.round(detectedBpm * 10) / 10, tagBpm);
+    }
 
     // Key consensus — 5 segments spread across the first 75 % of the track × 4 profiles.
     // Proportional spacing means we hit the main drop, verse and chorus regardless of

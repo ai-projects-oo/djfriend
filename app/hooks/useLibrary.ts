@@ -185,6 +185,7 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
           setLibraryName(`${event.libraryName} (analyzed)`);
           setAnalyzedApplePlaylists(prev => new Set([...prev, playlistName]));
           setError(null);
+          onPlaylistImportedRef.current?.(songs, playlistName);
         }
       }, controller.signal);
     } catch (err) {

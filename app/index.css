@@ -1,13 +1,66 @@
 @import "tailwindcss";
 
+/* ─── DJFriend Design Tokens ──────────────────────────────────────────────────
+   Single source of truth for all theme colors.
+   JS mirror: app/lib/theme.ts
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Brand / accent */
+  --dj-brand:        #7c3aed;
+  --dj-brand-dark:   #6d28d9;
+  --dj-brand-light:  #a855f7;
+  --dj-brand-muted:  #a78bfa;
+
+  /* Backgrounds (darkest → lightest surface) */
+  --dj-bg-base:      #0a0a0f;
+  --dj-bg-surface:   #12121a;
+  --dj-bg-input:     #0d0d14;
+  --dj-bg-elevated:  #1a1a2e;
+
+  /* Borders */
+  --dj-border:       #1e1e2e;
+  --dj-border-muted: #2a2a3a;
+
+  /* Text (brightest → dimmest) */
+  --dj-text-primary:   #e2e8f0;
+  --dj-text-secondary: #94a3b8;
+  --dj-text-muted:     #64748b;
+  --dj-text-subtle:    #475569;
+  --dj-text-dim:       #334155;
+
+  /* Status */
+  --dj-success: #22c55e;
+  --dj-warning: #f59e0b;
+  --dj-error:   #ef4444;
+
+  /* External services */
+  --dj-spotify: #1db954;
+
+  /* Energy gradient: hsl((1-energy)*120, 72%, 52%) — green→yellow→red */
+  --dj-energy-saturation: 72%;
+  --dj-energy-lightness:  52%;
+
+  /* Semantic tag chip colors */
+  --dj-tag-vibe-bg:   #7c3aed22;
+  --dj-tag-vibe-text: #a78bfa;
+  --dj-tag-mood-bg:   #1d4ed822;
+  --dj-tag-mood-text: #60a5fa;
+  --dj-tag-venue-bg:  #06522022;
+  --dj-tag-venue-text:#34d399;
+  --dj-tag-time-bg:   #92400e22;
+  --dj-tag-time-text: #fbbf24;
+  --dj-tag-vocal-bg:  #4a044e22;
+  --dj-tag-vocal-text:#e879f9;
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background-color: #0a0a0f;
-  color: #e2e8f0;
+  background-color: var(--dj-bg-base);
+  color: var(--dj-text-primary);
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   min-height: 100vh;
 }
@@ -17,12 +70,12 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #12121a;
+  background: var(--dj-bg-surface);
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a2a3a;
+  background: var(--dj-border-muted);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #7c3aed;
+  background: var(--dj-brand);
 }

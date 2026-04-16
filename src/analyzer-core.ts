@@ -43,15 +43,15 @@ const KEY_TO_PITCH: Record<string, number> = {
  * ~20x faster than RhythmExtractor2013.
  *
  * Works by:
- * 1. Decimating to ~2205 Hz (kick drum energy lives well below that)
+ * 1. Decimating to ~4410 Hz
  * 2. Computing a short-time RMS energy envelope
  * 3. Half-wave rectifying the first difference → onset strength signal
- * 4. Autocorrelating over the 60–200 BPM lag range
- * 5. Correcting for half-time / double-time octave errors
+ * 4. Autocorrelating over the 40–220 BPM lag range (wider than the final target)
+ * 5. Harmonic-aware candidate scoring to resolve half-time / double-time errors
  */
 function detectBpm(audio: Float32Array, sampleRate: number): number {
-  // Decimate to ~2205 Hz — cheap approximation, fine for sub-200 Hz kick energy
-  const DECIMATE = Math.max(1, Math.floor(sampleRate / 2205));
+  // Decimate to ~4410 Hz — better time resolution for onset detection
+  const DECIMATE = Math.max(1, Math.floor(sampleRate / 4410));
   const decimated = new Float32Array(Math.floor(audio.length / DECIMATE));
   for (let i = 0; i < decimated.length; i++) decimated[i] = audio[i * DECIMATE];
   const sr = sampleRate / DECIMATE;
@@ -72,26 +72,51 @@ function detectBpm(audio: Float32Array, sampleRate: number): number {
   const onset = new Float32Array(nFrames);
   for (let i = 1; i < nFrames; i++) onset[i] = Math.max(0, energy[i] - energy[i - 1]);
 
-  // Autocorrelation over the 60–200 BPM lag range
-  const fps = sr / HOP; // frames per second (~100)
-  const lagMin = Math.floor(fps * 60 / 200); // shortest period = fastest BPM
-  const lagMax = Math.ceil(fps * 60 / 60);   // longest period = slowest BPM
+  // Autocorrelation over a wider 40–220 BPM range so we capture octave candidates
+  const fps = sr / HOP;
+  const lagMin = Math.floor(fps * 60 / 220);
+  const lagMax = Math.ceil(fps * 60 / 40);
 
-  let bestLag = lagMin;
-  let bestCorr = -Infinity;
+  const corr = new Float32Array(lagMax + 1);
   for (let lag = lagMin; lag <= lagMax; lag++) {
     let c = 0;
     for (let i = lag; i < nFrames; i++) c += onset[i] * onset[i - lag];
-    if (c > bestCorr) { bestCorr = c; bestLag = lag; }
+    corr[lag] = c;
   }
 
-  let bpm = (fps * 60) / bestLag;
+  // Harmonic-aware scoring: for each candidate lag in the 60–175 BPM range,
+  // boost its score if its double-time (half lag) is also strong in the autocorrelation
+  // and penalise it if its half-time (double lag) is even stronger.
+  // This resolves the classic kick-on-2-and-4 → half-BPM error.
+  const targetMin = Math.floor(fps * 60 / 175);
+  const targetMax = Math.ceil(fps * 60 / 60);
 
-  // Octave correction: fold into the typical 60–175 BPM range
-  while (bpm < 60) bpm *= 2;
-  while (bpm > 175) bpm /= 2;
+  let bestLag = targetMin;
+  let bestScore = -Infinity;
 
-  return Math.round(bpm * 10) / 10;
+  for (let lag = targetMin; lag <= targetMax; lag++) {
+    const c = corr[lag];
+    if (c <= 0) continue;
+
+    // Half-lag = double tempo candidate
+    const halfLag = Math.round(lag / 2);
+    const halfC = (halfLag >= lagMin && halfLag <= lagMax) ? corr[halfLag] : 0;
+
+    // Double-lag = half tempo candidate
+    const doubleLag = Math.round(lag * 2);
+    const doubleC = (doubleLag <= lagMax) ? corr[doubleLag] : 0;
+
+    // Boost if double-time is also present (confirms this is a real beat period),
+    // penalise if half-time has a much stronger peak (we're likely seeing half-BPM).
+    const harmonicBoost = halfC > 0 ? Math.min(1.5, halfC / c) : 0;
+    const halfTimePenalty = doubleC > c * 1.1 ? doubleC / c : 0;
+
+    const score = c * (1 + 0.4 * harmonicBoost) / (1 + 0.5 * halfTimePenalty);
+
+    if (score > bestScore) { bestScore = score; bestLag = lag; }
+  }
+
+  return Math.round((fps * 60 / bestLag) * 10) / 10;
 }
 
 // Lazy singleton — WASM init is heavy, reuse across tracks
@@ -226,30 +251,11 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     const e = getEssentia();
 
     // BPM — trust ID3 tag if present and in a valid DJ range (60–200).
-    // For untagged tracks use Essentia RhythmExtractor2013 (accurate but slower);
-    // correctBpmWithTag then disambiguates ×2/÷2 octave errors against the tag hint.
-    let bpm: number;
-    if (tagBpm && tagBpm >= 60 && tagBpm <= 200) {
-      bpm = Math.round(tagBpm * 10) / 10;
-    } else {
-      let detectedBpm: number;
-      try {
-        const bpmVec = e.arrayToVector(grooveData.slice(0, 30 * 44100));
-        const rhythmResult = e.RhythmExtractor2013(bpmVec, 208, 'degara', 40) as { bpm: number };
-        bpmVec.delete();
-        detectedBpm = rhythmResult.bpm ?? 0;
-        // Fold into 60–175 DJ range
-        if (detectedBpm > 0) {
-          while (detectedBpm < 60) detectedBpm *= 2;
-          while (detectedBpm > 175) detectedBpm /= 2;
-        } else {
-          detectedBpm = detectBpm(grooveData.slice(0, 30 * 44100), 44100);
-        }
-      } catch {
-        detectedBpm = detectBpm(grooveData.slice(0, 30 * 44100), 44100);
-      }
-      bpm = correctBpmWithTag(Math.round(detectedBpm * 10) / 10, tagBpm);
-    }
+    // For untagged tracks, run the internal onset-autocorrelation detector
+    // then apply tag-based octave correction as a final sanity check.
+    const bpm = (tagBpm && tagBpm >= 60 && tagBpm <= 200)
+      ? Math.round(tagBpm * 10) / 10
+      : correctBpmWithTag(detectBpm(grooveData.slice(0, 30 * 44100), 44100), tagBpm);
 
     // Key consensus — 5 segments spread across the first 75 % of the track × 4 profiles.
     // Proportional spacing means we hit the main drop, verse and chorus regardless of

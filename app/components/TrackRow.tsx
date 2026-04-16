@@ -32,10 +32,8 @@ for (let i = 0; i < 12; i++) {
   CAMELOT_TO_KEY[CAMELOT_MINOR[i].toLowerCase()] = `${KEY_NAMES[i]} Minor`
 }
 
-function energyBarColor(energy: number): string {
-  if (energy < 0.4) return '#3b82f6';
-  if (energy < 0.7) return '#a855f7';
-  return '#ef4444';
+function energyBarColor(_energy: number): string {
+  return '#a855f7';
 }
 
 function formatDuration(seconds: number): string {

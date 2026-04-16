@@ -266,18 +266,16 @@ export default function EnergyCurveEditor({ points, onChange, setTracks }: Props
             const cx = toSvgX(xPos);
             const cy = toSvgY(t.energy);
             const targetCy = toSvgY(t.targetEnergy);
-            const delta = Math.abs(t.energy - t.targetEnergy);
-            const dotColor = delta <= 0.15 ? '#22c55e' : delta <= 0.30 ? '#f59e0b' : '#ef4444';
             return (
               <g key={t.file}>
                 {/* Vertical line from target to actual */}
-                <line x1={cx} y1={targetCy} x2={cx} y2={cy} stroke={dotColor} strokeWidth={1} strokeOpacity={0.3} />
+                <line x1={cx} y1={targetCy} x2={cx} y2={cy} stroke="#a855f7" strokeWidth={1} strokeOpacity={0.25} />
                 {/* Actual energy dot */}
                 <circle
                   cx={cx} cy={cy} r={t.locked ? 4 : 3}
-                  fill={dotColor}
+                  fill="#a855f7"
                   fillOpacity={0.85}
-                  stroke={t.locked ? '#f59e0b' : dotColor}
+                  stroke={t.locked ? '#c084fc' : '#a855f7'}
                   strokeWidth={t.locked ? 1.5 : 0}
                 >
                   <title>{t.title} — E:{t.energy.toFixed(2)} target:{t.targetEnergy.toFixed(2)}{t.locked ? ' 🔒' : ''}</title>
@@ -296,8 +294,6 @@ export default function EnergyCurveEditor({ points, onChange, setTracks }: Props
   );
 }
 
-function energyToColor(energy: number): string {
-  if (energy < 0.4) return '#22c55e';
-  if (energy < 0.7) return '#eab308';
-  return '#ef4444';
+function energyToColor(_energy: number): string {
+  return '#a855f7';
 }

@@ -294,7 +294,8 @@ export default function EnergyCurveEditor({ points, onChange, setTracks }: Props
   );
 }
 
+import { energyColor } from '../lib/theme';
+
 function energyToColor(energy: number): string {
-  const hue = Math.round((1 - Math.max(0, Math.min(1, energy))) * 120);
-  return `hsl(${hue}, 72%, 52%)`;
+  return energyColor(energy);
 }

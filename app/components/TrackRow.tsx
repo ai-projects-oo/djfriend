@@ -32,10 +32,10 @@ for (let i = 0; i < 12; i++) {
   CAMELOT_TO_KEY[CAMELOT_MINOR[i].toLowerCase()] = `${KEY_NAMES[i]} Minor`
 }
 
+import { energyColor, theme } from '../lib/theme';
+
 function energyBarColor(energy: number): string {
-  // Green (120°) → Yellow (60°) → Red (0°) smooth gradient
-  const hue = Math.round((1 - Math.max(0, Math.min(1, energy))) * 120);
-  return `hsl(${hue}, 72%, 52%)`;
+  return energyColor(energy);
 }
 
 function formatDuration(seconds: number): string {
@@ -57,13 +57,7 @@ function getCompatibleKeys(camelot: string): { standard: string[]; boost: string
   };
 }
 
-const TAG_COLORS: Record<string, { bg: string; text: string }> = {
-  vibe:  { bg: '#7c3aed22', text: '#a78bfa' },
-  mood:  { bg: '#1d4ed822', text: '#60a5fa' },
-  venue: { bg: '#06522022', text: '#34d399' },
-  time:  { bg: '#92400e22', text: '#fbbf24' },
-  vocal: { bg: '#4a044e22', text: '#e879f9' },
-};
+const TAG_COLORS = theme.tag;
 
 function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS }) {
   const c = TAG_COLORS[type];

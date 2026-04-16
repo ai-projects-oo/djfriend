@@ -1463,6 +1463,18 @@ function AppInner() {
                       >
                         →&nbsp;Set
                       </button>
+                      {!entry.playlistId.startsWith('local-') && (
+                        <a
+                          href={`https://open.spotify.com/playlist/${entry.playlistId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Play on Spotify"
+                          title="Play on Spotify"
+                          className="shrink-0 px-3 py-4 flex items-center text-[#475569] hover:text-[#1db954] transition-colors"
+                        >
+                          <SpotifyIcon size={14} />
+                        </a>
+                      )}
                       {/* Import export dropdown */}
                       <div className="relative shrink-0" ref={openImportExportId === entry.id ? importExportRef : null}>
                         <button

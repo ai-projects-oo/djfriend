@@ -821,7 +821,7 @@ function AppInner() {
                   </h2>
 
                 </div>
-                <EnergyCurveEditor points={curve} onChange={handleCurveChange} setTracks={generatedSet.length > 0 ? generatedSet : undefined} />
+                <EnergyCurveEditor points={curve} onChange={handleCurveChange} setTracks={generatedSet.length > 0 ? generatedSet : undefined} setLength={generatedSet.length} />
               </div>
 
               {/* Card 2: Filters (only when tag data exists) */}

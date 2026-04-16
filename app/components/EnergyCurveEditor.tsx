@@ -27,9 +27,27 @@ interface Props {
   points: CurvePoint[];
   onChange: (points: CurvePoint[]) => void;
   setTracks?: SetTrack[]; // overlay actual track energies as dots
+  setLength?: number;     // number of tracks — used to cap max control points
 }
 
-export default function EnergyCurveEditor({ points, onChange, setTracks }: Props) {
+/** Max control points recommended for a given set length */
+function maxPointsForSetLength(n: number): number {
+  if (n <= 6)  return 3;
+  if (n <= 12) return 5;
+  if (n <= 20) return 7;
+  return 9;
+}
+
+/** Resample current curve to a new number of evenly-spaced control points */
+function resampleCurve(points: CurvePoint[], newCount: number): CurvePoint[] {
+  if (newCount < 2) newCount = 2;
+  return Array.from({ length: newCount }, (_, i) => {
+    const x = i / (newCount - 1);
+    return { x, y: sampleCurve(points, x) };
+  });
+}
+
+export default function EnergyCurveEditor({ points, onChange, setTracks, setLength = 0 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgWidth, setSvgWidth] = useState(600);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
@@ -125,9 +143,12 @@ export default function EnergyCurveEditor({ points, onChange, setTracks }: Props
     return `${pathD} L ${(svgWidth - PADDING.right).toFixed(2)} ${SVG_HEIGHT} L ${PADDING.left} ${SVG_HEIGHT} Z`;
   }, [pathD, svgWidth]);
 
+  const maxPoints = setLength > 0 ? maxPointsForSetLength(setLength) : 9;
+  const currentCount = points.length;
+
   return (
     <div className="flex flex-col gap-3">
-      {/* Preset buttons */}
+      {/* Preset buttons + point count control */}
       <div className="flex gap-1.5 items-center overflow-x-auto scrollbar-none">
         {(Object.keys(ARC_PRESETS) as ArcPreset[]).map((preset) => (
           <button
@@ -149,6 +170,25 @@ export default function EnergyCurveEditor({ points, onChange, setTracks }: Props
         >
           ↺
         </button>
+
+        {/* Point count control */}
+        <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => { setActivePreset(null); onChange(resampleCurve(points, currentCount - 1)); }}
+            disabled={currentCount <= 2}
+            title="Fewer control points"
+            className="w-6 h-6 flex items-center justify-center rounded border border-[#2a2a3a] bg-[#12121a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-xs"
+          >−</button>
+          <span className="text-[10px] text-[#475569] w-8 text-center tabular-nums" title={`Max recommended: ${maxPoints} for ${setLength} tracks`}>
+            {currentCount}pt
+          </span>
+          <button
+            onClick={() => { setActivePreset(null); onChange(resampleCurve(points, currentCount + 1)); }}
+            disabled={currentCount >= maxPoints}
+            title={`More control points (max ${maxPoints} for this set length)`}
+            className="w-6 h-6 flex items-center justify-center rounded border border-[#2a2a3a] bg-[#12121a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-xs"
+          >+</button>
+        </div>
       </div>
 
       {/* SVG canvas */}

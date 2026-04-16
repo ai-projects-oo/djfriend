@@ -269,13 +269,13 @@ export default function EnergyCurveEditor({ points, onChange, setTracks }: Props
             return (
               <g key={t.file}>
                 {/* Vertical line from target to actual */}
-                <line x1={cx} y1={targetCy} x2={cx} y2={cy} stroke="#a855f7" strokeWidth={1} strokeOpacity={0.25} />
+                <line x1={cx} y1={targetCy} x2={cx} y2={cy} stroke={energyToColor(t.energy)} strokeWidth={1} strokeOpacity={0.3} />
                 {/* Actual energy dot */}
                 <circle
                   cx={cx} cy={cy} r={t.locked ? 4 : 3}
-                  fill="#a855f7"
+                  fill={energyToColor(t.energy)}
                   fillOpacity={0.85}
-                  stroke={t.locked ? '#c084fc' : '#a855f7'}
+                  stroke={t.locked ? '#fff' : energyToColor(t.energy)}
                   strokeWidth={t.locked ? 1.5 : 0}
                 >
                   <title>{t.title} — E:{t.energy.toFixed(2)} target:{t.targetEnergy.toFixed(2)}{t.locked ? ' 🔒' : ''}</title>
@@ -294,6 +294,7 @@ export default function EnergyCurveEditor({ points, onChange, setTracks }: Props
   );
 }
 
-function energyToColor(_energy: number): string {
-  return '#a855f7';
+function energyToColor(energy: number): string {
+  const hue = Math.round((1 - Math.max(0, Math.min(1, energy))) * 120);
+  return `hsl(${hue}, 72%, 52%)`;
 }

@@ -32,8 +32,10 @@ for (let i = 0; i < 12; i++) {
   CAMELOT_TO_KEY[CAMELOT_MINOR[i].toLowerCase()] = `${KEY_NAMES[i]} Minor`
 }
 
-function energyBarColor(_energy: number): string {
-  return '#a855f7';
+function energyBarColor(energy: number): string {
+  // Green (120°) → Yellow (60°) → Red (0°) smooth gradient
+  const hue = Math.round((1 - Math.max(0, Math.min(1, energy))) * 120);
+  return `hsl(${hue}, 72%, 52%)`;
 }
 
 function formatDuration(seconds: number): string {

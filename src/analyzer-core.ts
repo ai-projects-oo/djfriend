@@ -84,12 +84,12 @@ function detectBpm(audio: Float32Array, sampleRate: number): number {
     corr[lag] = c;
   }
 
-  // Harmonic-aware scoring: for each candidate lag in the 60–175 BPM range,
+  // Harmonic-aware scoring: for each candidate lag in the 50–150 BPM range,
   // boost its score if its double-time (half lag) is also strong in the autocorrelation
   // and penalise it if its half-time (double lag) is even stronger.
   // This resolves the classic kick-on-2-and-4 → half-BPM error.
-  const targetMin = Math.floor(fps * 60 / 175);
-  const targetMax = Math.ceil(fps * 60 / 60);
+  const targetMin = Math.floor(fps * 60 / 150);
+  const targetMax = Math.ceil(fps * 60 / 50);
 
   let bestLag = targetMin;
   let bestScore = -Infinity;

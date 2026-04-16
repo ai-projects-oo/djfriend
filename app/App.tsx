@@ -891,8 +891,8 @@ function AppInner() {
                           </div>
                           {/* Preset pills */}
                           <div className="flex flex-wrap gap-1.5">
-                            {(['all', 'thisYear', 'lastYear', 'older', 'range'] as const).map(opt => {
-                              const label = opt === 'all' ? 'All' : opt === 'thisYear' ? 'This Year' : opt === 'lastYear' ? 'Last Year' : opt === 'older' ? 'Older' : 'Range';
+                            {(['all', 'thisYear', 'lastYear', 'range'] as const).map(opt => {
+                              const label = opt === 'all' ? 'All' : opt === 'thisYear' ? 'This Year' : opt === 'lastYear' ? 'Last Year' : 'Range';
                               const active = (prefs.dateFilter?.preset ?? 'all') === opt;
                               return (
                                 <button key={opt} type="button"

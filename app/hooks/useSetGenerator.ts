@@ -5,6 +5,7 @@ import { clamp } from "../lib/genreUtils";
 import { DEFAULT_CURVE } from "../components/EnergyCurveEditor";
 import { generateSet, getAffinityKey, genreAffinityBonus, semanticAffinityBonus } from "../lib/setGenerator";
 import { isHarmonicWarning, camelotHarmonyScore } from "../lib/camelot";
+import { sampleCurve } from "../lib/curveInterpolation";
 
 export interface SwapBreakdown {
   harmonicPrev: number | null;   // 0–1 camelot harmony score with previous track
@@ -377,15 +378,17 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     setGeneratedSet((prev) => {
       if (index < 0 || index >= prev.length) return prev;
       const next = prev.filter((_, i) => i !== index);
+      const n = next.length;
       const resequenced = next.map((track, i) => ({
         ...track,
         slot: i,
+        targetEnergy: n > 1 ? sampleCurve(curve, i / (n - 1)) : sampleCurve(curve, 0.5),
         harmonicWarning:
           i > 0 ? isHarmonicWarning(next[i - 1].camelot, track.camelot) : false,
       }));
       return resequenced;
     });
-  }, []);
+  }, [curve]);
 
   const handleReorderTrack = useCallback((fromIdx: number, toIdx: number) => {
     setGeneratedSet(prev => {
@@ -393,15 +396,17 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
       const next = [...prev];
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
+      const n = next.length;
       return next.map((track, i) => ({
         ...track,
         slot: i,
+        targetEnergy: n > 1 ? sampleCurve(curve, i / (n - 1)) : sampleCurve(curve, 0.5),
         harmonicWarning: i > 0 ? isHarmonicWarning(next[i - 1].camelot, track.camelot) : false,
       }));
     });
-  }, []);
+  }, [curve]);
 
-  const handleUpdateTrack = useCallback((index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => {
+  const handleUpdateTrack = useCallback((index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => {
     const patch = {
       ...(tags.title !== undefined ? { title: tags.title } : {}),
       ...(tags.artist !== undefined ? { artist: tags.artist } : {}),
@@ -412,6 +417,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
       ...(tags.bpm !== undefined ? { bpm: tags.bpm } : {}),
       ...(tags.camelot !== undefined ? { camelot: tags.camelot } : {}),
       ...(tags.key !== undefined ? { key: tags.key } : {}),
+      ...(tags.energy !== undefined ? { energy: tags.energy } : {}),
     };
     setGeneratedSet(prev => {
       if (index < 0 || index >= prev.length) return prev;

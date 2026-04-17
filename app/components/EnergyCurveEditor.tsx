@@ -171,24 +171,6 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
           ↺
         </button>
 
-        {/* Point count control */}
-        <div className="ml-auto flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={() => { setActivePreset(null); onChange(resampleCurve(points, currentCount - 1)); }}
-            disabled={currentCount <= 2}
-            title="Fewer control points"
-            className="w-6 h-6 flex items-center justify-center rounded border border-[#2a2a3a] bg-[#12121a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-xs"
-          >−</button>
-          <span className="text-[10px] text-[#475569] w-8 text-center tabular-nums" title={`Max recommended: ${maxPoints} for ${setLength} tracks`}>
-            {currentCount}pt
-          </span>
-          <button
-            onClick={() => { setActivePreset(null); onChange(resampleCurve(points, currentCount + 1)); }}
-            disabled={currentCount >= maxPoints}
-            title={`More control points (max ${maxPoints} for this set length)`}
-            className="w-6 h-6 flex items-center justify-center rounded border border-[#2a2a3a] bg-[#12121a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-xs"
-          >+</button>
-        </div>
       </div>
 
       {/* SVG canvas */}
@@ -329,6 +311,32 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
           <text x={toSvgX(0.5)} y={SVG_HEIGHT - 4} textAnchor="middle" fill="#475569" fontSize={10}>50%</text>
           <text x={toSvgX(1)} y={SVG_HEIGHT - 4} textAnchor="end" fill="#475569" fontSize={10}>100%</text>
         </svg>
+      </div>
+
+      {/* Control point count pills */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-[#334155] uppercase tracking-wider flex-shrink-0">Points</span>
+        {[2, 3, 4, 5, 6, 7, 8, 9].map(n => {
+          const isActive = currentCount === n;
+          const isDisabled = n > maxPoints;
+          return (
+            <button
+              key={n}
+              onClick={() => { if (!isDisabled && !isActive) { setActivePreset(null); onChange(resampleCurve(points, n)); } }}
+              disabled={isDisabled}
+              title={isDisabled ? `Max ${maxPoints} for ${setLength} tracks` : `${n} control points`}
+              className={`w-7 h-6 text-xs rounded border transition-colors flex-shrink-0 ${
+                isActive
+                  ? 'border-[#7c3aed] bg-[#7c3aed]/20 text-[#e2e8f0] cursor-default'
+                  : isDisabled
+                  ? 'border-[#1e1e2e] bg-transparent text-[#2a2a3a] cursor-not-allowed'
+                  : 'border-[#2a2a3a] bg-[#12121a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0] cursor-pointer'
+              }`}
+            >
+              {n}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

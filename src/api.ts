@@ -117,6 +117,25 @@ function readExistingResults(rootPath: string): Record<string, AppSong> {
 
 interface AppleMusicTrack { filePath: string; file: string; artist: string | null; title: string; duration: number | null; dateAdded?: number }
 
+/**
+ * Percentile-normalize energy values across the full library so they span 0–1.
+ *
+ * The raw ZCR+RMS formula produces values in a narrow band (e.g. 0.5–0.9 for a
+ * library that's mostly medium-high energy).  Percentile normalization maps the
+ * lowest-energy track to 0.0 and the highest-energy track to 1.0, with all
+ * others spread linearly by rank.  This is purely audio-based — no filename tags
+ * are used.  Values update in-place on the resultsJson map.
+ */
+function normalizeLibraryEnergy(resultsJson: Record<string, AppSong>): void {
+  const entries = Object.entries(resultsJson).filter(([, s]) => typeof s.energy === 'number')
+  if (entries.length < 2) return
+  entries.sort(([, a], [, b]) => (a.energy as number) - (b.energy as number))
+  const n = entries.length
+  entries.forEach(([key], i) => {
+    resultsJson[key] = { ...resultsJson[key], energy: Math.round((i / (n - 1)) * 1000) / 1000 }
+  })
+}
+
 async function listAppleMusicPlaylists(): Promise<Array<{ name: string; count: number }>> {
   const rs = String.fromCharCode(30), us = String.fromCharCode(31)
   const script = `set outputLines to {}\ntell application "Music"\n  repeat with p in (every user playlist)\n    try\n      if class of p is not folder playlist then\n        set pName to (name of p) as text\n        set pCount to (count of tracks of p) as text\n        set end of outputLines to pName & "${us}" & pCount\n      end if\n    end try\n  end repeat\nend tell\nset AppleScript's text item delimiters to "${rs}"\nreturn outputLines as text`
@@ -230,6 +249,7 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
       })
     } catch { /* enrichment is optional — don't fail the whole analysis */ }
   }
+  normalizeLibraryEnergy(resultsJson)
   fs.writeFileSync(path.join(rootPath, 'results.json'), JSON.stringify(resultsJson, null, 2), 'utf-8')
   const songs = Object.values(resultsJson)
   return { total, analyzed: songs.length, songs, resultsJson }
@@ -286,6 +306,7 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
       })
     } catch { /* enrichment is optional — don't fail the whole analysis */ }
   }
+  normalizeLibraryEnergy(resultsJson)
   fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
   fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
   const songs = Object.values(resultsJson)
@@ -799,6 +820,232 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       patchResults(APPLE_RESULTS_PATH, absolutePath)
       res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ ok: true }))
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to update tags' })) }
+  })
+
+  // ── Bulk BPM fix ──────────────────────────────────────────────────────────────
+  middlewares.use('/api/bulk-fix-bpm', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const fixes = body.fixes as Array<{ file: string; bpm: number }>
+      if (!Array.isArray(fixes) || fixes.length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing fixes array' })); return }
+
+      const patchFile = (resultsPath: string, keyFn: (f: string) => string) => {
+        if (!fs.existsSync(resultsPath)) return
+        try {
+          const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+          let dirty = false
+          for (const { file, bpm } of fixes) {
+            const key = keyFn(file)
+            if (results[key]) { results[key].bpm = bpm; dirty = true }
+          }
+          if (dirty) fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+        } catch { /* ignore */ }
+      }
+
+      if (songsFolder) patchFile(path.join(songsFolder, 'results.json'), f => path.relative(songsFolder!, f).replace(/\\/g, '/'))
+      patchFile(APPLE_RESULTS_PATH, f => f)
+
+      res.end(JSON.stringify({ ok: true, count: fixes.length }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Bulk BPM fix failed' })) }
+  })
+
+  // ── Energy normalization ───────────────────────────────────────────────────────
+  // MixedInKey filename pattern: optional track# then KEY - ENERGY(1-10) - TITLE
+  const MIK_PREFIX_RE = /^(?:\d+[-\s]+)?[0-9]{1,2}[AB]\s*-\s*(10|[1-9])\s*-\s*/i
+
+  function parseMikEnergy(filePath: string): number | null {
+    const fname = path.basename(filePath)
+    const m = MIK_PREFIX_RE.exec(fname)
+    if (!m) return null
+    return parseInt(m[1], 10) / 10  // normalize 1-10 → 0.1-1.0
+  }
+
+  middlewares.use('/api/normalize-energy', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const targetPath = fs.existsSync(APPLE_RESULTS_PATH) ? APPLE_RESULTS_PATH
+        : songsFolder ? path.join(songsFolder, 'results.json') : null
+      if (!targetPath) { res.statusCode = 404; res.end(JSON.stringify({ error: 'No results.json found' })); return }
+
+      const results = JSON.parse(fs.readFileSync(targetPath, 'utf-8')) as Record<string, AppSong>
+      const allKeys = Object.keys(results).filter(k => typeof results[k].energy === 'number')
+      if (allKeys.length < 4) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Not enough tracks to normalize' })); return }
+
+      let mikCount = 0
+
+      // Pass 1: set energy directly from MIK filename tag where available (ground truth)
+      for (const k of allKeys) {
+        const mik = parseMikEnergy(k) ?? parseMikEnergy(results[k].filePath ?? '')
+        if (mik !== null) {
+          results[k].energy = Math.round(mik * 1000) / 1000
+          mikCount++
+        }
+      }
+
+      // Pass 2: for tracks without MIK tag, use percentile rank anchored to MIK-calibrated values
+      // Build reference: what percentile do MIK-tagged tracks occupy in the raw energy distribution?
+      const untaggedKeys = allKeys.filter(k => {
+        const mik = parseMikEnergy(k) ?? parseMikEnergy(results[k].filePath ?? '')
+        return mik === null
+      })
+
+      if (untaggedKeys.length > 0) {
+        // Sort ALL keys by their current energy (MIK tracks now have correct values)
+        const sorted = [...allKeys].sort((a, b) => results[a].energy - results[b].energy)
+        const n = sorted.length
+        const untaggedSet = new Set(untaggedKeys)
+
+        // For untagged tracks, interpolate their energy from their rank among all tracks
+        for (let i = 0; i < n; i++) {
+          if (!untaggedSet.has(sorted[i])) continue
+          const percentile = i / (n - 1)
+          // Map percentile to 0.1–1.0 to match MIK scale floor
+          results[sorted[i]].energy = Math.round((0.1 + percentile * 0.9) * 1000) / 1000
+        }
+      }
+
+      fs.writeFileSync(targetPath, JSON.stringify(results, null, 2), 'utf-8')
+
+      res.end(JSON.stringify({ ok: true, count: allKeys.length, mikCount, untaggedCount: untaggedKeys.length }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Normalization failed' })) }
+  })
+
+  middlewares.use('/api/lookup-bpm', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const { spotifyClientId, spotifyClientSecret } = readSettings()
+      if (!spotifyClientId || !spotifyClientSecret) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Spotify credentials not configured' })); return }
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const spotifyId = typeof body.spotifyId === 'string' ? body.spotifyId.trim() : null
+      const artist   = typeof body.artist   === 'string' ? body.artist.trim()   : ''
+      const title    = typeof body.title    === 'string' ? body.title.trim()    : ''
+
+      const token = await authenticate(spotifyClientId, spotifyClientSecret)
+
+      let resolvedSpotifyId = spotifyId
+      if (!resolvedSpotifyId && (artist || title)) {
+        const match = await searchTrack(artist, title, token)
+        resolvedSpotifyId = match?.spotifyId ?? null
+        if (!resolvedSpotifyId) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Track not found on Spotify search' })); return }
+      }
+      if (!resolvedSpotifyId) { res.statusCode = 400; res.end(JSON.stringify({ error: 'No spotifyId or search terms provided' })); return }
+      const features = await getAudioFeatures(resolvedSpotifyId, token)
+      if (!features) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Spotify audio features API unavailable for this track (may be deprecated for your app)' })); return }
+
+      res.end(JSON.stringify({ ok: true, bpm: features.bpm }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'BPM lookup failed' })) }
+  })
+
+  middlewares.use('/api/reanalyze-track', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const filePath = typeof body.filePath === 'string' ? body.filePath.trim() : null
+      if (!filePath) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing filePath' })); return }
+      let absolutePath = filePath
+      if (!path.isAbsolute(filePath) && songsFolder) absolutePath = path.join(songsFolder, filePath)
+      if (!fs.existsSync(absolutePath)) { res.statusCode = 404; res.end(JSON.stringify({ error: 'File not found' })); return }
+      if (!AUDIO_EXTENSIONS.has(path.extname(absolutePath).toLowerCase())) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Not an audio file' })); return }
+
+      const features = await analyzeAudio(absolutePath)
+      if (!features) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Audio analysis failed' })); return }
+      const keyInfo = toCamelot(features.pitchClass, features.mode)
+      if (!keyInfo) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Key detection failed' })); return }
+
+      // Read cached genres so normalizeBpm can still apply genre-aware adjustments
+      const patchResultsFile = (resultsPath: string, key: string, patch: Partial<AppSong>): void => {
+        if (!fs.existsSync(resultsPath)) return
+        try {
+          const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+          if (!results[key]) return
+          Object.assign(results[key], patch)
+          fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+        } catch { /* ignore */ }
+      }
+
+      const cachedGenres: string[] = (() => {
+        try {
+          if (songsFolder) {
+            const r = JSON.parse(fs.readFileSync(path.join(songsFolder, 'results.json'), 'utf-8')) as Record<string, AppSong>
+            const key = path.relative(songsFolder, absolutePath).replace(/\\/g, '/')
+            return r[key]?.genres ?? []
+          }
+        } catch { /* ignore */ }
+        try {
+          const r = JSON.parse(fs.readFileSync(APPLE_RESULTS_PATH, 'utf-8')) as Record<string, AppSong>
+          return r[absolutePath]?.genres ?? []
+        } catch { return [] }
+      })()
+
+      const bpm = normalizeBpm(features.bpm, features.energy, cachedGenres, features.tagBpm)
+      const patch: Partial<AppSong> = { bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy }
+
+      if (songsFolder) patchResultsFile(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'), patch)
+      patchResultsFile(APPLE_RESULTS_PATH, absolutePath, patch)
+
+      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Reanalysis failed' })) }
+  })
+
+  // Re-analyze entire library: re-runs audio analysis on all tracks, updates energy/bpm/key
+  middlewares.use('/api/reanalyze-library', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
+    try {
+      const targetPath = fs.existsSync(APPLE_RESULTS_PATH) ? APPLE_RESULTS_PATH
+        : songsFolder ? path.join(songsFolder, 'results.json') : null
+      if (!targetPath) { writeEvent({ type: 'error', message: 'No results.json found' }); res.end(); return }
+
+      const results = JSON.parse(fs.readFileSync(targetPath, 'utf-8')) as Record<string, AppSong>
+      const keys = Object.keys(results).filter(k => {
+        const fp = results[k].filePath
+        return fp && fs.existsSync(fp) && AUDIO_EXTENSIONS.has(path.extname(fp).toLowerCase())
+      })
+
+      writeEvent({ type: 'start', total: keys.length })
+      let completed = 0
+      let updated = 0
+
+      for (const key of keys) {
+        completed++
+        const song = results[key]
+        const fp = song.filePath!
+        writeEvent({ type: 'progress', completed, total: keys.length, file: path.basename(fp) })
+        await new Promise<void>(r => setImmediate(r))
+
+        try {
+          const features = await analyzeAudio(fp)
+          if (!features) continue
+          const keyInfo = toCamelot(features.pitchClass, features.mode)
+          if (!keyInfo) continue
+
+          const bpm = normalizeBpm(features.bpm, features.energy, song.genres ?? [], features.tagBpm)
+          song.bpm = bpm
+          song.key = keyInfo.keyName
+          song.camelot = keyInfo.camelot
+          song.energy = features.energy
+          if (features.energyProfile) (song as unknown as Record<string, unknown>).energyProfile = features.energyProfile
+          updated++
+        } catch { /* skip failed tracks */ }
+      }
+
+      // Percentile-normalize energy across the library
+      normalizeLibraryEnergy(results)
+      fs.writeFileSync(targetPath, JSON.stringify(results, null, 2), 'utf-8')
+
+      writeEvent({ type: 'done', updated, total: keys.length })
+      res.end()
+    } catch (err) {
+      writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Re-analysis failed' })
+      res.end()
+    }
   })
 
   middlewares.use('/api/ai/enrich', async (req, res, next) => {

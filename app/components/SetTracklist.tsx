@@ -44,6 +44,48 @@ function saveVisibleColumns(cols: Set<ColumnKey>) {
   localStorage.setItem(LS_KEY, JSON.stringify(Array.from(cols)));
 }
 
+// ─── Transition hints ─────────────────────────────────────────────────────────
+
+interface TransitionHint {
+  icon: string;
+  tip: string;
+  color?: string;
+}
+
+function computeTransitionHints(prev: SetTrack, next: SetTrack): TransitionHint[] {
+  const hints: TransitionHint[] = [];
+  const eDelta = next.energy - prev.energy;
+  const bDelta = prev.bpm > 0 && next.bpm > 0 ? Math.abs(next.bpm - prev.bpm) : 0;
+
+  if (next.harmonicWarning) {
+    hints.push({ icon: '⚠', color: '#ef4444', tip: 'Harmonic clash — use EQ filtering or a quick cut transition to avoid tonal conflict' });
+  }
+
+  if (bDelta > 15) {
+    hints.push({ icon: '⚡', color: '#f59e0b', tip: `BPM jump of ${Math.round(bDelta)} — bridge with a filter sweep, acapella, or a break before bringing in the new tempo` });
+  } else if (bDelta > 8) {
+    hints.push({ icon: '⚡', color: '#94a3b8', tip: `BPM shift of ${Math.round(bDelta)} — nudge the tempo gradually during the mix-out or use a loop to align the grids` });
+  }
+
+  if (eDelta > 0.2) {
+    hints.push({ icon: '↑', color: '#22c55e', tip: 'Energy build — gradually open up the highs and layer in percussion before dropping the next track' });
+  } else if (eDelta < -0.2) {
+    hints.push({ icon: '↓', color: '#60a5fa', tip: 'Energy drop — sweep the highs with a filter and ease off the bass to soften the transition' });
+  } else {
+    hints.push({ icon: '→', color: '#475569', tip: 'Smooth blend — beatmatch and crossfade gradually for a seamless transition' });
+  }
+
+  const prevVocal = prev.semanticTags?.vocalType;
+  const nextVocal = next.semanticTags?.vocalType;
+  if (prevVocal && prevVocal !== 'instrumental') {
+    hints.push({ icon: '🎤', tip: 'Outgoing vocal — mix out before the chorus ends or use the instrumental version for a cleaner exit' });
+  } else if (nextVocal && nextVocal !== 'instrumental') {
+    hints.push({ icon: '🎤', tip: 'Incoming vocal — let the intro breathe; avoid talking over the first lyric phrase' });
+  }
+
+  return hints;
+}
+
 // ─── Fit scoring ───────────────────────────────────────────────────────────────
 
 function computeFit(track: SetTrack, prevTrack: SetTrack | null, prefs: DJPreferences): FitInfo {
@@ -93,7 +135,7 @@ interface Props {
   onToggleLock: (index: number) => void;
   onRemoveTrack: (index: number) => void;
   onReorderTrack: (fromIdx: number, toIdx: number) => void;
-  onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
+  onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => void;
   onExport?: () => void;
   onExportSpotify?: () => void;
 }
@@ -367,25 +409,50 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
                   : '';
                 const bpmDeltaColor = bpmDelta <= 8 ? '#475569' : bpmDelta <= 15 ? '#f59e0b' : '#ef4444';
 
+                const transitionHints = prevTrack ? computeTransitionHints(prevTrack, track) : [];
+
                 return (
                   <React.Fragment key={track.file}>
-                    {bpmDelta > 0 && (
+                    {prevTrack && (
                       <tr>
                         <td
                           colSpan={totalCols}
                           className="text-center"
-                          style={{ height: '16px', padding: '0', lineHeight: '16px' }}
+                          style={{ height: '18px', padding: '0 8px', lineHeight: '18px' }}
                         >
-                          <span
-                            style={{
-                              fontSize: '10px',
-                              color: bpmDeltaColor,
-                              fontVariantNumeric: 'tabular-nums',
-                              letterSpacing: '0.02em',
-                            }}
-                          >
-                            {bpmDir}{Math.round(bpmDelta)} BPM
-                          </span>
+                          <div className="flex items-center justify-center gap-2">
+                            {bpmDelta > 0 && (
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  color: bpmDeltaColor,
+                                  fontVariantNumeric: 'tabular-nums',
+                                  letterSpacing: '0.02em',
+                                }}
+                              >
+                                {bpmDir}{Math.round(bpmDelta)} BPM
+                              </span>
+                            )}
+                            <span style={{ width: '1px', height: '10px', background: '#1e1e2e', display: 'inline-block', flexShrink: 0 }} />
+                            {transitionHints.map((hint, hi) => (
+                              <span
+                                key={hi}
+                                title={hint.tip}
+                                style={{
+                                  fontSize: '11px',
+                                  color: hint.color ?? '#475569',
+                                  cursor: 'help',
+                                  opacity: 0.7,
+                                  lineHeight: 1,
+                                  userSelect: 'none',
+                                }}
+                                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.7'; }}
+                              >
+                                {hint.icon}
+                              </span>
+                            ))}
+                          </div>
                         </td>
                       </tr>
                     )}

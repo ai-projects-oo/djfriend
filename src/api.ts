@@ -117,6 +117,25 @@ function readExistingResults(rootPath: string): Record<string, AppSong> {
 
 interface AppleMusicTrack { filePath: string; file: string; artist: string | null; title: string; duration: number | null; dateAdded?: number }
 
+/**
+ * Percentile-normalize energy values across the full library so they span 0–1.
+ *
+ * The raw ZCR+RMS formula produces values in a narrow band (e.g. 0.5–0.9 for a
+ * library that's mostly medium-high energy).  Percentile normalization maps the
+ * lowest-energy track to 0.0 and the highest-energy track to 1.0, with all
+ * others spread linearly by rank.  This is purely audio-based — no filename tags
+ * are used.  Values update in-place on the resultsJson map.
+ */
+function normalizeLibraryEnergy(resultsJson: Record<string, AppSong>): void {
+  const entries = Object.entries(resultsJson).filter(([, s]) => typeof s.energy === 'number')
+  if (entries.length < 2) return
+  entries.sort(([, a], [, b]) => (a.energy as number) - (b.energy as number))
+  const n = entries.length
+  entries.forEach(([key], i) => {
+    resultsJson[key] = { ...resultsJson[key], energy: Math.round((i / (n - 1)) * 1000) / 1000 }
+  })
+}
+
 async function listAppleMusicPlaylists(): Promise<Array<{ name: string; count: number }>> {
   const rs = String.fromCharCode(30), us = String.fromCharCode(31)
   const script = `set outputLines to {}\ntell application "Music"\n  repeat with p in (every user playlist)\n    try\n      if class of p is not folder playlist then\n        set pName to (name of p) as text\n        set pCount to (count of tracks of p) as text\n        set end of outputLines to pName & "${us}" & pCount\n      end if\n    end try\n  end repeat\nend tell\nset AppleScript's text item delimiters to "${rs}"\nreturn outputLines as text`
@@ -230,6 +249,7 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
       })
     } catch { /* enrichment is optional — don't fail the whole analysis */ }
   }
+  normalizeLibraryEnergy(resultsJson)
   fs.writeFileSync(path.join(rootPath, 'results.json'), JSON.stringify(resultsJson, null, 2), 'utf-8')
   const songs = Object.values(resultsJson)
   return { total, analyzed: songs.length, songs, resultsJson }
@@ -286,6 +306,7 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
       })
     } catch { /* enrichment is optional — don't fail the whole analysis */ }
   }
+  normalizeLibraryEnergy(resultsJson)
   fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
   fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
   const songs = Object.values(resultsJson)

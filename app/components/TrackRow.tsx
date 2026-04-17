@@ -251,7 +251,7 @@ async function handleReanalyze() {
             {fitInfo && fitInfo.level !== 'good' && (
               <div className="relative">
                 <span
-                  className="cursor-help text-[8px] leading-none select-none block"
+                  className="cursor-default text-[8px] leading-none select-none block"
                   style={{ color: fitInfo.level === 'bad' ? '#ef4444' : '#f59e0b' }}
                   onMouseEnter={() => setShowFitTooltip(true)}
                   onMouseLeave={() => setShowFitTooltip(false)}
@@ -294,7 +294,7 @@ async function handleReanalyze() {
             {track.harmonicWarning && (
               <div className="relative flex-shrink-0">
                 <span
-                  className="text-[#f59e0b] cursor-help text-base"
+                  className="text-[#f59e0b] cursor-default text-base"
                   onMouseEnter={() => setShowHarmonicTooltip(true)}
                   onMouseLeave={() => setShowHarmonicTooltip(false)}
                 >
@@ -327,7 +327,7 @@ async function handleReanalyze() {
           <div className="relative inline-block">
             {track.camelot ? (
               <span
-                className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold cursor-help"
+                className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold cursor-default"
                 style={{ backgroundColor: camelotColor(track.camelot) + '26', color: camelotColor(track.camelot), border: `1px solid ${camelotColor(track.camelot)}66` }}
                 onMouseEnter={() => setShowKeyTooltip(true)}
                 onMouseLeave={() => setShowKeyTooltip(false)}

@@ -992,6 +992,62 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Reanalysis failed' })) }
   })
 
+  // Re-analyze entire library: re-runs audio analysis on all tracks, updates energy/bpm/key
+  middlewares.use('/api/reanalyze-library', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
+    try {
+      const targetPath = fs.existsSync(APPLE_RESULTS_PATH) ? APPLE_RESULTS_PATH
+        : songsFolder ? path.join(songsFolder, 'results.json') : null
+      if (!targetPath) { writeEvent({ type: 'error', message: 'No results.json found' }); res.end(); return }
+
+      const results = JSON.parse(fs.readFileSync(targetPath, 'utf-8')) as Record<string, AppSong>
+      const keys = Object.keys(results).filter(k => {
+        const fp = results[k].filePath
+        return fp && fs.existsSync(fp) && AUDIO_EXTENSIONS.has(path.extname(fp).toLowerCase())
+      })
+
+      writeEvent({ type: 'start', total: keys.length })
+      let completed = 0
+      let updated = 0
+
+      for (const key of keys) {
+        completed++
+        const song = results[key]
+        const fp = song.filePath!
+        writeEvent({ type: 'progress', completed, total: keys.length, file: path.basename(fp) })
+        await new Promise<void>(r => setImmediate(r))
+
+        try {
+          const features = await analyzeAudio(fp)
+          if (!features) continue
+          const keyInfo = toCamelot(features.pitchClass, features.mode)
+          if (!keyInfo) continue
+
+          const bpm = normalizeBpm(features.bpm, features.energy, song.genres ?? [], features.tagBpm)
+          song.bpm = bpm
+          song.key = keyInfo.keyName
+          song.camelot = keyInfo.camelot
+          song.energy = features.energy
+          if (features.energyProfile) (song as unknown as Record<string, unknown>).energyProfile = features.energyProfile
+          updated++
+        } catch { /* skip failed tracks */ }
+      }
+
+      // Percentile-normalize energy across the library
+      normalizeLibraryEnergy(results)
+      fs.writeFileSync(targetPath, JSON.stringify(results, null, 2), 'utf-8')
+
+      writeEvent({ type: 'done', updated, total: keys.length })
+      res.end()
+    } catch (err) {
+      writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Re-analysis failed' })
+      res.end()
+    }
+  })
+
   middlewares.use('/api/ai/enrich', async (req, res, next) => {
     if (req.method !== 'POST') { next(); return }
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')

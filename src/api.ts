@@ -801,6 +801,176 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to update tags' })) }
   })
 
+  // ── Bulk BPM fix ──────────────────────────────────────────────────────────────
+  middlewares.use('/api/bulk-fix-bpm', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const fixes = body.fixes as Array<{ file: string; bpm: number }>
+      if (!Array.isArray(fixes) || fixes.length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing fixes array' })); return }
+
+      const patchFile = (resultsPath: string, keyFn: (f: string) => string) => {
+        if (!fs.existsSync(resultsPath)) return
+        try {
+          const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+          let dirty = false
+          for (const { file, bpm } of fixes) {
+            const key = keyFn(file)
+            if (results[key]) { results[key].bpm = bpm; dirty = true }
+          }
+          if (dirty) fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+        } catch { /* ignore */ }
+      }
+
+      if (songsFolder) patchFile(path.join(songsFolder, 'results.json'), f => path.relative(songsFolder!, f).replace(/\\/g, '/'))
+      patchFile(APPLE_RESULTS_PATH, f => f)
+
+      res.end(JSON.stringify({ ok: true, count: fixes.length }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Bulk BPM fix failed' })) }
+  })
+
+  // ── Energy normalization ───────────────────────────────────────────────────────
+  // MixedInKey filename pattern: optional track# then KEY - ENERGY(1-10) - TITLE
+  const MIK_PREFIX_RE = /^(?:\d+[-\s]+)?[0-9]{1,2}[AB]\s*-\s*(10|[1-9])\s*-\s*/i
+
+  function parseMikEnergy(filePath: string): number | null {
+    const fname = path.basename(filePath)
+    const m = MIK_PREFIX_RE.exec(fname)
+    if (!m) return null
+    return parseInt(m[1], 10) / 10  // normalize 1-10 → 0.1-1.0
+  }
+
+  middlewares.use('/api/normalize-energy', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const targetPath = fs.existsSync(APPLE_RESULTS_PATH) ? APPLE_RESULTS_PATH
+        : songsFolder ? path.join(songsFolder, 'results.json') : null
+      if (!targetPath) { res.statusCode = 404; res.end(JSON.stringify({ error: 'No results.json found' })); return }
+
+      const results = JSON.parse(fs.readFileSync(targetPath, 'utf-8')) as Record<string, AppSong>
+      const allKeys = Object.keys(results).filter(k => typeof results[k].energy === 'number')
+      if (allKeys.length < 4) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Not enough tracks to normalize' })); return }
+
+      let mikCount = 0
+
+      // Pass 1: set energy directly from MIK filename tag where available (ground truth)
+      for (const k of allKeys) {
+        const mik = parseMikEnergy(k) ?? parseMikEnergy(results[k].filePath ?? '')
+        if (mik !== null) {
+          results[k].energy = Math.round(mik * 1000) / 1000
+          mikCount++
+        }
+      }
+
+      // Pass 2: for tracks without MIK tag, use percentile rank anchored to MIK-calibrated values
+      // Build reference: what percentile do MIK-tagged tracks occupy in the raw energy distribution?
+      const untaggedKeys = allKeys.filter(k => {
+        const mik = parseMikEnergy(k) ?? parseMikEnergy(results[k].filePath ?? '')
+        return mik === null
+      })
+
+      if (untaggedKeys.length > 0) {
+        // Sort ALL keys by their current energy (MIK tracks now have correct values)
+        const sorted = [...allKeys].sort((a, b) => results[a].energy - results[b].energy)
+        const n = sorted.length
+        const untaggedSet = new Set(untaggedKeys)
+
+        // For untagged tracks, interpolate their energy from their rank among all tracks
+        for (let i = 0; i < n; i++) {
+          if (!untaggedSet.has(sorted[i])) continue
+          const percentile = i / (n - 1)
+          // Map percentile to 0.1–1.0 to match MIK scale floor
+          results[sorted[i]].energy = Math.round((0.1 + percentile * 0.9) * 1000) / 1000
+        }
+      }
+
+      fs.writeFileSync(targetPath, JSON.stringify(results, null, 2), 'utf-8')
+
+      res.end(JSON.stringify({ ok: true, count: allKeys.length, mikCount, untaggedCount: untaggedKeys.length }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Normalization failed' })) }
+  })
+
+  middlewares.use('/api/lookup-bpm', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const { spotifyClientId, spotifyClientSecret } = readSettings()
+      if (!spotifyClientId || !spotifyClientSecret) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Spotify credentials not configured' })); return }
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const spotifyId = typeof body.spotifyId === 'string' ? body.spotifyId.trim() : null
+      const artist   = typeof body.artist   === 'string' ? body.artist.trim()   : ''
+      const title    = typeof body.title    === 'string' ? body.title.trim()    : ''
+
+      const token = await authenticate(spotifyClientId, spotifyClientSecret)
+
+      let resolvedSpotifyId = spotifyId
+      if (!resolvedSpotifyId && (artist || title)) {
+        const match = await searchTrack(artist, title, token)
+        resolvedSpotifyId = match?.spotifyId ?? null
+        if (!resolvedSpotifyId) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Track not found on Spotify search' })); return }
+      }
+      if (!resolvedSpotifyId) { res.statusCode = 400; res.end(JSON.stringify({ error: 'No spotifyId or search terms provided' })); return }
+      const features = await getAudioFeatures(resolvedSpotifyId, token)
+      if (!features) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Spotify audio features API unavailable for this track (may be deprecated for your app)' })); return }
+
+      res.end(JSON.stringify({ ok: true, bpm: features.bpm }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'BPM lookup failed' })) }
+  })
+
+  middlewares.use('/api/reanalyze-track', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const filePath = typeof body.filePath === 'string' ? body.filePath.trim() : null
+      if (!filePath) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing filePath' })); return }
+      let absolutePath = filePath
+      if (!path.isAbsolute(filePath) && songsFolder) absolutePath = path.join(songsFolder, filePath)
+      if (!fs.existsSync(absolutePath)) { res.statusCode = 404; res.end(JSON.stringify({ error: 'File not found' })); return }
+      if (!AUDIO_EXTENSIONS.has(path.extname(absolutePath).toLowerCase())) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Not an audio file' })); return }
+
+      const features = await analyzeAudio(absolutePath)
+      if (!features) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Audio analysis failed' })); return }
+      const keyInfo = toCamelot(features.pitchClass, features.mode)
+      if (!keyInfo) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Key detection failed' })); return }
+
+      // Read cached genres so normalizeBpm can still apply genre-aware adjustments
+      const patchResultsFile = (resultsPath: string, key: string, patch: Partial<AppSong>): void => {
+        if (!fs.existsSync(resultsPath)) return
+        try {
+          const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+          if (!results[key]) return
+          Object.assign(results[key], patch)
+          fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+        } catch { /* ignore */ }
+      }
+
+      const cachedGenres: string[] = (() => {
+        try {
+          if (songsFolder) {
+            const r = JSON.parse(fs.readFileSync(path.join(songsFolder, 'results.json'), 'utf-8')) as Record<string, AppSong>
+            const key = path.relative(songsFolder, absolutePath).replace(/\\/g, '/')
+            return r[key]?.genres ?? []
+          }
+        } catch { /* ignore */ }
+        try {
+          const r = JSON.parse(fs.readFileSync(APPLE_RESULTS_PATH, 'utf-8')) as Record<string, AppSong>
+          return r[absolutePath]?.genres ?? []
+        } catch { return [] }
+      })()
+
+      const bpm = normalizeBpm(features.bpm, features.energy, cachedGenres, features.tagBpm)
+      const patch: Partial<AppSong> = { bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy }
+
+      if (songsFolder) patchResultsFile(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'), patch)
+      patchResultsFile(APPLE_RESULTS_PATH, absolutePath, patch)
+
+      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Reanalysis failed' })) }
+  })
+
   middlewares.use('/api/ai/enrich', async (req, res, next) => {
     if (req.method !== 'POST') { next(); return }
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')

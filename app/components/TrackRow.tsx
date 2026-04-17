@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCcw, Trash2, Pencil, Check, X } from 'lucide-react';
+import { RefreshCcw, Trash2, Pencil, Check, X, MoreVertical, RotateCcw, FolderOpen, Play, ExternalLink } from 'lucide-react';
 import type { SetTrack } from '../types';
 import { parseCamelot } from '../lib/camelot';
 import { camelotColor } from '../lib/camelotColors';
@@ -14,7 +14,7 @@ interface Props {
   onSwap: () => void;
   onToggleLock: () => void;
   onRemove: () => void;
-  onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string }) => void;
+  onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => void;
   // drag-to-reorder
   onDragStart?: () => void;
   onDragEnd?: () => void;
@@ -82,6 +82,9 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
   const [saveError, setSaveError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const [swapFlash, setSwapFlash] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const prevFileRef = useRef(track.file);
   useEffect(() => {
@@ -92,6 +95,15 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
       return () => clearTimeout(timer);
     }
   }, [track.file]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [menuOpen]);
 
   const [editTitle, setEditTitle] = useState('');
   const [editArtist, setEditArtist] = useState('');
@@ -124,6 +136,23 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
   function handleRemove() {
     setRemoving(true);
     setTimeout(onRemove, 150);
+  }
+
+async function handleReanalyze() {
+    if (!track.filePath || reanalyzing) return;
+    setMenuOpen(false);
+    setReanalyzing(true);
+    try {
+      const res = await fetch('/api/reanalyze-track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: track.filePath }),
+      });
+      const data = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Reanalysis failed');
+      onUpdateTrack({ bpm: data.bpm, key: data.key, camelot: data.camelot, energy: data.energy });
+    } catch { /* silently ignore — no UI for error here */ }
+    finally { setReanalyzing(false); }
   }
 
   async function saveEdit() {
@@ -400,62 +429,136 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
           </td>
         )}
 
-        {/* Actions */}
+        {/* Actions — kebab menu */}
         <td className="py-3 pl-2 pr-4 text-right">
-          <div className="flex items-center justify-end gap-1">
-            {/* Lock / unlock */}
+          <div className="relative flex items-center justify-end gap-1" ref={menuRef}>
+            {/* Active state indicators (small dots) */}
+            {track.locked && <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] flex-shrink-0" title="Locked" />}
+            {(showTags || showReasons || editing) && <span className="w-1.5 h-1.5 rounded-full bg-[#7c3aed] flex-shrink-0" title="Panel open" />}
+            {reanalyzing && <span className="text-[10px] text-[#475569] animate-pulse">…</span>}
+
             <button
-              onClick={onToggleLock}
-              title={track.locked ? 'Unlock track (will be replaced on regenerate)' : 'Lock track (preserve on regenerate)'}
-              aria-label={track.locked ? 'Unlock track' : 'Lock track'}
-              className={`px-2 py-1 text-[11px] rounded-md border transition-colors cursor-pointer ${track.locked ? 'border-[#f59e0b] bg-[#f59e0b1a] text-[#fbbf24]' : 'border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#f59e0b] hover:text-[#f59e0b]'}`}
+              onClick={() => setMenuOpen(o => !o)}
+              title="Track actions"
+              aria-label="Track actions"
+              className={`px-2 py-1 rounded-md border transition-colors cursor-pointer ${menuOpen ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
             >
-              {track.locked ? '🔒' : '🔓'}
+              <MoreVertical size={14} />
             </button>
-            {track.semanticTags && (
-              <button
-                onClick={() => setShowTags(s => !s)}
-                title="AI tags"
-                aria-label="Toggle AI tags"
-                className={`px-2 py-1 text-[11px] rounded-md border transition-colors cursor-pointer ${showTags ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#7c3aed] hover:text-[#a78bfa]'}`}
-              >
-                ✦
-              </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-30 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-xl overflow-hidden py-1">
+
+                {/* ── Lock ── */}
+                <button
+                  onClick={() => { onToggleLock(); setMenuOpen(false); }}
+                  className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${track.locked ? 'text-[#fbbf24] hover:bg-[#f59e0b0d]' : 'text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0]'}`}
+                >
+                  <span className="w-3.5 text-center">{track.locked ? '🔒' : '🔓'}</span>
+                  {track.locked ? 'Unlock track' : 'Lock track'}
+                </button>
+
+                <div className="h-px bg-[#1e1e2e] my-1" />
+
+                {/* ── Play / Open ── */}
+                <button
+                  onClick={() => { setMenuOpen(false); void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) }); }}
+                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                >
+                  <Play size={13} className="w-3.5 flex-shrink-0" />
+                  Play in Apple Music
+                </button>
+
+                {track.spotifyId && (
+                  <a
+                    href={`https://open.spotify.com/track/${track.spotifyId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#1db954] transition-colors cursor-pointer"
+                  >
+                    <ExternalLink size={13} className="w-3.5 flex-shrink-0" />
+                    Open in Spotify
+                  </a>
+                )}
+
+                <div className="h-px bg-[#1e1e2e] my-1" />
+
+                {/* ── Edit / Swap / File ops ── */}
+                <button
+                  onClick={() => { if (editing) cancelEdit(); else openEdit(); setMenuOpen(false); }}
+                  className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${editing ? 'text-[#a78bfa] bg-[#7c3aed0d]' : 'text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0]'}`}
+                >
+                  <Pencil size={13} className="w-3.5 flex-shrink-0" />
+                  {editing ? 'Close editor' : 'Edit tags'}
+                </button>
+
+                <button
+                  onClick={() => { onSwap(); setMenuOpen(false); }}
+                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                >
+                  <RefreshCcw size={13} className="w-3.5 flex-shrink-0" />
+                  Swap track
+                </button>
+
+{track.filePath && (
+                  <button
+                    onClick={() => void handleReanalyze()}
+                    disabled={reanalyzing}
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <RotateCcw size={13} className="w-3.5 flex-shrink-0" />
+                    {reanalyzing ? 'Reanalyzing…' : 'Re-analyze'}
+                  </button>
+                )}
+
+                {track.filePath && (
+                  <button
+                    onClick={() => { setMenuOpen(false); void fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath }) }); }}
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    <FolderOpen size={13} className="w-3.5 flex-shrink-0" />
+                    Reveal in Finder
+                  </button>
+                )}
+
+                {/* ── Info panels ── */}
+                {(track.semanticTags || (track.selectionReason && track.selectionReason.length > 0)) && (
+                  <div className="h-px bg-[#1e1e2e] my-1" />
+                )}
+
+                {track.semanticTags && (
+                  <button
+                    onClick={() => { setShowTags(s => !s); setMenuOpen(false); }}
+                    className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${showTags ? 'text-[#a78bfa] bg-[#7c3aed0d]' : 'text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0]'}`}
+                  >
+                    <span className="w-3.5 text-center text-[11px]">✦</span>
+                    {showTags ? 'Hide AI tags' : 'Show AI tags'}
+                  </button>
+                )}
+
+                {track.selectionReason && track.selectionReason.length > 0 && (
+                  <button
+                    onClick={() => { setShowReasons(s => !s); setMenuOpen(false); }}
+                    className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${showReasons ? 'text-[#7dd3fc] bg-[#38bdf80d]' : 'text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0]'}`}
+                  >
+                    <span className="w-3.5 text-center text-[11px]">ⓘ</span>
+                    {showReasons ? 'Hide reasons' : 'Why chosen?'}
+                  </button>
+                )}
+
+                <div className="h-px bg-[#1e1e2e] my-1" />
+
+                {/* ── Remove ── */}
+                <button
+                  onClick={() => { setMenuOpen(false); handleRemove(); }}
+                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#94a3b8] hover:bg-[#ef444410] hover:text-[#ef4444] transition-colors cursor-pointer"
+                >
+                  <Trash2 size={13} className="w-3.5 flex-shrink-0" />
+                  Remove
+                </button>
+              </div>
             )}
-            {track.selectionReason && track.selectionReason.length > 0 && (
-              <button
-                onClick={() => setShowReasons(s => !s)}
-                title="Why was this track chosen?"
-                aria-label="Toggle selection reasons"
-                className={`px-2 py-1 text-[11px] rounded-md border transition-colors cursor-pointer ${showReasons ? 'border-[#38bdf8] bg-[#38bdf822] text-[#7dd3fc]' : 'border-[#2a2a3a] bg-[#12121a] text-[#475569] hover:border-[#38bdf8] hover:text-[#7dd3fc]'}`}
-              >
-                ⓘ
-              </button>
-            )}
-            <button
-              onClick={openEdit}
-              title="Edit tags"
-              aria-label="Edit tags"
-              className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-            >
-              <Pencil size={14} />
-            </button>
-            <button
-              onClick={onSwap}
-              title="Swap track"
-              aria-label="Swap track"
-              className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-            >
-              <RefreshCcw size={14} />
-            </button>
-            <button
-              onClick={handleRemove}
-              title="Remove track"
-              aria-label="Remove track"
-              className="px-2 py-1 text-[11px] rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors cursor-pointer"
-            >
-              <Trash2 size={14} />
-            </button>
           </div>
         </td>
       </tr>

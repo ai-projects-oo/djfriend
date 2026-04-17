@@ -217,10 +217,9 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
   // Keep ref up to date so drain loop always calls the latest closure
   runAppleMusicInternalRef.current = runAppleMusicInternal;
 
-  // Public: enqueue a playlist for analysis (max 3)
+  // Public: enqueue a playlist for analysis
   const runAppleMusicAnalysis = useCallback((playlistName: string) => {
     if (analysisQueueRef.current.some(item => item.playlistName === playlistName)) return;
-    if (analysisQueueRef.current.length >= 3) return;
 
     const newItem: QueueItem = { playlistName, status: 'queued', completed: 0, total: 0 };
     analysisQueueRef.current = [...analysisQueueRef.current, newItem];

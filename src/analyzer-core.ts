@@ -231,6 +231,7 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
       if (rawComment && rawComment.length > 0) tagComment = rawComment[0].text ?? undefined;
     } catch { /* tag read failure is non-fatal */ }
 
+
     const fileBuffer = fs.readFileSync(filePath);
     const audioBuffer = await decodeAudio(fileBuffer);
 
@@ -326,8 +327,11 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     for (let i = 0; i < energyData.length; i += 4) sumSq += energyData[i] * energyData[i];
     const rms = Math.sqrt(sumSq / Math.ceil(energyData.length / 4));
     const rmsDb = 20 * Math.log10(Math.max(rms, 1e-9));
-    const rmsScore = Math.max(0, Math.min(1, 1 + rmsDb / 55));
-    const energy = Math.round((onsetScore * 0.6 + rmsScore * 0.4) * 1000) / 1000;
+    // Calibrated to DJ music range: -18 dBFS (quiet/ambient) → 0.0, -4 dBFS (loud/compressed) → 1.0
+    // This matches MixedInKey's loudness-first energy model better than the old broad -55..0 mapping.
+    const rmsScore = Math.max(0, Math.min(1, (rmsDb + 18) / 14));
+    // MIK energy is primarily loudness (70%) + rhythmic density (30%)
+    const energy = Math.round((onsetScore * 0.3 + rmsScore * 0.7) * 1000) / 1000;
 
     const energyProfile = computeEnergyProfile(channelData, 44100);
 

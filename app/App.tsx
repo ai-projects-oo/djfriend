@@ -9,6 +9,7 @@ import SettingsModal from "./components/SettingsModal";
 import AIPlannerPanel from "./components/AIPlannerPanel";
 import CalendarPicker from "./components/CalendarPicker";
 import HistoryTab from "./components/HistoryTab";
+import BpmDoctorModal from "./components/BpmDoctorModal";
 import { genreMatchesUmbrella, TAG_GROUPS } from "./lib/genreUtils";
 import {
   exchangeCodeForToken,
@@ -123,6 +124,8 @@ function AppInner() {
   const importExportRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [bpmDoctorOpen, setBpmDoctorOpen] = useState(false);
+  const [normalizingEnergy, setNormalizingEnergy] = useState(false);
   const [hasGroqKey, setHasGroqKey] = useState(false);
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
@@ -537,6 +540,36 @@ function AppInner() {
               <span className="hidden sm:inline text-xs text-[#64748b] italic">
                 BPM/key/energy are AI-estimated — not from audio analysis
               </span>
+            )}
+            {library.length > 0 && (
+              <button
+                onClick={() => setBpmDoctorOpen(true)}
+                className="hidden sm:inline text-xs text-[#64748b] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                title="Detect and fix half/double-tempo BPM errors"
+              >
+                ♩ BPM Doctor
+              </button>
+            )}
+            {library.length > 0 && (
+              <button
+                onClick={async () => {
+                  setNormalizingEnergy(true);
+                  try {
+                    const res = await fetch('/api/normalize-energy', { method: 'POST' });
+                    const data = await res.json() as { ok?: boolean; count?: number; error?: string };
+                    if (data.ok) {
+                      // Reload library to reflect new energy values
+                      window.location.reload();
+                    }
+                  } catch { /* ignore */ }
+                  finally { setNormalizingEnergy(false); }
+                }}
+                disabled={normalizingEnergy}
+                className="hidden sm:inline text-xs text-[#64748b] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Calibrate energy values using MixedInKey tags in your filenames, then rank remaining tracks. Run once after scanning."
+              >
+                {normalizingEnergy ? '…' : '⟳ Calibrate energy'}
+              </button>
             )}
           </div>
 
@@ -2211,6 +2244,20 @@ function AppInner() {
         onSaved={() => { loadSettings(); setLibrary([]); setGeneratedSet([]); }}
         onDatabaseCleared={() => setAnalyzedApplePlaylists(new Set())}
       />
+
+      {bpmDoctorOpen && (
+        <BpmDoctorModal
+          library={library}
+          onApplyFixes={(fixes) => {
+            // Update in-memory library so UI reflects immediately
+            setLibrary(prev => prev.map(s => {
+              const fix = fixes.find(f => f.file === s.file);
+              return fix ? { ...s, bpm: fix.bpm } : s;
+            }));
+          }}
+          onClose={() => setBpmDoctorOpen(false)}
+        />
+      )}
 
     </div>
   );

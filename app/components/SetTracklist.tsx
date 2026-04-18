@@ -78,9 +78,9 @@ function computeTransitionHints(prev: SetTrack, next: SetTrack): TransitionHint[
   const prevVocal = prev.semanticTags?.vocalType;
   const nextVocal = next.semanticTags?.vocalType;
   if (prevVocal && prevVocal !== 'instrumental') {
-    hints.push({ icon: '🎤', tip: 'Outgoing vocal — mix out before the chorus ends or use the instrumental version for a cleaner exit' });
+    hints.push({ icon: '🎤', tip: 'Outgoing vocal — start mixing out before vocals end for a clean exit' });
   } else if (nextVocal && nextVocal !== 'instrumental') {
-    hints.push({ icon: '🎤', tip: 'Incoming vocal — let the intro breathe; avoid talking over the first lyric phrase' });
+    hints.push({ icon: '🎤', tip: 'Incoming vocal — let the intro play; avoid clashing with the first vocal phrase' });
   }
 
   return hints;

@@ -44,16 +44,19 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function getCompatibleKeys(camelot: string): { standard: string[]; boost: string[] } {
+function getCompatibleKeys(camelot: string): { standard: string[]; boost: string[]; relax: string[] } {
   const parsed = parseCamelot(camelot);
-  if (!parsed) return { standard: [], boost: [] };
+  if (!parsed) return { standard: [], boost: [], relax: [] };
   const { num, letter } = parsed;
   const other = letter === 'A' ? 'B' : 'A';
   const prev = num === 1 ? 12 : num - 1;
   const next = num === 12 ? 1 : num + 1;
+  const diagonals = [`${next}${other}`, `${prev}${other}`];
   return {
     standard: [`${prev}${letter}`, `${next}${letter}`, `${num}${other}`],
-    boost:    [`${next}${other}`, `${prev}${other}`],
+    // Minor→Major (A→B) = energy boost (brighter); Major→Minor (B→A) = relax (darker)
+    boost: letter === 'A' ? diagonals : [],
+    relax: letter === 'B' ? diagonals : [],
   };
 }
 
@@ -116,7 +119,7 @@ export default function TrackRow({ track, index, fitInfo, visibleColumns, totalC
   const isMp3 = track.filePath?.toLowerCase().endsWith('.mp3') ?? false;
 
 
-  const { standard: compatibleKeys, boost: boostKeys } = getCompatibleKeys(track.camelot);
+  const { standard: compatibleKeys, boost: boostKeys, relax: relaxKeys } = getCompatibleKeys(track.camelot);
 
   function openEdit() {
     setEditTitle(track.title);
@@ -351,6 +354,9 @@ async function handleReanalyze() {
                 {boostKeys.length > 0 && (
                   <span><span className="text-[#f59e0b]">Energy boost: </span><span className="text-[#fbbf24]">{boostKeys.join(', ')}</span></span>
                 )}
+                {relaxKeys.length > 0 && (
+                  <span><span className="text-[#60a5fa]">Relax: </span><span className="text-[#93c5fd]">{relaxKeys.join(', ')}</span></span>
+                )}
               </div>
             )}
           </div>
@@ -363,7 +369,7 @@ async function handleReanalyze() {
             <div
               className="relative flex-shrink-0 rounded-full bg-[#1e1e2e]"
               style={{ width: 56, height: 4 }}
-              title={`Energy: ${track.energy.toFixed(2)} · Target: ${track.targetEnergy.toFixed(2)}`}
+              title={`Energy: ${Math.round(track.energy * 100)}% · Target: ${Math.round(track.targetEnergy * 100)}%`}
             >
               {/* Filled portion */}
               <div
@@ -385,9 +391,9 @@ async function handleReanalyze() {
                 }}
               />
             </div>
-            {/* Decimal value */}
+            {/* Energy percentage */}
             <span className="text-[10px] text-[#64748b] tabular-nums">
-              {track.energy.toFixed(2)}
+              {Math.round(track.energy * 100)}
             </span>
           </div>
         </td>

@@ -300,7 +300,7 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
                   stroke={t.locked ? '#fff' : energyToColor(t.energy)}
                   strokeWidth={t.locked ? 1.5 : 0}
                 >
-                  <title>{t.title} — E:{t.energy.toFixed(2)} target:{t.targetEnergy.toFixed(2)}{t.locked ? ' 🔒' : ''}</title>
+                  <title>{t.title} — Energy: {Math.round(t.energy * 100)}% Target: {Math.round(t.targetEnergy * 100)}%{t.locked ? ' 🔒' : ''}</title>
                 </circle>
               </g>
             );

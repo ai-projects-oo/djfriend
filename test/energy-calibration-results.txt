@@ -1,0 +1,406 @@
+═══════════════════════════════════════════════════════════════
+  DJFriend Energy Calibration v2 — Spectral Feature Analysis  
+═══════════════════════════════════════════════════════════════
+
+MIK-tagged tracks found: 259
+Mode: FULL — analyzing all tracks
+
+  [1/259] MIK=4 04 8A - 4 - ndanele.mp3                                  [2/259] MIK=5 04 9A - 5 - Samanke.mp3                                  [3/259] MIK=5 02 7A - 5 - Tipu's Tiger (Original).mp3                  [4/259] MIK=3 01 1A - 3 - Naturaleza (Mose Edit).mp3                   [5/259] MIK=5 01 11A - 5 - Together (Tomanka).mp3                      [6/259] MIK=2 01 9A - 2 - Intro.mp3                                    [7/259] MIK=6 6A - 6 - Easy (Extended Mix).mp3                         [8/259] MIK=5 01 2A - 5 - Temptation (feat. Poppy Baskcomb) (Extended  [9/259] MIK=5 2A - 5 - Can You Feel It.mp3                             [10/259] MIK=5 32 2A - 5 - My Intuition (feat. Jenny Penkin).mp3        [11/259] MIK=6 1A - 6 - Somebody (Original Mix).mp3                     [12/259] MIK=5 12A - 5 - Submarine (Original Mix).mp3                   [13/259] MIK=7 7A - 7 - Dusty Memories (Original Mix).mp3               [14/259] MIK=6 4A - 6 - Tears.mp3                                       [15/259] MIK=6 8A - 6 - Your Love (Waze And Odyssey Remix).mp3          [16/259] MIK=6 11A - 6 - My Groove feat. Gjeazon (Doorly Remix).mp3     [17/259] MIK=6 13 2A - 6 - Let's Hope (Bicep Remix).mp3                 [18/259] MIK=5 5A - 5 - Play The Room (Original Mix).mp3                [19/259] MIK=7 06 6A - 7 - Lovelee Dae (with DANCE & Blaze (Kevin Hedg  [20/259] MIK=7 01 6A - 7 - Spiritual Thing (Extended Mix).mp3           [21/259] MIK=7 03 3A - 7 - I Found Love (Perel Remix - Single Edit).mp  [22/259] MIK=7 01 8A - 7 - The Magic Room (Dino Lenny & Seth Troxler R  [23/259] MIK=5 01 8A - 5 - House Music (Extended Mix).mp3               [24/259] MIK=6 01 2A - 6 - Deep Dancin' (Extended Mix).mp3              [25/259] MIK=6 01 5A - 6 - Special Kind Of Love (Extended Mix).mp3      [26/259] MIK=6 01 4A - 6 - In and Out (Extended Mix).mp3                [27/259] MIK=6 01 7A - 6 - I Hear Music In the Streets (Michael Gray R  [28/259] MIK=6 01 8A - 6 - Back To Life (feat. Lois Faith) (Extended M  [29/259] MIK=7 01 8A - 7 - Caged Bird (Full Vocal Media Mix).mp3        [30/259] MIK=6 08 7A - 6 - Love On The Line (extended mix).mp3          [31/259] MIK=6 01 10A - 6 - All I Want Is The Bass (Extended Mix).mp3   [32/259] MIK=6 08 9A - 6 - Don't Stop (Dario D'Attis Remix) (and Soul   [33/259] MIK=7 03 7A - 7 - It Started In Chicago (Extended Instrumenta  [34/259] MIK=6 01 12A - 6 - Let's Work (Extended Mix).mp3               [35/259] MIK=6 01 7A - 6 - Love Track 24 (B&S Concept Remix).mp3        [36/259] MIK=6 01 3A - 6 - This Rhythm (feat. RAHH) (Extended Mix).mp3  [37/259] MIK=6 01 5A - 6 - Nefertiti (Red Axes Remix).mp3               [38/259] MIK=6 01 6A - 6 - Veneno (Original Mix).mp3                    [39/259] MIK=6 02 7A - 6 - Keep It Stronger (Rub Mix).mp3               [40/259] MIK=6 02 10A - 6 - World Is Empty (Extended Mix).mp3           [41/259] MIK=6 01 11A - 6 - Kronos (Wild Mix).mp3                       [42/259] MIK=6 01 2A - 6 - Change It (Original Mix).mp3                 [43/259] MIK=5 01 5A - 5 - Tale of Devotion (Original Mix).mp3          [44/259] MIK=5 05 2A - 5 - I Know (Club Tularosa Remix).mp3             [45/259] MIK=6 01 6A - 6 - So U Kno.mp3                                 [46/259] MIK=7 02 8A - 7 - Never Alone (ft. Dix_On The Phone).mp3       [47/259] MIK=6 01 4A - 6 - Strictly Nu.mp3                              [48/259] MIK=7 01 4A - 7 - Zeus.mp3                                     [49/259] MIK=6 02 7A - 6 - Dance To The Music (Extended Mix).mp3        [50/259] MIK=5 4A - 5 - MUSTANG I.mp3                                   [51/259] MIK=5 02 5A - 5 - Delusion (Original Mix).mp3                  [52/259] MIK=6 04 9A - 6 - Tiempo (Original Mix).mp3                    [53/259] MIK=6 03 12A - 6 - Long Time (Original Mix).mp3                [54/259] MIK=5 01 7A - 5 - Tough Young Guys (Original Mix.mp3           [55/259] MIK=6 02 2A - 6 - Still In Love (feat. Navasha Daya).mp3       [56/259] MIK=6 02 6A - 6 - High (Two Soul Fusion Boogie Mix).mp3        [57/259] MIK=6 01 5A - 6 - Dog eat dog (Original Mix).mp3               [58/259] MIK=6 6A - 6 - The Truth Will Come Out (MG Reedit - Afshin &   [59/259] MIK=6 10A - 6 - Dj S - Real Love.mp3                           [60/259] MIK=6 01 4A - 6 - Damn Girl (Original Mix).mp3                 [61/259] MIK=6 01 8A - 6 - What Would You Do_ feat. Andrés feat. Amp F  [62/259] MIK=6 12A - 6 - The Reflex 'Halloween Disco' Edit.mp3          [63/259] MIK=6 09 10A - 6 - Don_t Stop Your Love (Extended Version).mp  [64/259] MIK=6 02 5A - 6 - Love On Hold(Extended Mix) (feat. Tawatha A  [65/259] MIK=6 8A - 6 - Dj S - Be Mine.mp3                              [66/259] MIK=7 02 10A - 7 - After the Disco.mp3                         [67/259] MIK=7 01 4A - 7 - 24K Magic.mp3                                [68/259] MIK=7 04 3A - 7 - That's What I Like.mp3                       [69/259] MIK=6 7A - 6 - The Devil feat. Thomas Gandey (Original Mix).m  [70/259] MIK=4 01 5A - 4 - Sleep.mp3                                    [71/259] MIK=6 04 6A - 6 - The Sequence Cabinet.mp3                     [72/259] MIK=6 02 12A - 6 - b. Science Fiction.mp3                      [73/259] MIK=5 01 12A - 5 - The Life We Choose (E.R.P. Remix).mp3       [74/259] MIK=5 01 6A - 5 - Herr Krank - Acid Jazz.mp3                   [75/259] MIK=4 02 12A - 4 - Rise and Fall (Original Mix).mp3            [76/259] MIK=4 11 5A - 4 - Baia 2012 (Aybee's Solar Dub).mp3            [77/259] MIK=6 02 11A - 6 - Music (Piano Mix).mp3                       [78/259] MIK=6 04 2A - 6 - All The Way (Original Mix).mp3               [79/259] MIK=5 7A - 5 - You Take Over (Yoruba Soul Mix).mp3             [80/259] MIK=6 05 8A - 6 - Bermuda (Original Mix).mp3                   [81/259] MIK=6 03 5A - 6 - Addicted (Original Mix).mp3                  [82/259] MIK=6 11A - 6 - Each Time.mp3                                  [83/259] MIK=7 01 9A - 7 - Go (Anfisa Letyago Remix).mp3                [84/259] MIK=6 01 1A - 6 - Stutter (Original Mix).mp3                   [85/259] MIK=5 8A - 5 - Ritual (Original Mix).mp3                       [86/259] MIK=5 03 6A - 5 - Acid Creep (Original Mix).mp3                [87/259] MIK=5 03 8A - 5 - Like This (Original Mix).mp3                 [88/259] MIK=6 01 4A - 6 - Elevate Us (Original Mix).mp3                [89/259] MIK=6 01 5B - 6 - Take Me Up.mp3                               [90/259] MIK=7 69 12A - 7 - Going Back.mp3                              [91/259] MIK=4 01 5A - 4 - I Can't.mp3                                  [92/259] MIK=7 01 7A - 7 - Stop Space Return.mp3                        [93/259] MIK=7 05 9A - 7 - Back Together (feat. Ron Carroll) (Copyrigh  [94/259] MIK=6 02 10A - 6 - Again & Again.mp3                           [95/259] MIK=7 11A - 7 - Rise Above (Original Mix).mp3                  [96/259] MIK=6 01 11A - 6 - Jazzy Things.mp3                            [97/259] MIK=7 01 11A - 7 - Got You The Floor.mp3                       [98/259] MIK=6 02 8A - 6 - Momma's Groove (Jimpster's Hip Replacement   [99/259] MIK=5 01 11A - 5 - 3 Days Later.mp3                            [100/259] MIK=3 01 1A - 3 - Réveiller (Feat. MANON).mp3                  [101/259] MIK=6 03 4A - 6 - Spiritual Thang.mp3                          [102/259] MIK=6 02 7A - 6 - Show Me Some Love (feat. Sadie Walker).mp3   [103/259] MIK=7 01 10A - 7 - Only Girl (In The World).mp3                [104/259] MIK=6 01 7A - 6 - Like A Prayer.mp3                            [105/259] MIK=7 03 2A - 7 - Like A Virgin.mp3                            [106/259] MIK=7 02 7A - 7 - Houdini (Extended).mp3                       [107/259] MIK=8 04 9A - 8 - CUFF IT.mp3                                  [108/259] MIK=6 01 7A - 6 - Flawless.mp3                                 [109/259] MIK=6 4A - 6 - Show Me Love (Kerri Chandler Remix).mp3         [110/259] MIK=7 15 1A - 7 - Vogue - voice start.mp3                      [111/259] MIK=7 08 5A - 7 - You Used to Hold Me.mp3                      [112/259] MIK=7 19 5A - 7 - Closer (feat. Carole Sylvan).mp3             [113/259] MIK=6 04 5A - 6 - Don't Make Me Wait (Original Mix).mp3        [114/259] MIK=5 13 12A - 5 - I Want You (John Morales Extended Mix).mp3  [115/259] MIK=6 7A - 6 - Miura (Original Mix).mp3                        [116/259] MIK=5 1A - 5 - Implanted Circle feat. David Ennio Minor (Re.Y  [117/259] MIK=6 02 4A - 6 - Fires (Extended).mp3                         [118/259] MIK=6 01 9A - 6 - Do This (Original Mix).mp3                   [119/259] MIK=6 02 4A - 6 - My Machine (Radio Edit).mp3                  [120/259] MIK=5 01 9A - 5 - Look Around, It's Gonna Be Fine.mp3          [121/259] MIK=5 03 10A - 5 - Vuoi Vuoi Me (Henrik Schwarz Remix).mp3     [122/259] MIK=5 01 3A - 5 - Beach Jazz feat. MarBlu (Original Mix).mp3   [123/259] MIK=6 01 2A - 6 - Où Je Vais.mp3                               [124/259] MIK=6 01 6A - 6 - NOBODY (Extended Mix).mp3                    [125/259] MIK=7 01 5A - 7 - Mi Ritmo.mp3                                 [126/259] MIK=6 01 6A - 6 - Sick Boy.mp3                                 [127/259] MIK=4 05 4A - 4 - Liquid Skies (The Voice).mp3                 [128/259] MIK=6 05 2A - 6 - Hey Hey (Da Capo & Kitty Amor Extended Remi  [129/259] MIK=6 01 3A - 6 - L.I.F.E.mp3                                  [130/259] MIK=5 07 5A - 5 - The Day We Met For Coffee (Yotam Avni Remix  [131/259] MIK=6 02 4A - 6 - Every Breath You Take (Extended Mix).mp3     [132/259] MIK=6 01 7A - 6 - Amathole.mp3                                 [133/259] MIK=6 01 7A - 6 - Wrong (Francis Mercier Sunrise Mix (Extende  [134/259] MIK=7 01 3A - 7 - You & Me (Rivo Extended Mix).mp3             [135/259] MIK=5 01 11A - 5 - Molly & Sally (Adam Ten & Mita Gami Remix)  [136/259] MIK=6 04 5A - 6 - Principal Agent (Sunrise Version).mp3        [137/259] MIK=6 5A - 6 - Sevillanas (Original Mix).mp3                   [138/259] MIK=5 02 8A - 5 - Pussy Power (DESIREE Remix).mp3              [139/259] MIK=6 5A - 6 - Madan (Liboz Edit).mp3                          [140/259] MIK=6 01 9A - 6 - Muy Bien (Original Mix).mp3                  [141/259] MIK=6 03 4A - 6 - Renegade (Adam Ten & Mita Gami Remix).mp3    [142/259] MIK=6 01 4A - 6 - Take Me.mp3                                  [143/259] MIK=5 03 10A - 5 - Persona.mp3                                 [144/259] MIK=5 02 7A - 5 - I Put A Spell On You (Extended Mix).mp3      [145/259] MIK=6 01 5A - 6 - Mawu.mp3                                     [146/259] MIK=5 01 7A - 5 - Mujer (Anja Schneider Remix).mp3             [147/259] MIK=5 01 8A - 5 - The Rapture Pt.III (Original Mix).mp3        [148/259] MIK=6 03 10A - 6 - Vento.mp3                                   [149/259] MIK=5 01 9A - 5 - Sermon Of The Drums (Original Mix).mp3       [150/259] MIK=5 01 6A - 5 - Does It Matter (Ajna BE Remix).mp3           [151/259] MIK=5 04 10A - 5 - Perio.mp3                                   [152/259] MIK=5 01 6A - 5 - Silence & Secrets (Black Coffee Remix).mp3   [153/259] MIK=5 8A - 5 - Muye.mp3                                        [154/259] MIK=7 01 7A - 7 - Evelin.mp3                                   [155/259] MIK=4 02 5A - 4 - Loma.mp3                                     [156/259] MIK=6 4A - 6 - Callisto (Joris Voorn Remix).mp3                [157/259] MIK=5 7A - 5 - Taste Of The Future (Original Mix).mp3          [158/259] MIK=6 01 3A - 6 - Sala Papa Ye (Extended Mix).mp3              [159/259] MIK=6 02 10A - 6 - The Blind Side (Rodriguez Jr. Remix).mp3    [160/259] MIK=6 01 12A - 6 - You Got the Love (Club Mix).mp3             [161/259] MIK=6 11A - 6 - Life Rules (Dan Taneff Remix).mp3              [162/259] MIK=6 26 12A - 6 - Be Somebody (feat. Boswell).mp3             [163/259] MIK=6 11A - 6 - Pulsate (Original Mix).mp3                     [164/259] MIK=5 1A - 5 - Mass Majestic (Gerd 1997 Remix).mp3             [165/259] MIK=5 02 2A - 5 - Lost in Rainbow (Nofex Remix).mp3            [166/259] MIK=6 02 9A - 6 - Can Soleil.mp3                               [167/259] MIK=6 11A - 6 - You Don`t Know (Original Mix).mp3              [168/259] MIK=5 01 7A - 5 - Take Me Down Deeper (Soul Button Secret Rem  [169/259] MIK=7 01 3A - 7 - Something I'm Going Through (Extended Mix).  [170/259] MIK=5 12A - 5 - Equal Responsibility (Original Mix).mp3        [171/259] MIK=5 8A - 5 - Absence of Gravity (Original Mix).mp3           [172/259] MIK=5 02 2A - 5 - Spells of Bhagwan.mp3                        [173/259] MIK=5 22 4A - 5 - Flash of Light feat. Roisin Murphy (Solomun  [174/259] MIK=5 01 5A - 5 - Line of Conception.mp3                       [175/259] MIK=6 01 11A - 6 - Thandaza.mp3                                [176/259] MIK=7 01 9A - 7 - Bo Bom (Original Mix).mp3                    [177/259] MIK=6 01 3A - 6 - This Is My Life (Bontan Extended Mix).mp3    [178/259] MIK=6 01 9A - 6 - Black Music (David Harness and Tedd Patters  [179/259] MIK=6 01 7A - 6 - Coming Up (Original Mix).mp3                 [180/259] MIK=6 01 8A - 6 - Vida Boa (Original Mix).mp3                  [181/259] MIK=6 03 6A - 6 - Mystery (Edit by DJ Kaos).mp3                [182/259] MIK=5 05 8A - 5 - Call You Back.mp3                            [183/259] MIK=6 01 6A - 6 - Mommy Whats A Record (Original Mix).mp3      [184/259] MIK=5 02 4A - 5 - Nobody's Fool (Luca Tuccillo Piano Mix).mp3  [185/259] MIK=6 01 6A - 6 - The Beat, The Scene, The Sound (N.W.N. Remi  [186/259] MIK=5 9A - 5 - Ijzeren Rots [DIGWAH03] Dreama Edit.mp3         [187/259] MIK=6 16 4A - 6 - Envision (Argy Vocal Mix).mp3                [188/259] MIK=7 01 1A - 7 - Get My Luv (Original Mix).mp3                [189/259] MIK=6 07 1A - 6 - Master Plug (feat. Kid Enigma).mp3           [190/259] MIK=5 27 1A - 5 - Rabbit Hole.mp3                              [191/259] MIK=6 05 7A - 6 - Kaoz (Dario D'Attis remix).mp3               [192/259] MIK=6 02 1A - 6 - I Can Finally Know (simo not simon Remix).m  [193/259] MIK=5 01 11A - 5 - Desperadio (Original Mix).mp3               [194/259] MIK=6 01 6A - 6 - All By Myself (Original Mix).mp3             [195/259] MIK=6 01 12A - 6 - Lately (Adam Ten & Mita Gami Remix).mp3     [196/259] MIK=5 18 2A - 5 - This Time (Gorge Remix).mp3                  [197/259] MIK=7 01 12A - 7 - Vintage Wine.mp3                            [198/259] MIK=5 21 12A - 5 - Simple World (Thodoris Triantafillou & Cj   [199/259] MIK=5 03 2A - 5 - Red Man Calypso (Whitesquare Remix).mp3      [200/259] MIK=6 01 4A - 6 - I See You Baby (Austin Ato Extended Remix).  [201/259] MIK=5 01 3A - 5 - Papa Waz (Club Mix).mp3                      [202/259] MIK=6 01 3A - 6 - Disco Music (Young Pulse Remix Extended Ver  [203/259] MIK=7 03 6A - 7 - PlayBooyz (Original Mix).mp3                 [204/259] MIK=6 01 6A - 6 - Right Here Right Now (Original Mix).mp3      [205/259] MIK=5 04 9A - 5 - Open Up (Remastered).mp3                     [206/259] MIK=7 03 9A - 7 - This Track.mp3                               [207/259] MIK=5 01 8A - 5 - Talkin' 'bout.mp3                            [208/259] MIK=6 05 8A - 6 - Good Street (Original Mix).mp3               [209/259] MIK=5 01 10A - 5 - Tonight (Main Mix).mp3                      [210/259] MIK=5 01 9A - 5 - Senses (Original Mix).mp3                    [211/259] MIK=5 07 1A - 5 - Loud Places (John Talabot's Loud Synths Rec  [212/259] MIK=6 34 7A - 6 - Give It Life (Extended Mix).mp3              [213/259] MIK=7 25 3A - 7 - Do Me Right (feat. Dames Brown (Crackazat E  [214/259] MIK=6 21 6A - 6 - Hold Me (Extended Mix).mp3                   [215/259] MIK=6 21 6A - 6 - Dance You Mutha (Original Mutha).mp3         [216/259] MIK=5 39 1A - 5 - Jass Yo Azz Off (The Tribal X Mixx).mp3      [217/259] MIK=6 04 1A - 6 - God Made Me Phunky.mp3                       [218/259] MIK=6 01 9A - 6 - Untouchable.mp3                              [219/259] MIK=6 43 9A - 6 - Love Story.mp3                               [220/259] MIK=6 01 8A - 6 - Be Where I Am (feat. Daniel Wilson) (Whites  [221/259] MIK=6 02 10A - 6 - Rhythm In Motion.mp3                        [222/259] MIK=7 03 8A - 7 - Funkskin (Original Mix).mp3                  [223/259] MIK=6 01 10A - 6 - Touch Of Love (Original Mix).mp3            [224/259] MIK=6 01 5A - 6 - What About My Love (Michael Gray Extended R  [225/259] MIK=6 01 5A - 6 - Million Pieces.mp3                           [226/259] MIK=6 02 3A - 6 - Cola (Club Mix).mp3                          [227/259] MIK=7 4A - 7 - James Hype x Maddison Avenue - More Than Frien  [228/259] MIK=7 11A - 7 - Billie Jean (Rubber Disco Mix).mp3             [229/259] MIK=7 01 6A - 7 - To The Top (Original Mix).mp3                [230/259] MIK=7 03 5A - 7 - First Choice.mp3                             [231/259] MIK=6 02 10A - 6 - Oblivion.mp3                                [232/259] MIK=6 26 5A - 6 - Keepin' the Faith.mp3                        [233/259] MIK=7 03 2A - 7 - Shut The Lights Out (Extended Mix) (feat. N  [234/259] MIK=6 9A - 6 - The Doors.mp3                                   [235/259] MIK=6 03 9A - 6 - LA Nights.mp3                                [236/259] MIK=6 09 10A - 6 - Jus' Dance (Sole Channel Mix).mp3           [237/259] MIK=7 03 12A - 7 - U Feel Mi (Kai Alce's New Feel).mp3         [238/259] MIK=6 01 12A - 6 - Provenance (Original Mix).mp3               [239/259] MIK=6 3A - 6 - Enjoy Music (Original Mix).mp3                  [240/259] MIK=5 02 6A - 5 - House Is Love (Edit).mp3                     [241/259] MIK=6 10 8A - 6 - Why (DJ Seinfeld remix) (feat. Tim KNomi Ru  [242/259] MIK=6 01 8A - 6 - Stronger Than Me (Original Mix).mp3          [243/259] MIK=6 01 10A - 6 - Chez A. Untitled (Original Mix).mp3         [244/259] MIK=6 04 11A - 6 - Help (Extended Mix).mp3                     [245/259] MIK=7 01 4A - 7 - Big Bad Mood.mp3                             [246/259] MIK=6 2A - 6 - My Space Feat. Hollis P Monroe & Overnite (The  [247/259] MIK=6 12A - 6 - Shes So Untouchable (12 inch Edit).wav         [248/259] MIK=7 01 5A - 7 - Karl-Löwe street groove (ft. Birol).mp3      [249/259] MIK=5 01 9A - 5 - Harlem (Retromigration Remix).mp3            [250/259] MIK=6 04 4A - 6 - BSTC feat. JL - Love It (Phil Asher's restl  [251/259] MIK=6 03 2A - 6 - Better Me Feat. Elatehem (Original Mix).mp3  [252/259] MIK=5 3A - 5 - Move Body, Move Forward (Original Mix).mp3      [253/259] MIK=6 04 3A - 6 - Ask Yourself (Can You Dance) (Extended Mix)  [254/259] MIK=8 6A - 8 - It's You (Original Mix).mp3                     [255/259] MIK=6 01 8A - 6 - Obnoxious Groove (Original Mix).mp3          [256/259] MIK=6 02 7A - 6 - Satisfy (Original Mix).mp3                   [257/259] MIK=6 03 11A - 6 - I DON_T CARE.mp3                            [258/259] MIK=6 01 12A - 6 - Love Vibration (Extended Mix).mp3           [259/259] MIK=6 9A - 6 - GIVE IT UP EDIT.wav                           
+
+  Analyzed 259 tracks in 537.0s
+
+─── Individual Feature Correlations with MIK Energy ───────────
+
+  Feature              │   r   │ Strength
+  ─────────────────────┼───────┼─────────────────
+  rmsScore             │ +0.168 │ ███ ○ weak
+  zcScore              │ +0.348 │ ███████ ● MEDIUM
+  crestScore           │ +0.080 │ ██ ○ weak
+  centroidScore        │ +0.185 │ ████ ○ weak
+  rolloffScore         │ +0.180 │ ████ ○ weak
+  bassScore            │ −0.107 │ ██ ○ weak
+  highScore            │ +0.215 │ ████ ○ weak
+  fluxScore            │ +0.000 │  ○ weak
+
+─── Raw Feature Distributions by MIK Level ──────────────────
+
+  rmsDb:
+    MIK 2: -12.231 ± 0.000  [-12.231..-12.231]  n=1
+    MIK 3: -11.142 ± 0.141  [-11.283..-11.001]  n=2
+    MIK 4: -13.681 ± 3.985  [-20.059..-9.692]  n=7
+    MIK 5: -11.634 ± 2.281  [-18.837..-8.491]  n=65
+    MIK 6: -11.209 ± 2.414  [-22.975..-7.041]  n=139
+    MIK 7: -10.703 ± 2.252  [-18.444..-7.936]  n=43
+    MIK 8: -10.838 ± 0.742  [-11.581..-10.096]  n=2
+
+  zcRate:
+    MIK 2: 0.018 ± 0.000  [0.018..0.018]  n=1
+    MIK 3: 0.027 ± 0.001  [0.026..0.029]  n=2
+    MIK 4: 0.041 ± 0.034  [0.009..0.119]  n=7
+    MIK 5: 0.051 ± 0.029  [0.007..0.157]  n=65
+    MIK 6: 0.069 ± 0.027  [0.021..0.166]  n=139
+    MIK 7: 0.072 ± 0.026  [0.027..0.152]  n=43
+    MIK 8: 0.071 ± 0.008  [0.063..0.079]  n=2
+
+  crestFactor:
+    MIK 2: 3.308 ± 0.000  [3.308..3.308]  n=1
+    MIK 3: 3.493 ± 0.091  [3.402..3.584]  n=2
+    MIK 4: 5.104 ± 2.395  [2.967..9.837]  n=7
+    MIK 5: 3.923 ± 1.006  [2.760..7.373]  n=65
+    MIK 6: 3.880 ± 1.313  [2.433..14.103]  n=139
+    MIK 7: 3.694 ± 1.096  [2.449..7.964]  n=43
+    MIK 8: 3.642 ± 0.214  [3.427..3.856]  n=2
+
+  spectralCentroid:
+    MIK 2: 331.720 ± 0.000  [331.720..331.720]  n=1
+    MIK 3: 407.081 ± 26.577  [380.504..433.658]  n=2
+    MIK 4: 728.149 ± 773.375  [150.241..2522.308]  n=7
+    MIK 5: 810.986 ± 561.235  [132.783..2834.370]  n=65
+    MIK 6: 1098.644 ± 532.624  [251.764..3046.457]  n=139
+    MIK 7: 1076.989 ± 509.616  [240.649..2268.955]  n=43
+    MIK 8: 890.086 ± 13.587  [876.499..903.673]  n=2
+
+  spectralRolloff:
+    MIK 2: 495.623 ± 0.000  [495.623..495.623]  n=1
+    MIK 3: 657.839 ± 185.186  [472.654..843.025]  n=2
+    MIK 4: 1073.635 ± 1146.950  [186.980..3670.334]  n=7
+    MIK 5: 1397.615 ± 1011.282  [183.032..4731.204]  n=65
+    MIK 6: 1964.435 ± 989.493  [404.824..5612.988]  n=139
+    MIK 7: 1900.839 ± 1010.014  [299.312..5179.812]  n=43
+    MIK 8: 1460.131 ± 116.100  [1344.031..1576.230]  n=2
+
+  bassRatio:
+    MIK 2: 0.462 ± 0.000  [0.462..0.462]  n=1
+    MIK 3: 0.591 ± 0.079  [0.512..0.669]  n=2
+    MIK 4: 0.556 ± 0.337  [0.020..0.925]  n=7
+    MIK 5: 0.673 ± 0.154  [0.288..0.962]  n=65
+    MIK 6: 0.644 ± 0.155  [0.069..0.961]  n=139
+    MIK 7: 0.632 ± 0.161  [0.300..0.915]  n=43
+    MIK 8: 0.528 ± 0.015  [0.513..0.542]  n=2
+
+  highRatio:
+    MIK 2: 0.000 ± 0.000  [0.000..0.000]  n=1
+    MIK 3: 0.011 ± 0.007  [0.003..0.018]  n=2
+    MIK 4: 0.032 ± 0.034  [0.000..0.091]  n=7
+    MIK 5: 0.063 ± 0.063  [0.000..0.303]  n=65
+    MIK 6: 0.094 ± 0.061  [0.010..0.308]  n=139
+    MIK 7: 0.087 ± 0.056  [0.010..0.210]  n=43
+    MIK 8: 0.047 ± 0.000  [0.046..0.047]  n=2
+
+  spectralFlux:
+    MIK 2: 150.512 ± 0.000  [150.512..150.512]  n=1
+    MIK 3: 207.552 ± 2.562  [204.990..210.114]  n=2
+    MIK 4: 166.543 ± 72.076  [78.369..282.130]  n=7
+    MIK 5: 161.539 ± 51.915  [58.951..279.816]  n=65
+    MIK 6: 191.184 ± 57.210  [56.461..347.812]  n=139
+    MIK 7: 211.559 ± 60.221  [61.372..317.001]  n=43
+    MIK 8: 251.712 ± 18.366  [233.346..270.077]  n=2
+
+─── Weight Fitting (Grid Search) ──────────────────────────────
+
+  Feature ranking by |r|:
+    1. zcScore (|r|=0.348)
+    2. highScore (|r|=0.215)
+    3. centroidScore (|r|=0.185)
+    4. rolloffScore (|r|=0.180)
+    5. rmsScore (|r|=0.168)
+    6. bassScore (|r|=0.107)
+    7. crestScore (|r|=0.080)
+    8. fluxScore (|r|=0.000)
+
+  Top 3: zcScore, highScore, centroidScore
+    Weights: zcScore=0.90, highScore=0.00, centroidScore=0.10
+    MSE=0.0636, r=0.342, MAE=2.12 MIK units
+
+  Top 4: zcScore, highScore, centroidScore, rolloffScore
+    Weights: zcScore=0.90, highScore=0.00, centroidScore=0.10, rolloffScore=0.00
+    MSE=0.0636, r=0.342, MAE=2.12 MIK units
+
+  Top 5: zcScore, highScore, centroidScore, rolloffScore, rmsScore
+    Weights: zcScore=0.40, highScore=0.00, centroidScore=0.00, rolloffScore=0.00, rmsScore=0.60
+    MSE=0.0248, r=0.380, MAE=1.22 MIK units
+
+─── Best Model: top3 ──────────────────────────────────────────
+
+  r = 0.342, MAE = 2.12 MIK units
+
+  Formula:
+    energy =
+      zcScore          × 0.90
+    + highScore        × 0.00
+    + centroidScore    × 0.10
+
+─── Sample Predictions ────────────────────────────────────────
+
+  MIK  New    Old    Err   File
+  ───  ───    ───    ───   ────
+  ▿ 2     0.7    0.4   -1.3  01 9A - 2 - Intro.mp3
+  ✗ 3     1.5    2.3   -1.5  01 1A - 3 - Naturaleza (Mose Edit).mp3
+  ▿ 3     1.7    4.6   -1.3  01 1A - 3 - Réveiller (Feat. MANON).mp3
+  ✓ 4     4.0    4.5   -0.0  01 5A - 4 - I Can't.mp3
+  ✗ 4     1.0    1.3   -3.0  01 5A - 4 - Sleep.mp3
+  ✗ 4     0.0    0.5   -4.0  02 12A - 4 - Rise and Fall (Original Mix).mp3
+  ✗ 4     1.5    3.3   -2.5  02 5A - 4 - Loma.mp3
+  ▿ 4     2.6    6.7   -1.4  04 8A - 4 - ndanele.mp3
+  ✗ 4     9.4    3.0   + 5.4  05 4A - 4 - Liquid Skies (The Voice).mp3
+  ✗ 4     1.1    0.0   -2.9  11 5A - 4 - Baia 2012 (Aybee's Solar Dub).mp3
+  ~ 5     4.1    4.7   -0.9  01 10A - 5 - Tonight (Main Mix).mp3
+  ~ 5     4.0    0.4   -1.0  01 11A - 5 - 3 Days Later.mp3
+  ✗ 5     3.0    4.3   -2.0  01 11A - 5 - Desperadio (Original Mix).mp3
+  ✓ 5     4.6    4.0   -0.4  01 11A - 5 - Molly & Sally (Adam Ten & Mita G
+  ✗ 5     2.2    0.5   -2.8  01 11A - 5 - Together (Tomanka).mp3
+  ~ 5     5.7    1.4   + 0.7  01 12A - 5 - The Life We Choose (E.R.P. Remix
+  ✓ 5     5.3    1.2   + 0.3  01 2A - 5 - Temptation (feat. Poppy Baskcomb)
+  ✗ 5     1.8    0.2   -3.2  01 3A - 5 - Beach Jazz feat. MarBlu (Original
+  ✗ 5     9.4    8.7   + 4.4  01 3A - 5 - Papa Waz (Club Mix).mp3
+  ✗ 5     2.8    5.3   -2.2  01 5A - 5 - Line of Conception.mp3
+  ✗ 5     2.0    6.1   -3.0  01 5A - 5 - Tale of Devotion (Original Mix).m
+  ~ 5     4.2    2.1   -0.8  01 6A - 5 - Does It Matter (Ajna BE Remix).mp
+  ✗ 5     1.6    2.6   -3.4  01 6A - 5 - Herr Krank - Acid Jazz.mp3
+  ✗ 5     1.9    3.2   -3.1  01 6A - 5 - Silence & Secrets (Black Coffee R
+  ✗ 5     2.2    5.0   -2.8  01 7A - 5 - Mujer (Anja Schneider Remix).mp3
+  ✗ 5     1.4    4.8   -3.6  01 7A - 5 - Take Me Down Deeper (Soul Button 
+  ✗ 5     3.4    1.8   -1.6  01 7A - 5 - Tough Young Guys (Original Mix.mp
+  ✗ 5     3.4    5.7   -1.6  01 8A - 5 - House Music (Extended Mix).mp3
+  ▿ 5     6.1    7.8   + 1.1  01 8A - 5 - Talkin' 'bout.mp3
+  ✗ 5     1.8    0.3   -3.2  01 8A - 5 - The Rapture Pt.III (Original Mix)
+  ▿ 5     6.1    8.5   + 1.1  01 9A - 5 - Harlem (Retromigration Remix).mp3
+  ✓ 5     5.0    9.1   + 0.0  01 9A - 5 - Look Around, It's Gonna Be Fine.m
+  ✓ 5     5.0    7.1   -0.0  01 9A - 5 - Senses (Original Mix).mp3
+  ~ 5     5.6    3.9   + 0.6  01 9A - 5 - Sermon Of The Drums (Original Mix
+  ✗ 5     8.9    6.7   + 3.9  02 2A - 5 - Lost in Rainbow (Nofex Remix).mp3
+  ✗ 5     0.9    3.3   -4.1  02 2A - 5 - Spells of Bhagwan.mp3
+  ▿ 5     6.2    6.1   + 1.2  02 4A - 5 - Nobody's Fool (Luca Tuccillo Pian
+  ~ 5     4.4    2.8   -0.6  02 5A - 5 - Delusion (Original Mix).mp3
+  ✗ 5     3.5    8.6   -1.5  02 6A - 5 - House Is Love (Edit).mp3
+  ✗ 5     2.5    0.7   -2.5  02 7A - 5 - I Put A Spell On You (Extended Mi
+  ✓ 5     4.7    2.2   -0.3  02 7A - 5 - Tipu's Tiger (Original).mp3
+  ✗ 5     0.9    3.7   -4.1  02 8A - 5 - Pussy Power (DESIREE Remix).mp3
+  ✓ 5     5.2    0.6   + 0.2  03 10A - 5 - Persona.mp3
+  ✗ 5     0.4    2.8   -4.6  03 10A - 5 - Vuoi Vuoi Me (Henrik Schwarz Rem
+  ✗ 5     0.8    5.0   -4.2  03 2A - 5 - Red Man Calypso (Whitesquare Remi
+  ✗ 5     3.1    1.7   -1.9  03 6A - 5 - Acid Creep (Original Mix).mp3
+  ~ 5     4.0    0.9   -1.0  03 8A - 5 - Like This (Original Mix).mp3
+  ✓ 5     4.6    4.7   -0.4  04 10A - 5 - Perio.mp3
+  ✗ 5     3.0    4.1   -2.0  04 9A - 5 - Open Up (Remastered).mp3
+  ✗ 5     2.0    0.8   -3.0  04 9A - 5 - Samanke.mp3
+  ✗ 5     2.1    1.4   -2.9  05 2A - 5 - I Know (Club Tularosa Remix).mp3
+  ✗ 5     6.7    9.1   + 1.7  05 8A - 5 - Call You Back.mp3
+  ✗ 5     0.8    4.0   -4.2  07 1A - 5 - Loud Places (John Talabot's Loud 
+  ▿ 5     3.9    3.2   -1.1  07 5A - 5 - The Day We Met For Coffee (Yotam 
+  ✓ 5     5.5    5.2   + 0.5  12A - 5 - Equal Responsibility (Original Mix)
+  ✗ 5     9.4    5.9   + 4.4  12A - 5 - Submarine (Original Mix).mp3
+  ~ 5     4.0    0.0   -1.0  13 12A - 5 - I Want You (John Morales Extende
+  ✗ 5     1.0    5.5   -4.0  18 2A - 5 - This Time (Gorge Remix).mp3
+  ✗ 5     2.8    2.9   -2.2  1A - 5 - Implanted Circle feat. David Ennio M
+  ✗ 5     1.8    3.5   -3.2  1A - 5 - Mass Majestic (Gerd 1997 Remix).mp3
+  ~ 5     4.3    6.5   -0.7  21 12A - 5 - Simple World (Thodoris Triantafi
+  ✗ 5     3.0    4.8   -2.0  22 4A - 5 - Flash of Light feat. Roisin Murph
+  ✗ 5     8.9    7.3   + 3.9  27 1A - 5 - Rabbit Hole.mp3
+  ✗ 5     1.5    9.8   -3.5  2A - 5 - Can You Feel It.mp3
+  ✗ 5     2.9    0.7   -2.1  32 2A - 5 - My Intuition (feat. Jenny Penkin)
+  ✗ 5     1.7    3.1   -3.3  39 1A - 5 - Jass Yo Azz Off (The Tribal X Mix
+  ✗ 5     0.3    7.9   -4.7  3A - 5 - Move Body, Move Forward (Original Mi
+  ✗ 5     6.9    5.8   + 1.9  4A - 5 - MUSTANG I.mp3
+  ✗ 5     9.5    3.5   + 4.5  5A - 5 - Play The Room (Original Mix).mp3
+  ✗ 5     0.6    3.7   -4.4  7A - 5 - Taste Of The Future (Original Mix).m
+  ✗ 5     2.0    2.2   -3.0  7A - 5 - You Take Over (Yoruba Soul Mix).mp3
+  ✗ 5     1.2    4.5   -3.8  8A - 5 - Absence of Gravity (Original Mix).mp
+  ✗ 5     0.0    0.5   -5.0  8A - 5 - Muye.mp3
+  ✗ 5     7.5    9.5   + 2.5  8A - 5 - Ritual (Original Mix).mp3
+  ✗ 5     2.3    3.6   -2.7  9A - 5 - Ijzeren Rots [DIGWAH03] Dreama Edit.
+  ✓ 6     6.1    2.0   + 0.1  01 10A - 6 - All I Want Is The Bass (Extended
+  ✗ 6     7.6    7.1   + 1.6  01 10A - 6 - Chez A. Untitled (Original Mix).
+  ~ 6     5.3    8.9   -0.7  01 10A - 6 - Touch Of Love (Original Mix).mp3
+  ✗ 6     9.3    9.7   + 3.3  01 11A - 6 - Jazzy Things.mp3
+  ✗ 6     1.6    3.8   -4.4  01 11A - 6 - Kronos (Wild Mix).mp3
+  ✗ 6     4.3    6.2   -1.7  01 11A - 6 - Thandaza.mp3
+  ✗ 6     9.3    7.3   + 3.3  01 12A - 6 - Lately (Adam Ten & Mita Gami Rem
+  ▿ 6     7.1    9.6   + 1.1  01 12A - 6 - Let's Work (Extended Mix).mp3
+  ▿ 6     7.2    8.9   + 1.2  01 12A - 6 - Love Vibration (Extended Mix).mp
+  ✗ 6     4.2    8.8   -1.8  01 12A - 6 - Provenance (Original Mix).mp3
+  ✗ 6     2.2    6.0   -3.8  01 12A - 6 - You Got the Love (Club Mix).mp3
+  ✗ 6     3.6    9.3   -2.4  01 1A - 6 - Stutter (Original Mix).mp3
+  ✗ 6     2.4    7.2   -3.6  01 2A - 6 - Change It (Original Mix).mp3
+  ~ 6     5.2    3.5   -0.8  01 2A - 6 - Deep Dancin' (Extended Mix).mp3
+  ▿ 6     4.6    0.8   -1.4  01 2A - 6 - Où Je Vais.mp3
+  ✗ 6     3.0    6.3   -3.0  01 3A - 6 - Disco Music (Young Pulse Remix Ex
+  ✗ 6     3.1    9.7   -2.9  01 3A - 6 - L.I.F.E.mp3
+  ✗ 6     1.7    5.1   -4.3  01 3A - 6 - Sala Papa Ye (Extended Mix).mp3
+  ~ 6     5.2    6.6   -0.8  01 3A - 6 - This Is My Life (Bontan Extended 
+  ✗ 6     3.5    9.5   -2.5  01 3A - 6 - This Rhythm (feat. RAHH) (Extende
+  ✓ 6     6.4    3.4   + 0.4  01 4A - 6 - Damn Girl (Original Mix).mp3
+  ✗ 6     4.1    7.5   -1.9  01 4A - 6 - Elevate Us (Original Mix).mp3
+  ✓ 6     6.4    8.6   + 0.4  01 4A - 6 - I See You Baby (Austin Ato Extend
+  ✓ 6     5.6    5.4   -0.4  01 4A - 6 - In and Out (Extended Mix).mp3
+  ✗ 6     8.5    6.2   + 2.5  01 4A - 6 - Strictly Nu.mp3
+  ✗ 6     2.1    4.3   -3.9  01 4A - 6 - Take Me.mp3
+  ✗ 6     3.7    2.4   -2.3  01 5A - 6 - Dog eat dog (Original Mix).mp3
+  ✗ 6     3.4    3.8   -2.6  01 5A - 6 - Mawu.mp3
+  ✗ 6     3.6    8.2   -2.4  01 5A - 6 - Million Pieces.mp3
+  ✗ 6     9.4    9.0   + 3.4  01 5A - 6 - Nefertiti (Red Axes Remix).mp3
+  ✗ 6     8.8    9.9   + 2.8  01 5A - 6 - Special Kind Of Love (Extended Mi
+  ~ 6     6.6    7.0   + 0.6  01 5A - 6 - What About My Love (Michael Gray 
+  ✓ 6     5.5    6.0   -0.5  01 5B - 6 - Take Me Up.mp3
+  ✗ 6     4.0    7.0   -2.0  01 6A - 6 - All By Myself (Original Mix).mp3
+  ✓ 6     5.5    6.0   -0.5  01 6A - 6 - Mommy Whats A Record (Original Mi
+  ✗ 6     2.2   10.0   -3.8  01 6A - 6 - NOBODY (Extended Mix).mp3
+  ~ 6     6.8    9.4   + 0.8  01 6A - 6 - Right Here Right Now (Original Mi
+  ▿ 6     7.1    8.3   + 1.1  01 6A - 6 - Sick Boy.mp3
+  ✓ 6     6.2    9.8   + 0.2  01 6A - 6 - So U Kno.mp3
+  ~ 6     5.4    9.5   -0.6  01 6A - 6 - The Beat, The Scene, The Sound (N
+  ✗ 6     2.2    4.5   -3.8  01 6A - 6 - Veneno (Original Mix).mp3
+  ✗ 6     1.0    2.1   -5.0  01 7A - 6 - Amathole.mp3
+  ✗ 6     9.4    6.8   + 3.4  01 7A - 6 - Coming Up (Original Mix).mp3
+  ✗ 6     8.6    2.5   + 2.6  01 7A - 6 - Flawless.mp3
+  ~ 6     6.8    9.9   + 0.8  01 7A - 6 - I Hear Music In the Streets (Mich
+  ▿ 6     7.4    4.3   + 1.4  01 7A - 6 - Like A Prayer.mp3
+  ~ 6     6.9    9.7   + 0.9  01 7A - 6 - Love Track 24 (B&S Concept Remix)
+  ✗ 6     3.5    0.3   -2.5  01 7A - 6 - Wrong (Francis Mercier Sunrise Mi
+  ~ 6     6.6    6.2   + 0.6  01 8A - 6 - Back To Life (feat. Lois Faith) (
+  ✓ 6     5.5    6.8   -0.5  01 8A - 6 - Be Where I Am (feat. Daniel Wilso
+  ~ 6     5.5    8.2   -0.5  01 8A - 6 - Obnoxious Groove (Original Mix).m
+  ✓ 6     6.3    9.0   + 0.3  01 8A - 6 - Stronger Than Me (Original Mix).m
+  ✓ 6     5.7    8.3   -0.3  01 8A - 6 - Vida Boa (Original Mix).mp3
+  ▿ 6     4.9    1.9   -1.1  01 8A - 6 - What Would You Do_ feat. Andrés f
+  ✓ 6     5.6    9.1   -0.4  01 9A - 6 - Black Music (David Harness and Te
+  ✓ 6     5.9    4.0   -0.1  01 9A - 6 - Do This (Original Mix).mp3
+  ✗ 6     3.5    0.7   -2.5  01 9A - 6 - Muy Bien (Original Mix).mp3
+  ✗ 6     3.9    6.6   -2.1  01 9A - 6 - Untouchable.mp3
+  ▿ 6     4.9    4.1   -1.1  02 10A - 6 - Again & Again.mp3
+  ✗ 6     3.2    5.8   -2.8  02 10A - 6 - Oblivion.mp3
+  ✓ 6     6.1    8.1   + 0.1  02 10A - 6 - Rhythm In Motion.mp3
+  ✗ 6     3.3    3.9   -2.7  02 10A - 6 - The Blind Side (Rodriguez Jr. Re
+  ✗ 6     3.2    3.0   -2.8  02 10A - 6 - World Is Empty (Extended Mix).mp
+  ✓ 6     6.1    0.3   + 0.1  02 11A - 6 - Music (Piano Mix).mp3
+  ✗ 6     2.0    5.2   -4.0  02 12A - 6 - b. Science Fiction.mp3
+  ✗ 6     8.5    7.5   + 2.5  02 1A - 6 - I Can Finally Know (simo not simo
+  ~ 6     5.3    2.9   -0.7  02 2A - 6 - Still In Love (feat. Navasha Daya
+  ▿ 6     4.9    7.1   -1.1  02 3A - 6 - Cola (Club Mix).mp3
+  ✗ 6     3.7    1.5   -2.3  02 4A - 6 - Every Breath You Take (Extended M
+  ✗ 6     4.1    1.2   -1.9  02 4A - 6 - Fires (Extended).mp3
+  ✓ 6     5.8    5.3   -0.2  02 4A - 6 - My Machine (Radio Edit).mp3
+  ✓ 6     5.6    1.3   -0.4  02 5A - 6 - Love On Hold(Extended Mix) (feat.
+  ✓ 6     6.3    3.6   + 0.3  02 6A - 6 - High (Two Soul Fusion Boogie Mix)
+  ~ 6     6.5    9.6   + 0.5  02 7A - 6 - Dance To The Music (Extended Mix)
+  ▿ 6     7.3    5.1   + 1.3  02 7A - 6 - Keep It Stronger (Rub Mix).mp3
+  ✗ 6     8.3    8.1   + 2.3  02 7A - 6 - Satisfy (Original Mix).mp3
+  ✗ 6     4.2    0.6   -1.8  02 7A - 6 - Show Me Some Love (feat. Sadie Wa
+  ✗ 6     1.2    9.6   -4.8  02 8A - 6 - Momma's Groove (Jimpster's Hip Re
+  ~ 6     5.3    7.4   -0.7  02 9A - 6 - Can Soleil.mp3
+  ▿ 6     7.1    2.6   + 1.1  03 10A - 6 - Vento.mp3
+  ✗ 6     1.7    8.4   -4.3  03 11A - 6 - I DON_T CARE.mp3
+  ✓ 6     5.8    3.1   -0.2  03 12A - 6 - Long Time (Original Mix).mp3
+  ✗ 6     1.8    6.4   -4.2  03 2A - 6 - Better Me Feat. Elatehem (Origina
+  ✗ 6     8.6    1.3   + 2.6  03 4A - 6 - Renegade (Adam Ten & Mita Gami Re
+  ✗ 6     9.4    3.3   + 3.4  03 4A - 6 - Spiritual Thang.mp3
+  ✗ 6     3.6    0.6   -2.4  03 5A - 6 - Addicted (Original Mix).mp3
+  ✗ 6     2.4    5.8   -3.6  03 6A - 6 - Mystery (Edit by DJ Kaos).mp3
+  ✗ 6     9.3    8.9   + 3.3  03 9A - 6 - LA Nights.mp3
+  ✓ 6     5.9    8.5   -0.1  04 11A - 6 - Help (Extended Mix).mp3
+  ✗ 6     3.5    6.9   -2.5  04 1A - 6 - God Made Me Phunky.mp3
+  ▿ 6     4.9    3.4   -1.1  04 2A - 6 - All The Way (Original Mix).mp3
+  ✗ 6     3.3    8.7   -2.7  04 3A - 6 - Ask Yourself (Can You Dance) (Ext
+  ✗ 6     9.0    7.7   + 3.0  04 4A - 6 - BSTC feat. JL - Love It (Phil Ash
+  ~ 6     6.6    4.2   + 0.6  04 5A - 6 - Don't Make Me Wait (Original Mix)
+  ✗ 6     2.7    0.8   -3.3  04 5A - 6 - Principal Agent (Sunrise Version)
+  ✗ 6     2.0    0.1   -4.0  04 6A - 6 - The Sequence Cabinet.mp3
+  ✓ 6     6.2    1.7   + 0.2  04 9A - 6 - Tiempo (Original Mix).mp3
+  ✗ 6     1.0    0.9   -5.0  05 2A - 6 - Hey Hey (Da Capo & Kitty Amor Ext
+  ✓ 6     5.8    8.0   -0.2  05 7A - 6 - Kaoz (Dario D'Attis remix).mp3
+  ✗ 6     2.5    1.2   -3.5  05 8A - 6 - Bermuda (Original Mix).mp3
+  ✗ 6     4.1    7.7   -1.9  05 8A - 6 - Good Street (Original Mix).mp3
+  ✗ 6     3.6    8.8   -2.4  07 1A - 6 - Master Plug (feat. Kid Enigma).mp
+  ✗ 6     8.9    3.0   + 2.9  08 7A - 6 - Love On The Line (extended mix).m
+  ✗ 6     9.4    7.9   + 3.4  08 9A - 6 - Don't Stop (Dario D'Attis Remix) 
+  ✗ 6     4.0    1.7   -2.0  09 10A - 6 - Don_t Stop Your Love (Extended V
+  ✗ 6     7.5    8.4   + 1.5  09 10A - 6 - Jus' Dance (Sole Channel Mix).mp
+  ✗ 6     9.6    8.3   + 3.6  10 8A - 6 - Why (DJ Seinfeld remix) (feat. Ti
+  ✗ 6     7.9    2.1   + 1.9  10A - 6 - Dj S - Real Love.mp3
+  ✗ 6     2.8    2.7   -3.2  11A - 6 - Each Time.mp3
+  ✓ 6     6.4    7.6   + 0.4  11A - 6 - Life Rules (Dan Taneff Remix).mp3
+  ~ 6     6.6    5.7   + 0.6  11A - 6 - My Groove feat. Gjeazon (Doorly Rem
+  ✗ 6     4.4    5.4   -1.6  11A - 6 - Pulsate (Original Mix).mp3
+  ~ 6     6.7    9.0   + 0.7  11A - 6 - You Don`t Know (Original Mix).mp3
+  ✗ 6     3.5    8.8   -2.5  12A - 6 - Shes So Untouchable (12 inch Edit).
+  ▿ 6     4.6    4.8   -1.4  12A - 6 - The Reflex 'Halloween Disco' Edit.m
+  ✗ 6     4.4    2.0   -1.6  13 2A - 6 - Let's Hope (Bicep Remix).mp3
+  ~ 6     6.7    7.2   + 0.7  16 4A - 6 - Envision (Argy Vocal Mix).mp3
+  ✗ 6     9.4    7.0   + 3.4  1A - 6 - Somebody (Original Mix).mp3
+  ~ 6     6.9    7.5   + 0.9  21 6A - 6 - Dance You Mutha (Original Mutha).
+  ✗ 6     4.4    6.6   -1.6  21 6A - 6 - Hold Me (Extended Mix).mp3
+  ✗ 6     4.1    6.8   -1.9  26 12A - 6 - Be Somebody (feat. Boswell).mp3
+  ✗ 6     1.9    4.6   -4.1  26 5A - 6 - Keepin' the Faith.mp3
+  ✗ 6     4.2    6.9   -1.8  2A - 6 - My Space Feat. Hollis P Monroe & Ove
+  ~ 6     6.8    8.0   + 0.8  34 7A - 6 - Give It Life (Extended Mix).mp3
+  ✗ 6     9.4    8.2   + 3.4  3A - 6 - Enjoy Music (Original Mix).mp3
+  ~ 6     5.0    7.3   -1.0  43 9A - 6 - Love Story.mp3
+  ✗ 6     9.3    5.8   + 3.3  4A - 6 - Callisto (Joris Voorn Remix).mp3
+  ✗ 6     9.3    9.2   + 3.3  4A - 6 - Show Me Love (Kerri Chandler Remix).
+  ✓ 6     6.3    9.8   + 0.3  4A - 6 - Tears.mp3
+  ✗ 6     3.4    4.9   -2.6  5A - 6 - Madan (Liboz Edit).mp3
+  ▿ 6     7.1    1.0   + 1.1  5A - 6 - Sevillanas (Original Mix).mp3
+  ✗ 6     4.4    0.2   -1.6  6A - 6 - Easy (Extended Mix).mp3
+  ✗ 6     2.4    2.4   -3.6  6A - 6 - The Truth Will Come Out (MG Reedit -
+  ▿ 6     4.6    4.2   -1.4  7A - 6 - Miura (Original Mix).mp3
+  ✗ 6     1.8    4.1   -4.2  7A - 6 - The Devil feat. Thomas Gandey (Origi
+  ~ 6     5.3    2.0   -0.7  8A - 6 - Dj S - Be Mine.mp3
+  ✗ 6     9.0    8.7   + 3.0  8A - 6 - Your Love (Waze And Odyssey Remix).m
+  ▿ 6     4.9    8.0   -1.1  9A - 6 - GIVE IT UP EDIT.wav
+  ✗ 6     4.0    9.4   -2.0  9A - 6 - The Doors.mp3
+  ✓ 7     6.5    5.0   -0.5  01 10A - 7 - Only Girl (In The World).mp3
+  ~ 7     6.3    2.4   -0.7  01 11A - 7 - Got You The Floor.mp3
+  ✓ 7     7.3    6.3   + 0.3  01 12A - 7 - Vintage Wine.mp3
+  ~ 7     7.7    9.3   + 0.7  01 1A - 7 - Get My Luv (Original Mix).mp3
+  ✗ 7     4.9    9.3   -2.1  01 3A - 7 - Something I'm Going Through (Exte
+  ✗ 7     3.9   10.0   -3.1  01 3A - 7 - You & Me (Rivo Extended Mix).mp3
+  ~ 7     6.5    3.4   -0.5  01 4A - 7 - 24K Magic.mp3
+  ✗ 7     5.2    8.6   -1.8  01 4A - 7 - Big Bad Mood.mp3
+  ✗ 7     9.0    3.1   + 2.0  01 4A - 7 - Zeus.mp3
+  ✗ 7     2.2    7.6   -4.8  01 5A - 7 - Karl-Löwe street groove (ft. Biro
+  ✗ 7     1.9    4.9   -5.1  01 5A - 7 - Mi Ritmo.mp3
+  ✗ 7     5.4    5.6   -1.6  01 6A - 7 - Spiritual Thing (Extended Mix).mp
+  ✗ 7     4.7    7.4   -2.3  01 6A - 7 - To The Top (Original Mix).mp3
+  ✗ 7     4.2    0.1   -2.8  01 7A - 7 - Evelin.mp3
+  ▿ 7     5.8    1.1   -1.2  01 7A - 7 - Stop Space Return.mp3
+  ✗ 7     9.3    9.2   + 2.3  01 8A - 7 - Caged Bird (Full Vocal Media Mix)
+  ✗ 7     5.2    3.2   -1.8  01 8A - 7 - The Magic Room (Dino Lenny & Seth
+  ✗ 7     2.8    7.2   -4.2  01 9A - 7 - Bo Bom (Original Mix).mp3
+  ~ 7     6.2    4.1   -0.8  01 9A - 7 - Go (Anfisa Letyago Remix).mp3
+  ▿ 7     5.7    2.3   -1.3  02 10A - 7 - After the Disco.mp3
+  ✗ 7     3.8    4.3   -3.2  02 7A - 7 - Houdini (Extended).mp3
+  ✗ 7     2.6    1.6   -4.4  02 8A - 7 - Never Alone (ft. Dix_On The Phone
+  ✗ 7     4.9    7.8   -2.1  03 12A - 7 - U Feel Mi (Kai Alce's New Feel).
+  ✓ 7     6.5    0.9   -0.5  03 2A - 7 - Like A Virgin.mp3
+  ✓ 7     7.4    6.9   + 0.4  03 2A - 7 - Shut The Lights Out (Extended Mix
+  ✗ 7     4.9    5.0   -2.1  03 3A - 7 - I Found Love (Perel Remix - Singl
+  ✗ 7     4.0    6.4   -3.0  03 5A - 7 - First Choice.mp3
+  ✗ 7     1.6    7.7   -5.4  03 6A - 7 - PlayBooyz (Original Mix).mp3
+  ✗ 7     3.7    7.4   -3.3  03 7A - 7 - It Started In Chicago (Extended I
+  ✗ 7     9.0    6.5   + 2.0  03 8A - 7 - Funkskin (Original Mix).mp3
+  ▿ 7     8.3    6.3   + 1.3  03 9A - 7 - This Track.mp3
+  ~ 7     6.3    4.4   -0.7  04 3A - 7 - That's What I Like.mp3
+  ▿ 7     8.4    1.8   + 1.4  05 9A - 7 - Back Together (feat. Ron Carroll)
+  ▿ 7     8.2    3.6   + 1.2  06 6A - 7 - Lovelee Dae (with DANCE & Blaze (
+  ✗ 7     9.4    1.4   + 2.4  08 5A - 7 - You Used to Hold Me.mp3
+  ✗ 7     2.6    7.9   -4.4  11A - 7 - Billie Jean (Rubber Disco Mix).mp3
+  ✗ 7     2.2    4.7   -4.8  11A - 7 - Rise Above (Original Mix).mp3
+  ✗ 7     4.2    4.8   -2.8  15 1A - 7 - Vogue - voice start.mp3
+  ✗ 7     9.3    1.9   + 2.3  19 5A - 7 - Closer (feat. Carole Sylvan).mp3
+  ✗ 7     4.7    9.2   -2.3  25 3A - 7 - Do Me Right (feat. Dames Brown (C
+  ✗ 7     5.2    7.8   -1.8  4A - 7 - James Hype x Maddison Avenue - More 
+  ✗ 7     4.9    5.5   -2.1  69 12A - 7 - Going Back.mp3
+  ✗ 7     9.2    5.6   + 2.2  7A - 7 - Dusty Memories (Original Mix).mp3
+  ✗ 8     6.3    4.4   -1.7  04 9A - 8 - CUFF IT.mp3
+  ✗ 8     4.8    8.5   -3.2  6A - 8 - It's You (Original Mix).mp3
+
+─── Suggested analyzer-core.ts Formula ────────────────────────
+
+  const zcScore = Math.max(0, Math.min(1, (zcRate - 0.01) / 0.10));
+  const centroidScore = Math.max(0, Math.min(1, (spectralCentroid - 500) / 4500));
+  const energy = Math.round((
+    zcScore          * 0.90
+  + centroidScore    * 0.10
+  ) * 1000) / 1000;
+
+══════════════════════════════════════════════════════════════

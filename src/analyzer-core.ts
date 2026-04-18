@@ -159,6 +159,107 @@ function correctBpmWithTag(detected: number, tagBpm: number | null): number {
   return detected;
 }
 
+// ── FFT (iterative Cooley-Tukey radix-2) ──────────────────────────────────────
+function fft(re: Float64Array, im: Float64Array): void {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    while (j & bit) { j ^= bit; bit >>= 1; }
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const half = len >> 1;
+    const angle = -2 * Math.PI / len;
+    const wRe = Math.cos(angle), wIm = Math.sin(angle);
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1, curIm = 0;
+      for (let j = 0; j < half; j++) {
+        const a = i + j, b = a + half;
+        const tRe = curRe * re[b] - curIm * im[b];
+        const tIm = curRe * im[b] + curIm * re[b];
+        re[b] = re[a] - tRe; im[b] = im[a] - tIm;
+        re[a] += tRe; im[a] += tIm;
+        const nextRe = curRe * wRe - curIm * wIm;
+        curIm = curRe * wIm + curIm * wRe;
+        curRe = nextRe;
+      }
+    }
+  }
+}
+
+// Multi-band energy extraction for v3 energy formula
+const FFT_SIZE = 2048;
+const NUM_FRAMES = 60;
+const ENERGY_BANDS = [
+  { name: 'mid',     lo: 1000, hi: 4000 },
+  { name: 'highMid', lo: 4000, hi: 8000 },
+  { name: 'high',    lo: 8000, hi: 20000 },
+] as const;
+
+interface MultiBandFeatures {
+  midDb: number;
+  highMidDb: number;
+  highDb: number;
+  zcRate: number;
+}
+
+function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number): MultiBandFeatures {
+  const N = channelData.length;
+  const halfFFT = FFT_SIZE / 2;
+  const freqPerBin = sampleRate / FFT_SIZE;
+
+  // Hann window
+  const hann = new Float32Array(FFT_SIZE);
+  for (let i = 0; i < FFT_SIZE; i++) hann[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (FFT_SIZE - 1)));
+
+  const hop = Math.max(FFT_SIZE, Math.floor((N - FFT_SIZE) / (NUM_FRAMES - 1)));
+  const nFrames = Math.min(NUM_FRAMES, Math.floor((N - FFT_SIZE) / hop) + 1);
+
+  const bandPower: Record<string, number> = { mid: 0, highMid: 0, high: 0 };
+  let frameCount = 0;
+
+  const re = new Float64Array(FFT_SIZE);
+  const im = new Float64Array(FFT_SIZE);
+
+  for (let f = 0; f < nFrames; f++) {
+    const start = Math.min(f * hop, N - FFT_SIZE);
+    for (let i = 0; i < FFT_SIZE; i++) { re[i] = channelData[start + i] * hann[i]; im[i] = 0; }
+    fft(re, im);
+
+    let framePower = 0;
+    const frameBandPower: Record<string, number> = { mid: 0, highMid: 0, high: 0 };
+
+    for (let k = 1; k < halfFFT; k++) {
+      const power = re[k] * re[k] + im[k] * im[k];
+      const hz = k * freqPerBin;
+      framePower += power;
+      for (const b of ENERGY_BANDS) {
+        if (hz >= b.lo && hz < b.hi) { frameBandPower[b.name] += power; break; }
+      }
+    }
+
+    if (framePower > 1e-12) {
+      for (const b of ENERGY_BANDS) bandPower[b.name] += frameBandPower[b.name];
+      frameCount++;
+    }
+  }
+
+  // Band dBFS (absolute energy per band)
+  const midDb = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.mid / frameCount : 1e-18, 1e-18));
+  const highMidDb = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.highMid / frameCount : 1e-18, 1e-18));
+  const highDb = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.high / frameCount : 1e-18, 1e-18));
+
+  // Zero-crossing rate (full resolution for accuracy)
+  let zc = 0;
+  for (let i = 1; i < N; i++) {
+    if ((channelData[i] >= 0) !== (channelData[i - 1] >= 0)) zc++;
+  }
+  const zcRate = zc / N;
+
+  return { midDb, highMidDb, highDb, zcRate };
+}
+
 /** Normalized RMS of a slice (same dBFS scale as overall energy). */
 function windowRms(data: Float32Array, start: number, end: number): number {
   const len = end - start;
@@ -302,39 +403,33 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     }
     const pitchClass = best.pitchClass;
     const mode = best.mode;
-    // Energy — calibrated against MixedInKey energy labels on 90 real DJ tracks.
+    // Energy v3 — Multi-band spectral analysis + OLS regression
     //
-    // Feature analysis (Pearson r vs MIK energy, n=30 sample):
-    //   Zero-crossing rate : r = +0.45  ← strongest predictor (spectral brightness)
-    //   RMS dBFS           : r = +0.25  ← loudness
-    //   Crest factor       : r = +0.13  ← dynamic range (noisy)
-    //   Onset rate         : r ≈ +0.10  ← too slow to compute, weaker than ZCR
+    // Calibrated against 259 MixedInKey-tagged tracks via OLS regression.
+    // Uses FFT-based multi-band dB values (mid 1-4kHz, highMid 4-8kHz, high 8-20kHz)
+    // plus zero-crossing rate. The 4-8kHz band captures hi-hat/brightness that
+    // MIK energy is most sensitive to.
     //
-    // Zero-crossing rate captures hi-hat / treble density, which is exactly what
-    // MIK energy is sensitive to.  Computed in the same RMS pass at zero extra cost.
+    // Performance: r=0.513, MAE=0.52 MIK units (n=259)
+    //   highMidDb  r=+0.479  ← strongest individual predictor
+    //   highDb     r=+0.477
+    //   midDb      r=+0.410
+    //   zcRate     r=+0.314
     //
-    // Normalization ranges derived from the library:
-    //   ZCR  0.01 (very bass-heavy) → 1.0 (bright/energetic), normalised over 0.10 span
-    //   RMS  -18 dBFS (quiet ambient) → -4 dBFS (club-loud), 14 dB span
+    // OLS coefficients (intercept=0.5838, features centred on training means):
+    //   highMidDb  w=+0.0107  mean=28.454  std=5.648
+    //   highDb     w=+0.0209  mean=26.545  std=6.372
+    //   midDb      w=+0.0141  mean=32.203  std=4.492
+    //   zcRate     w=+0.0016  mean=0.064   std=0.029
     const energyData = channelData.slice(0, analysisEnd);
-    let sumSq = 0;
-    let zeroCrossings = 0;
-    const N = energyData.length;
-    for (let i = 0; i < N; i += 4) {
-      sumSq += energyData[i] * energyData[i];
-      // Count zero crossings (sign changes) — correlates with spectral brightness
-      if (i > 0 && (energyData[i] >= 0) !== (energyData[i - 4] >= 0)) zeroCrossings++;
-    }
-    const rms = Math.sqrt(sumSq / Math.ceil(N / 4));
-    const rmsDb = 20 * Math.log10(Math.max(rms, 1e-9));
-    // ZCR: crossings per sample (counting every 4th sample, adjust accordingly)
-    const zcRate = zeroCrossings / Math.ceil(N / 4);
-    // RMS: map -18 dBFS (quiet) → 0.0, -4 dBFS (loud/compressed) → 1.0
-    const rmsScore = Math.max(0, Math.min(1, (rmsDb + 18) / 14));
-    // ZCR: map 0.01 (bass-heavy/dark) → 0.0, 0.11 (bright/energetic) → 1.0
-    const zcScore = Math.max(0, Math.min(1, (zcRate - 0.01) / 0.10));
-    // Weighted: ZCR is primary predictor, RMS is secondary
-    const energy = Math.round((zcScore * 0.70 + rmsScore * 0.30) * 1000) / 1000;
+    const mbFeats = extractMultiBandFeatures(energyData, 44100);
+    const energy = Math.round(Math.max(0, Math.min(1,
+      0.5838
+      + (mbFeats.highMidDb - 28.454) / 5.648 * 0.0107
+      + (mbFeats.highDb - 26.545) / 6.372 * 0.0209
+      + (mbFeats.midDb - 32.203) / 4.492 * 0.0141
+      + (mbFeats.zcRate - 0.064) / 0.029 * 0.0016
+    )) * 1000) / 1000;
 
     const energyProfile = computeEnergyProfile(channelData, 44100);
 

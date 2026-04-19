@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../lib/apiFetch'
 import { redirectToSpotifyLogin } from '../lib/spotifyExport'
-import { SpotifyIcon, RekordboxIcon, GroqIcon } from './Icons'
+import { SpotifyIcon, RekordboxIcon } from './Icons'
 
 type PathStatus = 'idle' | 'checking' | 'ok' | 'missing'
 
@@ -76,11 +76,13 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [rekordboxFolderStatus, setRekordboxFolderStatus] = useState<PathStatus>('idle')
   const [saving, setSaving] = useState(false)
 
-  // Shared state
-  const [groqKey, setGroqKey] = useState('')
-  const [hasGroqKey, setHasGroqKey] = useState(false)
-  const [savingGroq, setSavingGroq] = useState(false)
-  const [groqSaved, setGroqSaved] = useState(false)
+  // AI state
+  const [aiProvider, setAiProvider] = useState<string>('groq')
+  const [aiApiKey, setAiApiKey] = useState('')
+  const [aiBaseUrl, setAiBaseUrl] = useState('')
+  const [hasAiKey, setHasAiKey] = useState(false)
+  const [savingAi, setSavingAi] = useState(false)
+  const [aiSaved, setAiSaved] = useState(false)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -107,12 +109,13 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasGroqKey: boolean; hasSecret: boolean }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasAIKey: boolean; hasSecret: boolean; aiProvider?: string }) => {
         setMusicFolder(d.musicFolder ?? '')
         setRekordboxFolder(d.rekordboxFolder ?? '')
         setMusicFolderStatus('idle')
         setRekordboxFolderStatus('idle')
-        setHasGroqKey(d.hasGroqKey ?? false)
+        setHasAiKey(d.hasAIKey ?? false)
+        if (d.aiProvider) setAiProvider(d.aiProvider)
         setHasSpotifySecret(d.hasSecret ?? false)
       })
       .catch(() => {})
@@ -137,24 +140,26 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     }
   }
 
-  async function saveGroqKey() {
-    if (!groqKey.trim()) return
-    setSavingGroq(true)
-    setGroqSaved(false)
+  async function saveAiKey() {
+    if (!aiApiKey.trim()) return
+    setSavingAi(true)
+    setAiSaved(false)
     try {
+      const payload: Record<string, string> = { aiApiKey: aiApiKey.trim(), aiProvider }
+      if (aiProvider === 'custom' && aiBaseUrl.trim()) payload.aiBaseUrl = aiBaseUrl.trim()
       const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groqApiKey: groqKey.trim() }),
+        body: JSON.stringify(payload),
       })
       if (!r.ok) throw new Error('Save failed')
-      setGroqKey('')
-      setHasGroqKey(true)
-      setGroqSaved(true)
+      setAiApiKey('')
+      setHasAiKey(true)
+      setAiSaved(true)
     } catch {
-      setError('Failed to save Groq API key.')
+      setError('Failed to save AI API key.')
     } finally {
-      setSavingGroq(false)
+      setSavingAi(false)
     }
   }
 
@@ -246,37 +251,64 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         {/* ── AI (both platforms) ───────────────────────────────────── */}
         <div className={`space-y-4 ${isElectron ? 'pt-5 border-t border-[#1e1e2e]' : ''}`}>
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] flex items-center gap-1.5">
-            <GroqIcon size={13} className="opacity-70" />
-            AI
+            AI Engine
           </h3>
+          <div>
+            <label className="block text-xs text-[#64748b] mb-1.5">Provider</label>
+            <select
+              value={aiProvider}
+              onChange={e => { setAiProvider(e.target.value); setAiSaved(false) }}
+              className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] transition-colors cursor-pointer"
+            >
+              <option value="groq">Groq (free)</option>
+              <option value="openai">OpenAI (ChatGPT)</option>
+              <option value="openrouter">OpenRouter (Claude, GPT, Llama, ...)</option>
+              <option value="custom">Custom (OpenAI-compatible)</option>
+            </select>
+          </div>
           <p className="text-xs text-[#64748b] leading-relaxed">
-            Get a free API key at{' '}
-            <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-[#7c3aed] hover:underline">
-              console.groq.com
-            </a>
-            {' '}— no credit card required.
+            {aiProvider === 'groq' && <>Get a free API key at{' '}
+              <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-[#7c3aed] hover:underline">console.groq.com</a>
+              {' '} — no credit card required.</>}
+            {aiProvider === 'openai' && <>Get an API key at{' '}
+              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-[#7c3aed] hover:underline">platform.openai.com</a></>}
+            {aiProvider === 'openrouter' && <>Access Claude, GPT, Llama and more. Get a key at{' '}
+              <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-[#7c3aed] hover:underline">openrouter.ai</a></>}
+            {aiProvider === 'custom' && <>Enter the base URL and API key for any OpenAI-compatible endpoint.</>}
           </p>
+          {aiProvider === 'custom' && (
+            <div>
+              <label className="block text-xs text-[#64748b] mb-1.5">Base URL</label>
+              <input
+                type="text"
+                value={aiBaseUrl}
+                onChange={e => setAiBaseUrl(e.target.value)}
+                placeholder="https://your-endpoint.com/v1"
+                className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+              />
+            </div>
+          )}
           <div>
             <label className="block text-xs text-[#64748b] mb-1.5">
-              Groq API Key
-              {hasGroqKey && !groqKey && !groqSaved && <span className="ml-2 text-[#22c55e]">✓ saved</span>}
-              {groqSaved && <span className="ml-2 text-[#22c55e]">✓ saved</span>}
+              API Key
+              {hasAiKey && !aiApiKey && !aiSaved && <span className="ml-2 text-[#22c55e]">&#10003; saved</span>}
+              {aiSaved && <span className="ml-2 text-[#22c55e]">&#10003; saved</span>}
             </label>
             <div className="flex gap-2">
               <input
                 type="password"
-                value={groqKey}
-                onChange={e => { setGroqKey(e.target.value); setGroqSaved(false) }}
-                placeholder={hasGroqKey ? 'Enter new key to replace' : 'gsk_…'}
+                value={aiApiKey}
+                onChange={e => { setAiApiKey(e.target.value); setAiSaved(false) }}
+                placeholder={hasAiKey ? 'Enter new key to replace' : aiProvider === 'groq' ? 'gsk_...' : 'sk-...'}
                 className="flex-1 rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
-                aria-label="Groq API key"
+                aria-label="AI API key"
               />
               <button
-                onClick={saveGroqKey}
-                disabled={savingGroq || !groqKey.trim()}
+                onClick={saveAiKey}
+                disabled={savingAi || !aiApiKey.trim()}
                 className="px-3 py-2 text-sm font-medium rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] disabled:opacity-40 transition-colors whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
               >
-                {savingGroq ? 'Saving…' : 'Save key'}
+                {savingAi ? 'Saving...' : 'Save key'}
               </button>
             </div>
           </div>

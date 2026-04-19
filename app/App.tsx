@@ -155,7 +155,7 @@ function AppInner() {
   const [normalizingEnergy, setNormalizingEnergy] = useState(false);
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
-  const [hasGroqKey, setHasGroqKey] = useState(false);
+  const [hasAIKey, setHasAIKey] = useState(false);
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(
@@ -468,13 +468,13 @@ function AppInner() {
           r.json() as Promise<{
             musicFolder?: string;
             rekordboxFolder?: string;
-            hasGroqKey?: boolean;
+            hasAIKey?: boolean;
             hasSecret?: boolean;
           }>,
       )
       .then((d) => {
         if (d.musicFolder) setFolderPath((prev) => prev || d.musicFolder!);
-        if (d.hasGroqKey !== undefined) setHasGroqKey(d.hasGroqKey);
+        if (d.hasAIKey !== undefined) setHasAIKey(d.hasAIKey);
         if (d.hasSecret !== undefined) setHasSpotifyCredentials(d.hasSecret);
         setHasRekordboxFolder(
           !!(d.rekordboxFolder && d.rekordboxFolder.trim()),
@@ -788,7 +788,7 @@ function AppInner() {
               </div>
             )}
             <div className="relative">
-              {hasGroqKey && (
+              {hasAIKey && (
                 <button
                   onClick={() => setChatOpen((o) => !o)}
                   title="AI Set Planner"

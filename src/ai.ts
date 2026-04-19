@@ -51,27 +51,73 @@ class RateLimiter {
   }
 }
 
-let _client: OpenAI | null = null
-let _currentKey = ''
+import type { AIProvider } from './settings'
 
-export function getGroqClient(apiKey: string): OpenAI {
-  if (apiKey !== _currentKey || !_client) {
-    _client = new OpenAI({
-      apiKey,
-      baseURL: 'https://api.groq.com/openai/v1',
-    })
-    _currentKey = apiKey
+export interface AIConfig {
+  provider: AIProvider
+  apiKey: string
+  baseUrl?: string  // only for 'custom'
+}
+
+const PROVIDER_BASE_URLS: Record<string, string> = {
+  groq: 'https://api.groq.com/openai/v1',
+  openai: 'https://api.openai.com/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+}
+
+// Default models per provider
+const ENRICHMENT_MODELS: Record<string, string> = {
+  groq: 'llama-3.1-8b-instant',
+  openai: 'gpt-4o-mini',
+  openrouter: 'meta-llama/llama-3.1-8b-instruct:free',
+  custom: 'gpt-4o-mini',
+}
+
+const PLANNER_MODELS: Record<string, string> = {
+  groq: 'llama-3.3-70b-versatile',
+  openai: 'gpt-4o',
+  openrouter: 'meta-llama/llama-3.3-70b-instruct',
+  custom: 'gpt-4o',
+}
+
+export function getEnrichmentModel(provider: AIProvider): string {
+  return ENRICHMENT_MODELS[provider] ?? ENRICHMENT_MODELS.groq
+}
+
+export function getPlannerModel(provider: AIProvider): string {
+  return PLANNER_MODELS[provider] ?? PLANNER_MODELS.groq
+}
+
+let _client: OpenAI | null = null
+let _clientFingerprint = ''
+
+function getClient(config: AIConfig): OpenAI {
+  const baseURL = config.provider === 'custom'
+    ? (config.baseUrl || PROVIDER_BASE_URLS.openai)
+    : PROVIDER_BASE_URLS[config.provider]
+  const fingerprint = `${config.provider}:${config.apiKey}:${baseURL}`
+  if (fingerprint !== _clientFingerprint || !_client) {
+    _client = new OpenAI({ apiKey: config.apiKey, baseURL })
+    _clientFingerprint = fingerprint
   }
   return _client
 }
 
+/** @deprecated Use getClient(config) instead */
+export function getGroqClient(apiKey: string): OpenAI {
+  return getClient({ provider: 'groq', apiKey })
+}
+
 export async function enrichTrackBatch(
   tracks: Array<{ file: string; artist: string; title: string; bpm: number; key: string; energy: number; genres: string[] }>,
-  apiKey: string
+  apiKeyOrConfig: string | AIConfig
 ): Promise<Map<string, SemanticTags>> {
-  const client = getGroqClient(apiKey)
+  const config: AIConfig = typeof apiKeyOrConfig === 'string'
+    ? { provider: 'groq', apiKey: apiKeyOrConfig }
+    : apiKeyOrConfig
+  const client = getClient(config)
   const completion = await client.chat.completions.create({
-    model: 'llama-3.1-8b-instant',
+    model: getEnrichmentModel(config.provider),
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: ENRICHMENT_SYSTEM_PROMPT },
@@ -118,11 +164,14 @@ const ANALYZE_BATCH_SIZE = 20
 
 export async function analyzeTracksBatch(
   tracks: Array<{ file: string; artist: string; title: string }>,
-  apiKey: string
+  apiKeyOrConfig: string | AIConfig
 ): Promise<Map<string, { bpm: number; camelot: string; energy: number }>> {
-  const client = getGroqClient(apiKey)
+  const config: AIConfig = typeof apiKeyOrConfig === 'string'
+    ? { provider: 'groq', apiKey: apiKeyOrConfig }
+    : apiKeyOrConfig
+  const client = getClient(config)
   const completion = await client.chat.completions.create({
-    model: 'llama-3.1-8b-instant',
+    model: getEnrichmentModel(config.provider),
     response_format: { type: 'json_object' },
     messages: [
       {
@@ -167,7 +216,7 @@ Return ONLY the JSON object, no explanation.`,
 
 export async function analyzeTracksWithAI(
   tracks: Array<{ file: string; artist: string; title: string }>,
-  apiKey: string,
+  apiKeyOrConfig: string | AIConfig,
   onProgress?: (completed: number, total: number) => void
 ): Promise<Map<string, { bpm: number; camelot: string; energy: number }>> {
   const result = new Map<string, { bpm: number; camelot: string; energy: number }>()
@@ -177,7 +226,7 @@ export async function analyzeTracksWithAI(
     const batch = tracks.slice(i, i + ANALYZE_BATCH_SIZE)
     await limiter.wait()
     try {
-      const batchResult = await analyzeTracksBatch(batch, apiKey)
+      const batchResult = await analyzeTracksBatch(batch, apiKeyOrConfig)
       for (const [file, data] of batchResult) result.set(file, data)
     } catch { /* skip failed batch */ }
     completed += batch.length
@@ -227,11 +276,14 @@ export interface SetPlan {
 export async function planSet(
   prompt: string,
   context: { availableGenres: string[]; librarySize: number },
-  apiKey: string
+  apiKeyOrConfig: string | AIConfig
 ): Promise<SetPlan> {
-  const client = getGroqClient(apiKey)
+  const config: AIConfig = typeof apiKeyOrConfig === 'string'
+    ? { provider: 'groq', apiKey: apiKeyOrConfig }
+    : apiKeyOrConfig
+  const client = getClient(config)
   const completion = await client.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getPlannerModel(config.provider),
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: PLANNER_SYSTEM_PROMPT },
@@ -278,7 +330,7 @@ export async function planSet(
 
 export async function enrichTracks(
   resultsMap: Record<string, EnrichableTrack>,
-  apiKey: string,
+  apiKeyOrConfig: string | AIConfig,
   onProgress?: (completed: number, total: number) => void
 ): Promise<void> {
   const toEnrich = Object.entries(resultsMap).filter(([, song]) => !song.semanticTags)
@@ -301,7 +353,7 @@ export async function enrichTracks(
           energy: song.energy,
           genres: song.genres,
         })),
-        apiKey
+        apiKeyOrConfig
       )
       for (const [file] of batch) {
         const t = tags.get(file)

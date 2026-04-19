@@ -12,9 +12,21 @@ import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
 import { enrichTracks, analyzeTracksWithAI, planSet } from './ai.js'
-import type { SemanticTags } from './ai.js'
+import type { SemanticTags, AIConfig } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
+
+/** Build AIConfig from current settings, or null if no AI key is configured */
+function getAIConfig(): AIConfig | null {
+  const s = readSettings()
+  const apiKey = s.aiApiKey || s.groqApiKey
+  if (!apiKey) return null
+  return {
+    provider: s.aiProvider ?? 'groq',
+    apiKey,
+    baseUrl: s.aiBaseUrl,
+  }
+}
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
 const execFileAsync = promisify(execFile)
@@ -249,11 +261,11 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
     }
     writeEvent({ type: 'folder_done', folder: folderKey })
   }
-  const { groqApiKey } = readSettings()
-  if (groqApiKey) {
+  const aiConfig = getAIConfig()
+  if (aiConfig) {
     writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
     try {
-      await enrichTracks(resultsJson, groqApiKey, (completed, total) => {
+      await enrichTracks(resultsJson, aiConfig, (completed, total) => {
         writeEvent({ type: 'enrich_progress', completed, total })
       })
     } catch { /* enrichment is optional — don't fail the whole analysis */ }
@@ -309,11 +321,11 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
       resultsJson[key] = { filePath: track.filePath, file: track.filePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), ...(track.dateAdded != null ? { dateAdded: track.dateAdded } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
     } catch { /* skip */ }
   }
-  const { groqApiKey } = readSettings()
-  if (groqApiKey) {
+  const aiConfig = getAIConfig()
+  if (aiConfig) {
     writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
     try {
-      await enrichTracks(resultsJson, groqApiKey, (completed, total) => {
+      await enrichTracks(resultsJson, aiConfig, (completed, total) => {
         writeEvent({ type: 'enrich_progress', completed, total })
       })
     } catch { /* enrichment is optional — don't fail the whole analysis */ }
@@ -375,7 +387,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'GET') {
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', hasGroqKey: !!s.groqApiKey }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', hasAIKey: !!(s.aiApiKey || s.groqApiKey), aiProvider: s.aiProvider ?? (s.groqApiKey ? 'groq' : '') }))
       return
     }
     if (req.method === 'POST') {
@@ -385,7 +397,11 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (typeof body.spotifyClientSecret === 'string' && body.spotifyClientSecret.trim()) updates.spotifyClientSecret = body.spotifyClientSecret.trim()
       if (typeof body.musicFolder === 'string') updates.musicFolder = body.musicFolder.trim()
       if (typeof body.rekordboxFolder === 'string') updates.rekordboxFolder = body.rekordboxFolder.trim()
-      if (typeof body.groqApiKey === 'string' && body.groqApiKey.trim()) updates.groqApiKey = body.groqApiKey.trim()
+      if (typeof body.aiApiKey === 'string' && body.aiApiKey.trim()) updates.aiApiKey = body.aiApiKey.trim()
+      if (typeof body.aiProvider === 'string' && ['groq', 'openai', 'openrouter', 'custom'].includes(body.aiProvider)) updates.aiProvider = body.aiProvider as import('./settings.js').AIProvider
+      if (typeof body.aiBaseUrl === 'string') updates.aiBaseUrl = body.aiBaseUrl.trim()
+      // Legacy support
+      if (typeof body.groqApiKey === 'string' && body.groqApiKey.trim()) { updates.aiApiKey = body.groqApiKey.trim(); updates.aiProvider = 'groq' }
       writeSettings(updates)
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))
@@ -528,10 +544,10 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         }
         resultsJson[track.path] = { filePath: track.path, file: path.basename(track.path), artist: track.artist || 'Unknown artist', title: track.title, duration: track.duration || undefined, bpm: track.bpm, key: finalKey.keyName, camelot: finalKey.camelot, energy: 0.5, genres, ...(localGenres.length === 0 && genres.length > 0 ? { genresFromSpotify: true } : {}) }
       }
-      const { groqApiKey } = readSettings()
-      if (groqApiKey) {
+      const aiCfg = getAIConfig()
+      if (aiCfg) {
         writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
-        try { await enrichTracks(resultsJson, groqApiKey, (c, t) => { writeEvent({ type: 'enrich_progress', completed: c, total: t }) }) } catch { /* optional */ }
+        try { await enrichTracks(resultsJson, aiCfg, (c, t) => { writeEvent({ type: 'enrich_progress', completed: c, total: t }) }) } catch { /* optional */ }
       }
       fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
       const songs = Object.values(resultsJson)
@@ -620,14 +636,14 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         } catch { /* skip unresolvable tracks */ }
       }
       // AI pass: estimate BPM/key/energy for tracks missing MIK prefix, then semantic-tag all tracks
-      const { groqApiKey } = readSettings()
-      if (groqApiKey) {
+      const aiCfg2 = getAIConfig()
+      if (aiCfg2) {
         // Pass 1: fill in BPM/key/energy for tracks without MIK prefix
         const needsAI = Object.entries(resultsJson).filter(([, s]) => s.bpm === 0 && s.camelot === '')
         if (needsAI.length > 0) {
           const aiInput = needsAI.map(([cacheKey, s]) => ({ file: cacheKey, artist: s.artist, title: s.title }))
           try {
-            const aiResults = await analyzeTracksWithAI(aiInput, groqApiKey)
+            const aiResults = await analyzeTracksWithAI(aiInput, aiCfg2)
             for (const [cacheKey] of needsAI) {
               const est = aiResults.get(cacheKey)
               if (!est) continue
@@ -644,7 +660,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         }
         // Pass 2: semantic tagging (vibe/mood/venue/time) for all tracks — same as desktop pipeline
         try {
-          await enrichTracks(resultsJson, groqApiKey, (completed, total) => {
+          await enrichTracks(resultsJson, aiCfg2, (completed, total) => {
             writeEvent({ type: 'progress', completed: tracks.length + completed, total: tracks.length + total })
           })
         } catch { /* skip enrichment on error */ }
@@ -715,10 +731,10 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(finalFeatures.bpm, finalFeatures.energy, genres, finalFeatures.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(finalFeatures.year != null ? { year: finalFeatures.year } : {}), ...(finalFeatures.comment ? { comment: finalFeatures.comment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}) }
         } catch { /* skip */ }
       }
-      const { groqApiKey } = readSettings()
-      if (groqApiKey) {
+      const aiCfg = getAIConfig()
+      if (aiCfg) {
         writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
-        try { await enrichTracks(resultsJson, groqApiKey, (c, t) => { writeEvent({ type: 'enrich_progress', completed: c, total: t }) }) } catch { /* optional */ }
+        try { await enrichTracks(resultsJson, aiCfg, (c, t) => { writeEvent({ type: 'enrich_progress', completed: c, total: t }) }) } catch { /* optional */ }
       }
       fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
       const songs = Object.values(resultsJson)
@@ -1104,8 +1120,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     res.setHeader('Cache-Control', 'no-cache')
     const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
     try {
-      const { groqApiKey } = readSettings()
-      if (!groqApiKey) { writeEvent({ type: 'error', message: 'AI features require a Groq API key. Add it in Settings.' }); res.end(); return }
+      const aiCfgEnrich = getAIConfig()
+      if (!aiCfgEnrich) { writeEvent({ type: 'error', message: 'AI features require an API key. Add it in Settings.' }); res.end(); return }
       const body = await readJsonBody(req) as Record<string, unknown>
       const resultsPath = typeof body.resultsPath === 'string' && body.resultsPath.trim()
         ? body.resultsPath.trim()
@@ -1114,7 +1130,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const resultsJson = readExistingResultsFile(resultsPath.replace(/\/results\.json$/, ''))
       const toEnrich = Object.values(resultsJson).filter(s => !s.semanticTags).length
       writeEvent({ type: 'start', total: toEnrich })
-      await enrichTracks(resultsJson, groqApiKey, (completed, total) => {
+      await enrichTracks(resultsJson, aiCfgEnrich, (completed, total) => {
         writeEvent({ type: 'progress', completed, total })
       })
       fs.writeFileSync(resultsPath, JSON.stringify(resultsJson, null, 2), 'utf-8')
@@ -1127,10 +1143,10 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method !== 'POST') { next(); return }
     res.setHeader('Content-Type', 'application/json')
     try {
-      const { groqApiKey } = readSettings()
-      if (!groqApiKey) {
+      const aiCfgPlan = getAIConfig()
+      if (!aiCfgPlan) {
         res.statusCode = 400
-        res.end(JSON.stringify({ ok: false, error: 'AI features require a Groq API key. Add it in Settings.' }))
+        res.end(JSON.stringify({ ok: false, error: 'AI features require an API key. Add it in Settings.' }))
         return
       }
       const body = await readJsonBody(req) as Record<string, unknown>
@@ -1138,7 +1154,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (!prompt) { res.statusCode = 400; res.end(JSON.stringify({ ok: false, error: 'prompt is required' })); return }
       const availableGenres = Array.isArray(body.availableGenres) ? body.availableGenres as string[] : []
       const librarySize = typeof body.librarySize === 'number' ? body.librarySize : 0
-      const plan = await planSet(prompt, { availableGenres, librarySize }, groqApiKey)
+      const plan = await planSet(prompt, { availableGenres, librarySize }, aiCfgPlan)
       res.end(JSON.stringify({ ok: true, plan }))
     } catch (err) {
       res.statusCode = 500

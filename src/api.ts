@@ -565,7 +565,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
     try {
       const { spotifyClientId, spotifyClientSecret } = readSettings()
-      if (!spotifyClientId || !spotifyClientSecret) { writeEvent({ type: 'error', message: 'Spotify credentials not configured.' }); res.end(); return }
+      if (!spotifyClientId || !spotifyClientSecret) { writeEvent({ type: 'error', message: 'Spotify is not connected. Connect Spotify in Settings to import playlists.' }); res.end(); return }
       const body = await readJsonBody(req) as { tracks?: unknown; label?: unknown }
       interface M3UTrack { artist: string; title: string }
       const tracks = Array.isArray(body.tracks)
@@ -742,7 +742,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method !== 'POST') { next(); return }
     const body = await readJsonBody(req) as { content?: string; filename?: string }
     const { rekordboxFolder } = readSettings()
-    if (!rekordboxFolder) { res.statusCode = 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'rekordboxFolder not set in settings.' })); return }
+    if (!rekordboxFolder) { res.statusCode = 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Set a Rekordbox XML folder in Settings first.' })); return }
     const filename = (body.filename ?? 'djfriend-set.xml').replace(/[/\\?%*:|"<>]/g, '-')
     const outPath = path.join(rekordboxFolder, filename)
     fs.mkdirSync(rekordboxFolder, { recursive: true })
@@ -966,7 +966,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     res.setHeader('Content-Type', 'application/json')
     try {
       const { spotifyClientId, spotifyClientSecret } = readSettings()
-      if (!spotifyClientId || !spotifyClientSecret) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Spotify credentials not configured' })); return }
+      if (!spotifyClientId || !spotifyClientSecret) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Spotify is not connected. Connect Spotify in Settings.' })); return }
       const body = await readJsonBody(req) as Record<string, unknown>
       const spotifyId = typeof body.spotifyId === 'string' ? body.spotifyId.trim() : null
       const artist   = typeof body.artist   === 'string' ? body.artist.trim()   : ''
@@ -1103,7 +1103,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
     try {
       const { groqApiKey } = readSettings()
-      if (!groqApiKey) { writeEvent({ type: 'error', message: 'Groq API key not configured. Open Settings to add it.' }); res.end(); return }
+      if (!groqApiKey) { writeEvent({ type: 'error', message: 'AI features require a Groq API key. Add it in Settings.' }); res.end(); return }
       const body = await readJsonBody(req) as Record<string, unknown>
       const resultsPath = typeof body.resultsPath === 'string' && body.resultsPath.trim()
         ? body.resultsPath.trim()
@@ -1128,7 +1128,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const { groqApiKey } = readSettings()
       if (!groqApiKey) {
         res.statusCode = 400
-        res.end(JSON.stringify({ ok: false, error: 'Groq API key not configured. Open Settings to add it.' }))
+        res.end(JSON.stringify({ ok: false, error: 'AI features require a Groq API key. Add it in Settings.' }))
         return
       }
       const body = await readJsonBody(req) as Record<string, unknown>

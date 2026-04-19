@@ -201,7 +201,7 @@ async function parseUploadedFolder(req: NodeJS.ReadableStream & { headers: Recor
 
 async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (e: Record<string, unknown>) => void) {
   const { spotifyClientId: SPOTIFY_CLIENT_ID, spotifyClientSecret: SPOTIFY_CLIENT_SECRET } = readSettings()
-  if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) throw new Error('Spotify credentials not configured. Open Settings to add your Client ID and Secret.')
+  const hasSpotify = !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET)
   const audioFolders = collectAudioDirs(rootPath)
   const folderTracks = new Map<string, Awaited<ReturnType<typeof scanFolder>>>()
   let total = 0
@@ -211,7 +211,10 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
   }
   if (total === 0) throw new Error('No audio files found in selected folder.')
   writeEvent({ type: 'start', total })
-  const token = await authenticate(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
+  let token: string | null = null
+  if (hasSpotify) {
+    try { token = await authenticate(SPOTIFY_CLIENT_ID!, SPOTIFY_CLIENT_SECRET!) } catch { /* Spotify auth failed — continue without it */ }
+  }
   const existing = readExistingResults(rootPath)
   let completed = 0
   const resultsJson: Record<string, AppSong> = { ...existing }
@@ -229,13 +232,19 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
         resultsJson[relativeFilePath] = cached; continue
       }
       try {
-        const match = await searchTrack(track.artist, track.title, token)
-        const [features, genres] = await Promise.all([analyzeAudio(track.filePath), track.localGenres.length === 0 && match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([])])
+        const match = token ? await searchTrack(track.artist, track.title, token) : null
+        const [localFeatures, genres] = await Promise.all([analyzeAudio(track.filePath), track.localGenres.length === 0 && match?.artistId && token ? getArtistGenres(match.artistId, token) : Promise.resolve([])])
+        let features = localFeatures
+        // Fallback: if local audio decode failed (e.g. native module issue on Windows), use Spotify audio features
+        if (!features && match?.spotifyId && token) {
+          const sf = await getAudioFeatures(match.spotifyId, token)
+          if (sf) features = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
+        }
         if (!features) continue
         const keyInfo = toCamelot(features.pitchClass, features.mode)
         if (!keyInfo) continue
         const finalGenres = track.localGenres.length > 0 ? track.localGenres : genres
-        resultsJson[relativeFilePath] = { filePath: relativeFilePath, file: relativeFilePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, finalGenres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres: finalGenres, ...(track.localGenres.length === 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
+        resultsJson[relativeFilePath] = { filePath: relativeFilePath, file: relativeFilePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, finalGenres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres: finalGenres, ...(track.localGenres.length === 0 && genres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
       } catch { /* skip */ }
     }
     writeEvent({ type: 'folder_done', folder: folderKey })
@@ -257,11 +266,14 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
 
 async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Record<string, unknown>) => void) {
   const { spotifyClientId: SPOTIFY_CLIENT_ID, spotifyClientSecret: SPOTIFY_CLIENT_SECRET } = readSettings()
-  if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) throw new Error('Spotify credentials not configured. Open Settings to add your Client ID and Secret.')
+  const hasSpotify = !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET)
   const tracks = await listAppleMusicTracks(playlistName)
   if (tracks.length === 0) throw new Error('No Apple Music local file tracks were found.')
   writeEvent({ type: 'start', total: tracks.length })
-  const token = await authenticate(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
+  let token: string | null = null
+  if (hasSpotify) {
+    try { token = await authenticate(SPOTIFY_CLIENT_ID!, SPOTIFY_CLIENT_SECRET!) } catch { /* continue without Spotify */ }
+  }
   const existing = readExistingResultsFile(APPLE_RESULTS_PATH)
   const resultsJson: Record<string, AppSong> = { ...existing }
   let completed = 0
@@ -280,13 +292,13 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
     try {
       let localGenres: string[] = []
       try { const meta = await mm.parseFile(track.filePath, { duration: false }); localGenres = meta.common.genre ?? [] } catch { /* ignore */ }
-      const match = await searchTrack(track.artist, track.title, token)
-      const [localFeatures, spotifyGenres] = await Promise.all([analyzeAudio(track.filePath), localGenres.length === 0 && match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([])])
+      const match = token ? await searchTrack(track.artist, track.title, token) : null
+      const [localFeatures, spotifyGenres] = await Promise.all([analyzeAudio(track.filePath), localGenres.length === 0 && match?.artistId && token ? getArtistGenres(match.artistId, token) : Promise.resolve([])])
       const genres = localGenres.length > 0 ? localGenres : spotifyGenres
 
       let features = localFeatures
       // Fallback: if local audio decode failed (e.g. FLAC), use Spotify audio features
-      if (!features && match?.spotifyId) {
+      if (!features && match?.spotifyId && token) {
         const sf = await getAudioFeatures(match.spotifyId, token)
         if (sf) features = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
       }

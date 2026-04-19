@@ -38,10 +38,15 @@ async function startServer() {
 
 ipcMain.handle('select-folder', async () => {
   if (!mainWindow) return null
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory', 'createDirectory'],
-  })
-  return result.canceled ? null : result.filePaths[0] ?? null
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory'],
+    })
+    return result.canceled ? null : result.filePaths[0] ?? null
+  } catch (err) {
+    console.error('select-folder dialog error:', err)
+    return null
+  }
 })
 
 function createWindow() {
@@ -52,7 +57,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'DJFriend',
-    titleBarStyle: 'hiddenInset',
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

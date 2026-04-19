@@ -38,7 +38,7 @@ npm run build
 echo "▶  Linting…"
 LINT_OUTPUT=$(npm run lint 2>&1)
 # Allow known pre-existing React Compiler warnings (7 errors from strict mode)
-LINT_ERRORS=$(echo "$LINT_OUTPUT" | grep -oP '(\d+) error' | head -1 | grep -oP '\d+' || echo "0")
+LINT_ERRORS=$(echo "$LINT_OUTPUT" | grep -Eo '[0-9]+ error' | head -1 | grep -Eo '[0-9]+' || echo "0")
 if [[ "$LINT_ERRORS" -gt 7 ]]; then
   echo "$LINT_OUTPUT"
   echo "❌  New lint errors found ($LINT_ERRORS total, 7 pre-existing). Fix before publishing."

@@ -1099,9 +1099,9 @@ function AppInner() {
                     {history.length}
                   </span>
                 )}
-                {tab === "Import" && importHistory.length > 0 && (
+                {tab === "Import" && importHistory.filter(e => !e.playlistId.startsWith("local-")).length > 0 && (
                   <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                    {importHistory.length}
+                    {importHistory.filter(e => !e.playlistId.startsWith("local-")).length}
                   </span>
                 )}
               </span>

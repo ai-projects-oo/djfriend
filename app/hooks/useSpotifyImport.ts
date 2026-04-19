@@ -26,7 +26,9 @@ export function useSpotifyImport({ library }: UseSpotifyImportParams) { // setHi
   const [importHistory, setImportHistory] = useState<ImportEntry[]>(() => {
     try {
       const raw = localStorage.getItem("djfriend-imports");
-      return raw ? (JSON.parse(raw) as ImportEntry[]) : [];
+      const all = raw ? (JSON.parse(raw) as ImportEntry[]) : [];
+      // Filter out old Apple Music local- entries (moved to applePlaylistFiles)
+      return all.filter(e => !e.playlistId.startsWith("local-"));
     } catch {
       return [];
     }

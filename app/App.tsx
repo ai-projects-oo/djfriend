@@ -3190,7 +3190,14 @@ function AppInner() {
           setLibrary([]);
           setGeneratedSet([]);
         }}
-        onDatabaseCleared={() => { setAnalyzedApplePlaylists(new Set()); setApplePlaylistFiles({}); }}
+        onDatabaseCleared={() => {
+          setAnalyzedApplePlaylists(new Set());
+          setApplePlaylistFiles({});
+          setLibrary([]);
+          setGeneratedSet([]);
+          setImportHistory([]);
+          setPlaylistFilterId(null);
+        }}
       />
 
       {bpmDoctorOpen && (

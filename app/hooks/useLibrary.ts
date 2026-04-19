@@ -215,7 +215,9 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
   }, []);
 
   // Keep ref up to date so drain loop always calls the latest closure
-  runAppleMusicInternalRef.current = runAppleMusicInternal;
+  useEffect(() => {
+    runAppleMusicInternalRef.current = runAppleMusicInternal;
+  }, [runAppleMusicInternal]);
 
   // Public: enqueue a playlist for analysis
   const runAppleMusicAnalysis = useCallback((playlistName: string) => {

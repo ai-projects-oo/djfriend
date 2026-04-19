@@ -105,13 +105,13 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
   useEffect(() => {
     if (!open) return
-    setMusicFolderStatus('idle')
-    setRekordboxFolderStatus('idle')
     apiFetch('/api/settings')
       .then(r => r.json())
       .then((d: { musicFolder: string; rekordboxFolder: string; hasGroqKey: boolean; hasSecret: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
         setRekordboxFolder(d.rekordboxFolder ?? '')
+        setMusicFolderStatus('idle')
+        setRekordboxFolderStatus('idle')
         setHasGroqKey(d.hasGroqKey ?? false)
         setHasSpotifySecret(d.hasSecret ?? false)
       })

@@ -32,6 +32,8 @@ import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
 import { camelotColor } from "./lib/camelotColors";
 import { findCrateGaps, setNeedsCrateSuggestions } from "./lib/crateBuilder";
 
+const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
+
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [requiresPassword, setRequiresPassword] = useState(false);
@@ -364,7 +366,8 @@ function AppInner() {
     return songs.reduce((s, t) => s + (t.duration ?? 210), 0) / 60;
   }, [playlistFilterId, importHistory, library]);
 
-  const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
+  // Moved outside to avoid lint dep warning — it's a constant
+
   // The only pill enabled in playlist mode: smallest duration that fits the playlist
   const minViablePill = useMemo<number | null>(() => {
     if (!playlistFilterId || playlistTotalMinutes <= 0) return null;
@@ -404,9 +407,11 @@ function AppInner() {
   } = useSetGenerator(library, setLibrary, playlistFilterFiles, history);
 
   // Wire setGeneratedSet into the bridge ref so useLibrary can reset the set on new analysis
-  onNewAnalysisRef.current = () => {
-    setGeneratedSet([]);
-  };
+  useEffect(() => {
+    onNewAnalysisRef.current = () => {
+      setGeneratedSet([]);
+    };
+  }, [setGeneratedSet]);
 
   // Auto-select the min viable duration pill when playlist mode activates or playlist changes
   useEffect(() => {
@@ -596,7 +601,7 @@ function AppInner() {
         });
       }
     })();
-  }, []);
+  }, [setImportUrl, setLoadingSpotifyPlaylists, setPendingImportUrl, setSpotifyExportStatus, setSpotifyPlaylistPicker]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">

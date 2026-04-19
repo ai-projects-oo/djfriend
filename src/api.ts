@@ -434,15 +434,37 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Analysis failed.' }); res.end() }
   })
 
-  const RB_KEY_MAP: Record<string, { pitchClass: number; mode: number }> = {
-    Cmaj:{pitchClass:0,mode:1}, Dbmaj:{pitchClass:1,mode:1}, Dmaj:{pitchClass:2,mode:1}, Ebmaj:{pitchClass:3,mode:1},
-    Emaj:{pitchClass:4,mode:1}, Fmaj:{pitchClass:5,mode:1}, Gbmaj:{pitchClass:6,mode:1}, Gmaj:{pitchClass:7,mode:1},
-    Abmaj:{pitchClass:8,mode:1}, Amaj:{pitchClass:9,mode:1}, Bbmaj:{pitchClass:10,mode:1}, Bmaj:{pitchClass:11,mode:1},
-    'C#maj':{pitchClass:1,mode:1},'D#maj':{pitchClass:3,mode:1},'F#maj':{pitchClass:6,mode:1},'G#maj':{pitchClass:8,mode:1},'A#maj':{pitchClass:10,mode:1},
-    Cmin:{pitchClass:0,mode:0}, Dbmin:{pitchClass:1,mode:0}, Dmin:{pitchClass:2,mode:0}, Ebmin:{pitchClass:3,mode:0},
-    Emin:{pitchClass:4,mode:0}, Fmin:{pitchClass:5,mode:0}, Gbmin:{pitchClass:6,mode:0}, Gmin:{pitchClass:7,mode:0},
-    Abmin:{pitchClass:8,mode:0}, Amin:{pitchClass:9,mode:0}, Bbmin:{pitchClass:10,mode:0}, Bmin:{pitchClass:11,mode:0},
-    'C#min':{pitchClass:1,mode:0},'D#min':{pitchClass:3,mode:0},'F#min':{pitchClass:6,mode:0},'G#min':{pitchClass:8,mode:0},'A#min':{pitchClass:10,mode:0},
+  // Rekordbox exports tonality in multiple formats depending on version/settings:
+  //   "Cmaj"/"Cmin" (compact), "C"/"Cm" (short), "C Major"/"C Minor" (long), Camelot "8B"/"5A"
+  // This map handles all variants so imports don't silently skip tracks.
+  const RB_KEY_MAP: Record<string, { pitchClass: number; mode: number }> = {}
+  const _NOTES = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B']
+  const _NOTES_ALT: Record<string, string> = { 'Db':'C#','D#':'Eb','Gb':'F#','G#':'Ab','A#':'Bb' }
+  const _CAMELOT_MAJ = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B']
+  const _CAMELOT_MIN = ['5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A']
+  for (let i = 0; i < 12; i++) {
+    const n = _NOTES[i]
+    // Major: "Cmaj", "C", "C Major"
+    RB_KEY_MAP[`${n}maj`] = { pitchClass: i, mode: 1 }
+    RB_KEY_MAP[n] = { pitchClass: i, mode: 1 }
+    RB_KEY_MAP[`${n} Major`] = { pitchClass: i, mode: 1 }
+    // Minor: "Cmin", "Cm", "C Minor"
+    RB_KEY_MAP[`${n}min`] = { pitchClass: i, mode: 0 }
+    RB_KEY_MAP[`${n}m`] = { pitchClass: i, mode: 0 }
+    RB_KEY_MAP[`${n} Minor`] = { pitchClass: i, mode: 0 }
+    // Camelot: "8B" (major), "5A" (minor)
+    RB_KEY_MAP[_CAMELOT_MAJ[i]] = { pitchClass: i, mode: 1 }
+    RB_KEY_MAP[_CAMELOT_MIN[i]] = { pitchClass: i, mode: 0 }
+  }
+  // Enharmonic aliases: Db/D#/Gb/G#/A# → canonical pitch class
+  for (const [alt, canon] of Object.entries(_NOTES_ALT)) {
+    const pc = _NOTES.indexOf(canon)
+    RB_KEY_MAP[`${alt}maj`] = { pitchClass: pc, mode: 1 }
+    RB_KEY_MAP[alt] = { pitchClass: pc, mode: 1 }
+    RB_KEY_MAP[`${alt} Major`] = { pitchClass: pc, mode: 1 }
+    RB_KEY_MAP[`${alt}min`] = { pitchClass: pc, mode: 0 }
+    RB_KEY_MAP[`${alt}m`] = { pitchClass: pc, mode: 0 }
+    RB_KEY_MAP[`${alt} Minor`] = { pitchClass: pc, mode: 0 }
   }
 
   middlewares.use('/api/import-rekordbox', async (req, res, next) => {
@@ -475,8 +497,14 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         writeEvent({ type: 'progress', completed, total: rbTracks.length, folder: 'Rekordbox', file: path.basename(track.path) })
         const cached = existing[track.path]
         if (cached) { resultsJson[track.path] = cached; continue }
-        const keyInfo_rb = RB_KEY_MAP[track.tonality] ? toCamelot(RB_KEY_MAP[track.tonality].pitchClass, RB_KEY_MAP[track.tonality].mode) : null
-        if (!keyInfo_rb) continue
+        const tonality = (track.tonality || '').trim()
+        const keyEntry = RB_KEY_MAP[tonality] || RB_KEY_MAP[tonality.replace(/\s+/g, '')]
+        const keyInfo_rb = keyEntry ? toCamelot(keyEntry.pitchClass, keyEntry.mode) : null
+        if (!keyInfo_rb) {
+          if (tonality) console.warn(`  Rekordbox import: unknown tonality "${tonality}" for "${track.title}" — using fallback key`)
+          // Still import the track with a fallback key (C Major / 8B) so it's not silently dropped
+        }
+        const finalKey = keyInfo_rb ?? { keyName: 'C Major', camelot: '8B' }
         let genres: string[] = []
         let localGenres: string[] = []
         try { const meta = await mm.parseFile(track.path, { duration: false }); localGenres = meta.common.genre ?? [] } catch { /* ignore */ }
@@ -484,7 +512,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         else if (needsSpotify && token) {
           try { const match = await searchTrack(track.artist, track.title, token); if (match?.artistId) genres = await getArtistGenres(match.artistId, token) } catch { /* ignore */ }
         }
-        resultsJson[track.path] = { filePath: track.path, file: path.basename(track.path), artist: track.artist || 'Unknown artist', title: track.title, duration: track.duration || undefined, bpm: track.bpm, key: keyInfo_rb.keyName, camelot: keyInfo_rb.camelot, energy: 0.5, genres, ...(localGenres.length === 0 && genres.length > 0 ? { genresFromSpotify: true } : {}) }
+        resultsJson[track.path] = { filePath: track.path, file: path.basename(track.path), artist: track.artist || 'Unknown artist', title: track.title, duration: track.duration || undefined, bpm: track.bpm, key: finalKey.keyName, camelot: finalKey.camelot, energy: 0.5, genres, ...(localGenres.length === 0 && genres.length > 0 ? { genresFromSpotify: true } : {}) }
       }
       const { groqApiKey } = readSettings()
       if (groqApiKey) {

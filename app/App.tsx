@@ -1018,17 +1018,20 @@ function AppInner() {
                 const tracks = trackEls.flatMap((el) => {
                   const loc = el.getAttribute("Location") ?? "";
                   // file://localhost/path/to/file.mp3 → /path/to/file.mp3
-                  const filePath = decodeURIComponent(
+                  // Windows: file://localhost/C:/Users/... → C:/Users/...
+                  let filePath = decodeURIComponent(
                     loc
                       .replace(/^file:\/\/localhost/, "")
                       .replace(/^file:\/\//, ""),
                   );
+                  // On Windows, strip leading "/" before drive letter (e.g. "/C:/..." → "C:/...")
+                  if (/^\/[A-Za-z]:/.test(filePath)) filePath = filePath.slice(1);
                   const bpm = parseFloat(el.getAttribute("AverageBpm") ?? "0");
                   const duration = parseFloat(
                     el.getAttribute("TotalTime") ?? "0",
                   );
                   const tonality = el.getAttribute("Tonality") ?? "";
-                  if (!filePath || !tonality || bpm <= 0) return [];
+                  if (!filePath || bpm <= 0) return [];
                   return [
                     {
                       path: filePath,

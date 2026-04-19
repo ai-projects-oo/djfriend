@@ -348,7 +348,9 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           )}
         </div>
 
-        {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+        {error && <p className="mt-3 text-xs text-red-400">{error.split(/(obo_odedr@hotmail\.com)/).map((part, i) =>
+          part === 'obo_odedr@hotmail.com' ? <a key={i} href="mailto:obo_odedr@hotmail.com" className="text-[#a78bfa] hover:underline">{part}</a> : part
+        )}</p>}
 
         {/* Save button — desktop only (folders) */}
         {isElectron && (

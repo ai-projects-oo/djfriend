@@ -373,7 +373,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'GET') {
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', hasGroqKey: !!s.groqApiKey }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', hasGroqKey: !!s.groqApiKey }))
       return
     }
     if (req.method === 'POST') {
@@ -663,7 +663,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
     try {
       const { spotifyClientId: SPOTIFY_CLIENT_ID, spotifyClientSecret: SPOTIFY_CLIENT_SECRET } = readSettings()
-      if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) { writeEvent({ type: 'error', message: 'Spotify credentials not configured.' }); res.end(); return }
+      const hasSpotify = !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET)
       const body = await readJsonBody(req) as { paths?: unknown; label?: unknown }
       const rawPaths = Array.isArray(body.paths) ? (body.paths as unknown[]).filter((p): p is string => typeof p === 'string' && p.trim().length > 0) : []
       if (rawPaths.length === 0) { writeEvent({ type: 'error', message: 'No valid file paths provided.' }); res.end(); return }
@@ -671,7 +671,10 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const validPaths = rawPaths.filter(p => AUDIO_EXTENSIONS.has(path.extname(p).toLowerCase()) && fs.existsSync(p))
       if (validPaths.length === 0) { writeEvent({ type: 'error', message: 'No audio files found at the provided paths.' }); res.end(); return }
       writeEvent({ type: 'start', total: validPaths.length })
-      const token = await authenticate(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
+      let token: string | null = null
+      if (hasSpotify) {
+        try { token = await authenticate(SPOTIFY_CLIENT_ID!, SPOTIFY_CLIENT_SECRET!) } catch { /* continue without Spotify */ }
+      }
       const existing = readExistingResultsFile(APPLE_RESULTS_PATH)
       const resultsJson: Record<string, AppSong> = { ...existing }
       let completed = 0
@@ -693,16 +696,21 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
             if (meta.common.title) localTitle = meta.common.title
             if (meta.format.duration != null) localDuration = meta.format.duration
           } catch { /* ignore */ }
-          const match = await searchTrack(localArtist, localTitle, token)
+          const match = token ? await searchTrack(localArtist, localTitle, token) : null
           const [features, spotifyGenres] = await Promise.all([
             analyzeAudio(filePath),
-            localGenres.length === 0 && match?.artistId ? getArtistGenres(match.artistId, token) : Promise.resolve([])
+            localGenres.length === 0 && match?.artistId && token ? getArtistGenres(match.artistId, token) : Promise.resolve([])
           ])
-          if (!features) continue
-          const keyInfo = toCamelot(features.pitchClass, features.mode)
+          let finalFeatures = features
+          if (!finalFeatures && match?.spotifyId && token) {
+            const sf = await getAudioFeatures(match.spotifyId, token)
+            if (sf) finalFeatures = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
+          }
+          if (!finalFeatures) continue
+          const keyInfo = toCamelot(finalFeatures.pitchClass, finalFeatures.mode)
           if (!keyInfo) continue
           const genres = localGenres.length > 0 ? localGenres : spotifyGenres
-          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
+          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(finalFeatures.bpm, finalFeatures.energy, genres, finalFeatures.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(finalFeatures.year != null ? { year: finalFeatures.year } : {}), ...(finalFeatures.comment ? { comment: finalFeatures.comment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}) }
         } catch { /* skip */ }
       }
       const { groqApiKey } = readSettings()

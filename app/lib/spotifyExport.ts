@@ -70,7 +70,7 @@ async function fetchClientId(): Promise<string> {
   const res = await apiFetch('/api/settings');
   if (!res.ok) throw new Error('Could not read settings.');
   const data = await res.json() as { spotifyClientId: string };
-  if (!data.spotifyClientId) throw new Error('Spotify Client ID is not configured. Open Settings to add it.');
+  if (!data.spotifyClientId) throw new Error('Spotify integration is not available. Contact support for access.');
   return data.spotifyClientId;
 }
 

@@ -47,49 +47,6 @@ export function useSpotifyImport({ library }: UseSpotifyImportParams) { // setHi
     localStorage.setItem("djfriend-imports", JSON.stringify(importHistory));
   }, [importHistory]);
 
-  // Auto-run import after OAuth redirect, once library is ready
-  useEffect(() => {
-    if (!pendingImportUrl) return;
-    if (library.length === 0) return; // wait for library to load
-    const url = pendingImportUrl;
-    setPendingImportUrl(null);
-    void runImport(url, library);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingImportUrl, library]);
-
-  // Re-match all imports whenever the library changes (e.g. after analysis)
-  useEffect(() => {
-    if (library.length === 0) return;
-    setImportHistory(prev => prev.map(entry => ({
-      ...entry,
-      tracks: entry.tracks.map(t => {
-        if (t.unavailable) return { ...t, inLibrary: false, matchConfidence: undefined };
-        if (t.manualMatchFile) {
-          const found = library.some(s => s.file === t.manualMatchFile);
-          return { ...t, inLibrary: found, matchConfidence: found ? 'exact' as const : undefined };
-        }
-        const confidence = matchInLibrary(t.spotifyId, t.title, t.artist, library);
-        return { ...t, inLibrary: confidence !== false, matchConfidence: confidence || undefined };
-      }),
-    })));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [library]);
-
-  // Click-outside for storeLinkRef
-  useEffect(() => {
-    if (!openStoreLinkKey) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        storeLinkRef.current &&
-        !storeLinkRef.current.contains(e.target as Node)
-      ) {
-        setOpenStoreLinkKey(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [openStoreLinkKey]);
-
   const runImport = useCallback(async (url: string, lib: Song[]) => {
     const playlistId = parsePlaylistId(url);
     if (!playlistId) {
@@ -139,6 +96,55 @@ export function useSpotifyImport({ library }: UseSpotifyImportParams) { // setHi
       });
     }
   }, []);
+
+  // Auto-run import after OAuth redirect, once library is ready
+  const runImportRef = useRef(runImport);
+  useEffect(() => { runImportRef.current = runImport; }, [runImport]);
+  useEffect(() => {
+    if (!pendingImportUrl) return;
+    if (library.length === 0) return;
+    const url = pendingImportUrl;
+    // Defer setState to avoid synchronous cascading render inside effect
+    queueMicrotask(() => setPendingImportUrl(null));
+    void runImportRef.current(url, library);
+  }, [pendingImportUrl, library]);
+
+  // Re-match all imports whenever the library changes (e.g. after analysis)
+  const libraryRef = useRef(library);
+  useEffect(() => { libraryRef.current = library; }, [library]);
+  useEffect(() => {
+    if (library.length === 0) return;
+    // Defer setState to avoid synchronous cascading render inside effect
+    queueMicrotask(() => {
+      setImportHistory(prev => prev.map(entry => ({
+        ...entry,
+        tracks: entry.tracks.map(t => {
+          if (t.unavailable) return { ...t, inLibrary: false, matchConfidence: undefined };
+          if (t.manualMatchFile) {
+            const found = library.some(s => s.file === t.manualMatchFile);
+            return { ...t, inLibrary: found, matchConfidence: found ? 'exact' as const : undefined };
+          }
+          const confidence = matchInLibrary(t.spotifyId, t.title, t.artist, library);
+          return { ...t, inLibrary: confidence !== false, matchConfidence: confidence || undefined };
+        }),
+      })));
+    });
+  }, [library]);
+
+  // Click-outside for storeLinkRef
+  useEffect(() => {
+    if (!openStoreLinkKey) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        storeLinkRef.current &&
+        !storeLinkRef.current.contains(e.target as Node)
+      ) {
+        setOpenStoreLinkKey(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openStoreLinkKey]);
 
   const handleImport = useCallback(() => {
     void runImport(importUrl, library);

@@ -5,7 +5,6 @@ import { apiFetch } from "../lib/apiFetch";
 
 interface UseLibraryOptions {
   onNewAnalysis?: () => void;
-  onPlaylistImported?: (songs: Song[], label: string) => void;
 }
 
 type AnalysisEvent =
@@ -14,7 +13,7 @@ type AnalysisEvent =
   | { type: 'folder_done'; folder: string }
   | { type: 'enriching'; message: string }
   | { type: 'enrich_progress'; completed: number; total: number }
-  | { type: 'done'; songs: unknown; libraryName: string; resultsJson: Record<string, unknown> }
+  | { type: 'done'; songs: unknown; libraryName: string; resultsJson: Record<string, unknown>; playlistFiles?: string[] }
   | { type: 'error'; message: string };
 
 async function streamAnalysis(
@@ -51,11 +50,9 @@ export interface QueueItem {
   total: number;
 }
 
-export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOptions = {}) {
+export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   const onNewAnalysisRef = useRef(onNewAnalysis);
   useEffect(() => { onNewAnalysisRef.current = onNewAnalysis; }, [onNewAnalysis]);
-  const onPlaylistImportedRef = useRef(onPlaylistImported);
-  useEffect(() => { onPlaylistImportedRef.current = onPlaylistImported; }, [onPlaylistImported]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const isAnalyzingRef = useRef(false);
@@ -79,11 +76,21 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
       return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
     } catch { return new Set(); }
   });
+  // Map of Apple Music playlist name → file paths (tracks in that playlist)
+  const [applePlaylistFiles, setApplePlaylistFiles] = useState<Record<string, string[]>>(() => {
+    try {
+      const raw = localStorage.getItem("djfriend-apple-playlist-files");
+      return raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
+    } catch { return {}; }
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem("djfriend-analyzed-apple-playlists", JSON.stringify([...analyzedApplePlaylists]));
   }, [analyzedApplePlaylists]);
+  useEffect(() => {
+    localStorage.setItem("djfriend-apple-playlist-files", JSON.stringify(applePlaylistFiles));
+  }, [applePlaylistFiles]);
 
   // Auto-load saved library on mount
   useEffect(() => {
@@ -184,8 +191,11 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
           setLibrary(songs);
           setLibraryName(`${event.libraryName} (analyzed)`);
           setAnalyzedApplePlaylists(prev => new Set([...prev, playlistName]));
+          // Store which files belong to this playlist (from server response)
+          if (event.playlistFiles && Array.isArray(event.playlistFiles)) {
+            setApplePlaylistFiles(prev => ({ ...prev, [playlistName]: event.playlistFiles as string[] }));
+          }
           setError(null);
-          onPlaylistImportedRef.current?.(songs, playlistName);
         }
       }, controller.signal);
     } catch (err) {
@@ -451,7 +461,6 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
           setLibrary(songs);
           setLibraryName(`${event.libraryName} (imported)`);
           setError(null);
-          onPlaylistImportedRef.current?.(songs, label);
         }
       }, controller.signal);
     } catch (err) {
@@ -480,6 +489,8 @@ export function useLibrary({ onNewAnalysis, onPlaylistImported }: UseLibraryOpti
     loadingPlaylists,
     analyzedApplePlaylists,
     setAnalyzedApplePlaylists,
+    applePlaylistFiles,
+    setApplePlaylistFiles,
     error,
     openPlaylistPicker,
     cancelAnalysis,

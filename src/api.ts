@@ -322,7 +322,9 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
   fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
   fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
   const songs = Object.values(resultsJson)
-  return { total: tracks.length, analyzed: songs.length, songs, resultsJson }
+  // Return the file paths that belong to this specific playlist (not the whole library)
+  const playlistFiles = tracks.map(t => t.filePath)
+  return { total: tracks.length, analyzed: songs.length, songs, resultsJson, playlistFiles }
 }
 
 export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: string | null): void {
@@ -820,7 +822,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const playlistName = typeof (body as Record<string, unknown>)?.playlistName === 'string' ? ((body as Record<string, unknown>).playlistName as string).trim() : ''
       if (!playlistName) { writeEvent({ type: 'error', message: 'Missing playlistName.' }); res.end(); return }
       const analysis = await analyzeAppleMusicLibrary(playlistName, writeEvent)
-      writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: 'Apple Music', songs: analysis.songs, resultsJson: analysis.resultsJson })
+      writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: 'Apple Music', songs: analysis.songs, resultsJson: analysis.resultsJson, playlistFiles: analysis.playlistFiles })
       res.end()
     } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Apple Music analysis failed.' }); res.end() }
   })

@@ -22,8 +22,7 @@ import {
   findSongsForImport,
 } from "./lib/spotifyImport";
 import { downloadM3U } from "./lib/m3uExport";
-import { downloadRekordboxXml } from "./lib/rekordboxExport";
-import { SpotifyIcon, RekordboxIcon, M3UIcon } from "./components/Icons";
+import { SpotifyIcon, M3UIcon } from "./components/Icons";
 import { useLibrary } from "./hooks/useLibrary";
 import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
@@ -150,10 +149,6 @@ function AppInner() {
     null,
   );
   const historyExportRef = useRef<HTMLDivElement | null>(null);
-  const [openImportExportId, setOpenImportExportId] = useState<string | null>(
-    null,
-  );
-  const importExportRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [bpmDoctorOpen, setBpmDoctorOpen] = useState(false);
@@ -228,26 +223,8 @@ function AppInner() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openHistoryExportId]);
 
-  // Click-outside for import history export dropdown
-  useEffect(() => {
-    if (!openImportExportId) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        importExportRef.current &&
-        !importExportRef.current.contains(e.target as Node)
-      )
-        setOpenImportExportId(null);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openImportExportId]);
-
   // Stable ref used to bridge setGeneratedSet (from useSetGenerator) into useLibrary's onNewAnalysis callback
   const onNewAnalysisRef = useRef<(() => void) | undefined>(undefined);
-  // Stable ref used to bridge setImportHistory (from useSpotifyImport) into useLibrary's onPlaylistImported callback
-  const onPlaylistImportedRef = useRef<
-    ((songs: import("./types").Song[], label: string) => void) | undefined
-  >(undefined);
 
   const {
     library,
@@ -264,6 +241,8 @@ function AppInner() {
     loadingPlaylists,
     analyzedApplePlaylists,
     setAnalyzedApplePlaylists,
+    applePlaylistFiles,
+    setApplePlaylistFiles,
     error,
     openPlaylistPicker,
     runAppleMusicAnalysis,
@@ -273,8 +252,6 @@ function AppInner() {
     runM3uWebImport,
   } = useLibrary({
     onNewAnalysis: () => onNewAnalysisRef.current?.(),
-    onPlaylistImported: (songs, label) =>
-      onPlaylistImportedRef.current?.(songs, label),
   });
 
   // Playlist filter — which import entry restricts the generator pool
@@ -321,50 +298,32 @@ function AppInner() {
     handleBrowseSpotifyPlaylists,
   } = useSpotifyImport({ library, setHistory });
 
-  // Wire the playlist-imported callback now that setImportHistory is available
-  useEffect(() => {
-    onPlaylistImportedRef.current = (songs, label) => {
-      const entry: import("./types").ImportEntry = {
-        id: Date.now().toString(),
-        name: label,
-        timestamp: Date.now(),
-        playlistId: `local-${Date.now()}`,
-        tracks: songs.map((s) => ({
-          spotifyId: s.spotifyId ?? s.file,
-          title: s.title,
-          artist: s.artist,
-          inLibrary: true,
-          matchConfidence: "exact" as const,
-        })),
-      };
-      setImportHistory((prev) => {
-        const exists = prev.findIndex((e) => e.name === label);
-        if (exists >= 0) {
-          const next = [...prev];
-          next[exists] = entry;
-          return next;
-        }
-        return [entry, ...prev];
-      });
-    };
-  }, [setImportHistory]);
-
-  // Derive the file set + duration for the active playlist filter (both memoized)
+  // Derive the file set for the active playlist filter
+  // playlistFilterId can be a Spotify import entry ID or "apple:<playlistName>"
   const playlistFilterFiles = useMemo<Set<string> | undefined>(() => {
     if (!playlistFilterId) return undefined;
+    // Apple Music playlist
+    if (playlistFilterId.startsWith("apple:")) {
+      const name = playlistFilterId.slice(6);
+      const files = applePlaylistFiles[name];
+      if (!files || files.length === 0) return undefined;
+      const fileSet = new Set(files);
+      // Only include files that are actually in the library
+      const inLib = library.filter(s => fileSet.has(s.file));
+      return inLib.length > 0 ? new Set(inLib.map(s => s.file)) : undefined;
+    }
+    // Spotify import entry
     const entry = importHistory.find((e) => e.id === playlistFilterId);
     if (!entry) return undefined;
     const songs = findSongsForImport(entry.tracks, library);
     return songs.length > 0 ? new Set(songs.map((s) => s.file)) : undefined;
-  }, [playlistFilterId, importHistory, library]);
+  }, [playlistFilterId, importHistory, library, applePlaylistFiles]);
 
   const playlistTotalMinutes = useMemo<number>(() => {
-    if (!playlistFilterId) return 0;
-    const entry = importHistory.find((e) => e.id === playlistFilterId);
-    if (!entry) return 0;
-    const songs = findSongsForImport(entry.tracks, library);
+    if (!playlistFilterId || !playlistFilterFiles) return 0;
+    const songs = library.filter(s => playlistFilterFiles.has(s.file));
     return songs.reduce((s, t) => s + (t.duration ?? 210), 0) / 60;
-  }, [playlistFilterId, importHistory, library]);
+  }, [playlistFilterId, playlistFilterFiles, library]);
 
   // Moved outside to avoid lint dep warning — it's a constant
 
@@ -489,21 +448,7 @@ function AppInner() {
     [library],
   );
 
-  const handleExportImportRekordbox = useCallback(
-    (entry: import("./types").ImportEntry) => {
-      const songs = findSongsForImport(entry.tracks, library);
-      if (songs.length === 0) return;
-      const setTracks = songs.map((s, i) => ({
-        ...s,
-        slot: i,
-        targetEnergy: s.energy,
-        harmonicWarning: false,
-      }));
-      const filename = `${entry.name.replace(/[^a-z0-9_\-. ]/gi, "_")}.xml`;
-      downloadRekordboxXml(setTracks, entry.name, filename);
-    },
-    [library],
-  );
+
 
   const handleLoadImportToSet = useCallback(
     (entry: import("./types").ImportEntry) => {
@@ -1418,8 +1363,8 @@ function AppInner() {
                   </div>
                 );
               })()}
-              {/* Card 2.5: Source — visible when there are imported playlists */}
-              {importHistory.length > 0 && (
+              {/* Card 2.5: Source — visible when there are playlists (Apple Music or Spotify) */}
+              {(Object.keys(applePlaylistFiles).length > 0 || importHistory.length > 0) && (
                 <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
@@ -1461,17 +1406,17 @@ function AppInner() {
                           }}
                           title={
                             playlistFilterId
-                              ? (importHistory.find(
-                                  (e) => e.id === playlistFilterId,
-                                )?.name ?? "Playlist")
-                              : "Generate from an imported playlist"
+                              ? (playlistFilterId.startsWith("apple:")
+                                  ? playlistFilterId.slice(6)
+                                  : importHistory.find((e) => e.id === playlistFilterId)?.name ?? "Playlist")
+                              : "Generate from a playlist"
                           }
                         >
                           <span className="truncate max-w-[160px]">
                             {playlistFilterId
-                              ? (importHistory.find(
-                                  (e) => e.id === playlistFilterId,
-                                )?.name ?? "Playlist")
+                              ? (playlistFilterId.startsWith("apple:")
+                                  ? playlistFilterId.slice(6)
+                                  : importHistory.find((e) => e.id === playlistFilterId)?.name ?? "Playlist")
                               : "From Playlist"}
                           </span>
                           <svg
@@ -1492,7 +1437,7 @@ function AppInner() {
                           <div className="absolute left-0 top-full mt-1 z-30 bg-[#12121a] border border-[#2a2a3a] rounded-lg shadow-xl py-1 min-w-[220px] max-h-60 overflow-y-auto">
                             <button
                               type="button"
-                              className="w-full text-left px-3 py-2 text-xs text-[#64748b] hover:bg-[#1e1e2e] transition-colors"
+                              className="w-full text-left px-3 py-2 text-xs text-[#64748b] hover:bg-[#1e1e2e] transition-colors cursor-pointer"
                               onClick={() => {
                                 setPlaylistFilterId(null);
                                 setSourceDropdownOpen(false);
@@ -1500,6 +1445,33 @@ function AppInner() {
                             >
                               — Full Library (no filter) —
                             </button>
+                            {/* Apple Music playlists */}
+                            {Object.entries(applePlaylistFiles).map(([name, files]) => {
+                              const id = `apple:${name}`;
+                              const inLib = files.filter(f => library.some(s => s.file === f)).length;
+                              const isSelected = playlistFilterId === id;
+                              return (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                                  style={{
+                                    color: isSelected ? "#a78bfa" : "#e2e8f0",
+                                    backgroundColor: isSelected ? "#1e1a2e" : undefined,
+                                  }}
+                                  onClick={() => {
+                                    setPlaylistFilterId(id);
+                                    setSourceDropdownOpen(false);
+                                  }}
+                                >
+                                  <span className="truncate">{name}</span>
+                                  <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">
+                                    {inLib} tracks
+                                  </span>
+                                </button>
+                              );
+                            })}
+                            {/* Spotify import playlists */}
                             {importHistory.map((entry) => {
                               const inLib = entry.tracks.filter(
                                 (t) => t.inLibrary,
@@ -1509,7 +1481,7 @@ function AppInner() {
                                 <button
                                   key={entry.id}
                                   type="button"
-                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center justify-between gap-2"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center justify-between gap-2 cursor-pointer"
                                   style={{
                                     color: isSelected ? "#a78bfa" : "#e2e8f0",
                                     backgroundColor: isSelected
@@ -1533,30 +1505,14 @@ function AppInner() {
                       </div>
                     </div>
                   </div>
-                  {playlistFilterId &&
-                    (() => {
-                      const entry = importHistory.find(
-                        (e) => e.id === playlistFilterId,
-                      );
-                      if (!entry) return null;
-                      const inLib = entry.tracks.filter(
-                        (t) => t.inLibrary,
-                      ).length;
-                      return (
-                        <p className="text-[11px] text-[#64748b]">
-                          <span className="text-[#94a3b8] font-medium">
-                            {inLib}
-                          </span>{" "}
-                          of {entry.tracks.length} tracks matched in your
-                          library
-                          {inLib === 0 && (
-                            <span className="text-[#f59e0b] ml-1">
-                              — no tracks found, add them first
-                            </span>
-                          )}
-                        </p>
-                      );
-                    })()}
+                  {playlistFilterId && playlistFilterFiles && (
+                    <p className="text-[11px] text-[#64748b]">
+                      <span className="text-[#94a3b8] font-medium">
+                        {playlistFilterFiles.size}
+                      </span>{" "}
+                      tracks in playlist
+                    </p>
+                  )}
                 </div>
               )}
               {/* Card 1: Energy Curve */}
@@ -2185,8 +2141,10 @@ function AppInner() {
             )}
           </div>
 
-          {/* Import history */}
-          {importHistory.length === 0 ? (
+          {/* Spotify import history (filter out old local- Apple Music entries) */}
+          {(() => {
+            const spotifyImports = importHistory.filter(e => !e.playlistId.startsWith("local-"));
+            return spotifyImports.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
               <span className="text-4xl">🎵</span>
               <p className="text-sm">
@@ -2195,7 +2153,7 @@ function AppInner() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {importHistory.map((entry) => {
+              {spotifyImports.map((entry) => {
                 const isExpanded = expandedImportId === entry.id;
                 const date = new Date(entry.timestamp);
                 const label =
@@ -2262,93 +2220,40 @@ function AppInner() {
                       <button
                         onClick={() => handleLoadImportToSet(entry)}
                         disabled={inLibraryCount === 0}
-                        aria-label="Load to generator"
+                        aria-label="Generate a set from matched tracks"
                         title={
                           inLibraryCount === 0
-                            ? "No matched tracks to load"
-                            : `Load ${inLibraryCount} matched track${inLibraryCount !== 1 ? "s" : ""} into the generator`
+                            ? "No matched tracks to generate from"
+                            : `Generate a set from ${inLibraryCount} matched track${inLibraryCount !== 1 ? "s" : ""}`
                         }
-                        className="shrink-0 px-3 py-4 text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#7c3aed] disabled:hover:text-[#475569]"
+                        className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#7c3aed] hover:text-[#a78bfa] disabled:hover:text-[#475569]"
                       >
-                        →&nbsp;Set
+                        + Set
                       </button>
-                      {!entry.playlistId.startsWith("local-") && (
-                        <a
-                          href={`https://open.spotify.com/playlist/${entry.playlistId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="Play on Spotify"
-                          title="Play on Spotify"
-                          className="shrink-0 px-3 py-4 flex items-center text-[#475569] hover:text-[#1db954] transition-colors"
-                        >
-                          <SpotifyIcon size={14} />
-                        </a>
-                      )}
-                      {/* Import export dropdown */}
-                      <div
-                        className="relative shrink-0"
-                        ref={
-                          openImportExportId === entry.id
-                            ? importExportRef
-                            : null
-                        }
+                      <a
+                        href={`https://open.spotify.com/playlist/${entry.playlistId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Open on Spotify"
+                        title="Open on Spotify"
+                        className="shrink-0 px-2 py-4 flex items-center text-[#475569] hover:text-[#1db954] transition-colors"
                       >
-                        <button
-                          onClick={() =>
-                            setOpenImportExportId((id) =>
-                              id === entry.id ? null : entry.id,
-                            )
-                          }
-                          disabled={
-                            inLibraryCount === 0 || entry.tracks.length === 0
-                          }
-                          title={
-                            inLibraryCount !== entry.tracks.length
-                              ? `${entry.tracks.length - inLibraryCount} track(s) missing`
-                              : "Export"
-                          }
-                          className="px-3 py-4 text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#a78bfa] disabled:hover:text-[#475569]"
-                        >
-                          Export <span className="text-[9px]">▾</span>
-                        </button>
-                        {openImportExportId === entry.id && (
-                          <div className="absolute right-0 bottom-full mb-1 z-20 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
-                            <button
-                              onClick={() => {
-                                void handleExportImportM3U(entry);
-                                setOpenImportExportId(null);
-                              }}
-                              className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                            >
-                              <M3UIcon
-                                size={13}
-                                className="shrink-0 opacity-60"
-                              />
-                              Export as M3U
-                            </button>
-                            {hasRekordboxFolder && (
-                              <button
-                                onClick={() => {
-                                  handleExportImportRekordbox(entry);
-                                  setOpenImportExportId(null);
-                                }}
-                                className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
-                              >
-                                <RekordboxIcon
-                                  size={13}
-                                  className="shrink-0 opacity-60"
-                                />
-                                Export to Rekordbox
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                        <SpotifyIcon size={14} />
+                      </a>
+                      <button
+                        onClick={() => void handleExportImportM3U(entry)}
+                        disabled={inLibraryCount === 0}
+                        aria-label="Export as M3U"
+                        title="Export matched tracks as M3U"
+                        className="shrink-0 px-2 py-4 flex items-center transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#a78bfa] disabled:hover:text-[#475569]"
+                      >
+                        <M3UIcon size={14} className="opacity-70" />
+                      </button>
                       <button
                         onClick={() => void reloadEntry(entry)}
                         aria-label="Reload from Spotify"
                         title="Reload from Spotify"
-                        className="shrink-0 px-3 py-4 text-[#475569] hover:text-[#7c3aed] transition-colors cursor-pointer"
+                        className="shrink-0 px-2 py-4 text-[#475569] hover:text-[#7c3aed] transition-colors cursor-pointer"
                       >
                         ↻
                       </button>
@@ -2788,7 +2693,8 @@ function AppInner() {
                 );
               })}
             </div>
-          )}
+          );
+          })()}
         </main>
       )}
 
@@ -2911,8 +2817,7 @@ function AppInner() {
                   <div className="flex flex-col gap-1 max-h-[55vh] overflow-y-auto">
                     {filtered.map((playlist) => {
                       const imported =
-                        analyzedApplePlaylists.has(playlist.name) ||
-                        importHistory.some((e) => e.name === playlist.name);
+                        analyzedApplePlaylists.has(playlist.name);
                       return (
                         <button
                           key={playlist.name}
@@ -3285,7 +3190,7 @@ function AppInner() {
           setLibrary([]);
           setGeneratedSet([]);
         }}
-        onDatabaseCleared={() => setAnalyzedApplePlaylists(new Set())}
+        onDatabaseCleared={() => { setAnalyzedApplePlaylists(new Set()); setApplePlaylistFiles({}); }}
       />
 
       {bpmDoctorOpen && (

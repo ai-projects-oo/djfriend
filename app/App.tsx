@@ -6,7 +6,6 @@ import SettingsModal from "./components/SettingsModal";
 import AIPlannerPanel from "./components/AIPlannerPanel";
 import CalendarPicker from "./components/CalendarPicker";
 import HistoryTab from "./components/HistoryTab";
-import BpmDoctorModal from "./components/BpmDoctorModal";
 import { genreMatchesUmbrella, TAG_GROUPS } from "./lib/genreUtils";
 import {
   exchangeCodeForToken,
@@ -29,7 +28,6 @@ import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
 import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
 import { camelotColor } from "./lib/camelotColors";
-import { findCrateGaps, setNeedsCrateSuggestions } from "./lib/crateBuilder";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 
@@ -151,8 +149,6 @@ function AppInner() {
   const historyExportRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [bpmDoctorOpen, setBpmDoctorOpen] = useState(false);
-  const [normalizingEnergy, setNormalizingEnergy] = useState(false);
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
   const [hasAIKey, setHasAIKey] = useState(false);
@@ -165,6 +161,8 @@ function AppInner() {
   const [dateCalendar, setDateCalendar] = useState<"from" | "to" | null>(null);
   const [analyzeMenuOpen, setAnalyzeMenuOpen] = useState(false);
   const [playlistSearch, setPlaylistSearch] = useState("");
+  const [selectedPlaylists, setSelectedPlaylists] = useState<string[]>([]);
+  const MAX_APPLE_PLAYLISTS = 3;
   const [manualMatchKey, setManualMatchKey] = useState<string | null>(null);
   const [manualMatchQuery, setManualMatchQuery] = useState("");
   const manualSearchRef = useRef<HTMLDivElement | null>(null);
@@ -623,45 +621,6 @@ function AppInner() {
                   BPM/key/energy are AI-estimated — not from audio analysis
                 </span>
               )}
-            {library.length > 0 && (
-              <button
-                onClick={() => setBpmDoctorOpen(true)}
-                className="hidden sm:inline text-xs text-[#64748b] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                title="Detect and fix half/double-tempo BPM errors"
-              >
-                ♩ BPM Doctor
-              </button>
-            )}
-            {library.length > 0 && (
-              <button
-                onClick={async () => {
-                  setNormalizingEnergy(true);
-                  try {
-                    const res = await fetch("/api/normalize-energy", {
-                      method: "POST",
-                    });
-                    const data = (await res.json()) as {
-                      ok?: boolean;
-                      count?: number;
-                      error?: string;
-                    };
-                    if (data.ok) {
-                      // Reload library to reflect new energy values
-                      window.location.reload();
-                    }
-                  } catch {
-                    /* ignore */
-                  } finally {
-                    setNormalizingEnergy(false);
-                  }
-                }}
-                disabled={normalizingEnergy}
-                className="hidden sm:inline text-xs text-[#64748b] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Calibrate energy values using MixedInKey tags in your filenames, then rank remaining tracks. Run once after scanning."
-              >
-                {normalizingEnergy ? "…" : "⟳ Calibrate energy"}
-              </button>
-            )}
             {library.length > 0 && (
               <button
                 onClick={async () => {
@@ -1992,59 +1951,6 @@ function AppInner() {
                   }
                 />
 
-                {/* Crate Suggestions */}
-                {generatedSet.length > 0 &&
-                  setNeedsCrateSuggestions(generatedSet) &&
-                  (() => {
-                    const gaps = findCrateGaps(generatedSet, prefs);
-                    if (gaps.length === 0) return null;
-                    return (
-                      <div className="mt-4 rounded-xl border border-[#f59e0b33] bg-[#0d0a00] p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="13"
-                            height="13"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="#f59e0b"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <circle cx="11" cy="11" r="8" />
-                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                          </svg>
-                          <span className="text-xs font-semibold uppercase tracking-widest text-[#f59e0b]">
-                            Crate Suggestions
-                          </span>
-                          <span className="text-[10px] text-[#78350f]">
-                            {gaps.length} gap{gaps.length !== 1 ? "s" : ""}{" "}
-                            found
-                          </span>
-                        </div>
-                        <ul className="space-y-2">
-                          {gaps.map((gap, i) => (
-                            <li key={i} className="flex items-start gap-3">
-                              <span className="text-[10px] text-[#78350f] shrink-0 mt-0.5 w-8 text-right">
-                                {Math.round(gap.setPosition * 100)}%
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs text-[#fbbf24] font-mono truncate">
-                                  {gap.suggestedSearch}
-                                </p>
-                                <p className="text-[10px] text-[#78350f] mt-0.5">
-                                  keys: {gap.camelotNeeded.join(", ")} · energy
-                                  ≈{gap.targetEnergy.toFixed(2)} ·{" "}
-                                  {gap.bpmRange.min}–{gap.bpmRange.max} BPM
-                                </p>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })()}
               </div>
             </div>
           </div>
@@ -2770,6 +2676,7 @@ function AppInner() {
           onClick={() => {
             setPlaylistPicker(null);
             setPlaylistSearch("");
+            setSelectedPlaylists([]);
           }}
         >
           <div
@@ -2778,13 +2685,17 @@ function AppInner() {
           >
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-[#e2e8f0]">
-                Select a Playlist
+                Select Playlists{" "}
+                <span className="text-[11px] font-normal text-[#475569]">
+                  (up to {MAX_APPLE_PLAYLISTS})
+                </span>
               </h3>
               <button
                 className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
                 onClick={() => {
                   setPlaylistPicker(null);
                   setPlaylistSearch("");
+                  setSelectedPlaylists([]);
                 }}
               >
                 Close
@@ -2818,21 +2729,71 @@ function AppInner() {
                     {filtered.map((playlist) => {
                       const imported =
                         analyzedApplePlaylists.has(playlist.name);
+                      const selected = selectedPlaylists.includes(
+                        playlist.name,
+                      );
+                      const atLimit =
+                        selectedPlaylists.length >= MAX_APPLE_PLAYLISTS;
+                      const disabled = !selected && atLimit;
                       return (
                         <button
                           key={playlist.name}
-                          onClick={() => runAppleMusicAnalysis(playlist.name)}
-                          className="w-full text-left rounded-md border px-3 py-2.5 hover:border-[#7c3aed] transition-colors cursor-pointer"
+                          disabled={disabled}
+                          onClick={() => {
+                            setSelectedPlaylists((prev) =>
+                              prev.includes(playlist.name)
+                                ? prev.filter((n) => n !== playlist.name)
+                                : prev.length < MAX_APPLE_PLAYLISTS
+                                  ? [...prev, playlist.name]
+                                  : prev,
+                            );
+                          }}
+                          className="w-full text-left rounded-md border px-3 py-2.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{
-                            borderColor: imported ? "#16a34a" : "#2a2a3a",
-                            backgroundColor: imported ? "#0d1f13" : "#0d0d14",
+                            borderColor: selected
+                              ? "#7c3aed"
+                              : imported
+                                ? "#16a34a"
+                                : "#2a2a3a",
+                            backgroundColor: selected
+                              ? "#1a0d2e"
+                              : imported
+                                ? "#0d1f13"
+                                : "#0d0d14",
                           }}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm text-[#e2e8f0]">
+                            <span className="text-sm text-[#e2e8f0] flex items-center gap-2">
+                              <span
+                                className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0"
+                                style={{
+                                  borderColor: selected
+                                    ? "#7c3aed"
+                                    : "#2a2a3a",
+                                  backgroundColor: selected
+                                    ? "#7c3aed"
+                                    : "transparent",
+                                }}
+                              >
+                                {selected && (
+                                  <svg
+                                    className="w-2.5 h-2.5 text-white"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth={3}
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M4.5 12.75l6 6 9-13.5"
+                                    />
+                                  </svg>
+                                )}
+                              </span>
                               {playlist.name}
                             </span>
-                            {imported && (
+                            {imported && !selected && (
                               <svg
                                 className="w-4 h-4 text-[#22c55e] flex-shrink-0"
                                 fill="none"
@@ -2848,7 +2809,7 @@ function AppInner() {
                               </svg>
                             )}
                           </div>
-                          <div className="text-[11px] text-[#475569] mt-0.5">
+                          <div className="text-[11px] text-[#475569] mt-0.5 pl-[22px]">
                             {playlist.count} track
                             {playlist.count === 1 ? "" : "s"}
                             {imported && (
@@ -2863,6 +2824,30 @@ function AppInner() {
                   </div>
                 );
               })()
+            )}
+            {playlistPicker.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-[#2a2a3a] flex items-center justify-between gap-2">
+                <span className="text-[11px] text-[#475569]">
+                  {selectedPlaylists.length}/{MAX_APPLE_PLAYLISTS} selected
+                </span>
+                <button
+                  disabled={selectedPlaylists.length === 0}
+                  onClick={() => {
+                    const toAnalyze = [...selectedPlaylists];
+                    setSelectedPlaylists([]);
+                    setPlaylistSearch("");
+                    for (const name of toAnalyze) {
+                      runAppleMusicAnalysis(name);
+                    }
+                  }}
+                  className="text-xs font-medium px-3 py-1.5 rounded-md bg-[#7c3aed] text-white hover:bg-[#9333ea] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Analyze{" "}
+                  {selectedPlaylists.length > 0
+                    ? `${selectedPlaylists.length} playlist${selectedPlaylists.length === 1 ? "" : "s"}`
+                    : ""}
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -3200,21 +3185,6 @@ function AppInner() {
         }}
       />
 
-      {bpmDoctorOpen && (
-        <BpmDoctorModal
-          library={library}
-          onApplyFixes={(fixes) => {
-            // Update in-memory library so UI reflects immediately
-            setLibrary((prev) =>
-              prev.map((s) => {
-                const fix = fixes.find((f) => f.file === s.file);
-                return fix ? { ...s, bpm: fix.bpm } : s;
-              }),
-            );
-          }}
-          onClose={() => setBpmDoctorOpen(false)}
-        />
-      )}
     </div>
   );
 }

@@ -1,12 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { SetTrack, DJPreferences } from '../types';
 import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
 import { downloadRekordboxXml } from '../lib/rekordboxExport';
-import SetCardExport from './SetCardExport';
-import { SpotifyIcon, RekordboxIcon, M3UIcon, CopyIcon, ImageIcon } from './Icons';
-import { matchesGenrePref } from '../lib/genreUtils';
-import { getAffinityKey, genreAffinityBonus } from '../lib/setGenerator';
+import { SpotifyIcon, RekordboxIcon, M3UIcon, CopyIcon } from './Icons';
 
 export type FitLevel = 'good' | 'warn' | 'bad';
 
@@ -52,20 +49,16 @@ interface TransitionHint {
   color?: string;
 }
 
+export interface TransitionInfo {
+  bpmDelta: number;
+  bpmDir: string;
+  bpmDeltaColor: string;
+  hints: TransitionHint[];
+}
+
 function computeTransitionHints(prev: SetTrack, next: SetTrack): TransitionHint[] {
   const hints: TransitionHint[] = [];
   const eDelta = next.energy - prev.energy;
-  const bDelta = prev.bpm > 0 && next.bpm > 0 ? Math.abs(next.bpm - prev.bpm) : 0;
-
-  if (next.harmonicWarning) {
-    hints.push({ icon: '⚠', color: '#ef4444', tip: 'Harmonic clash — use EQ filtering or a quick cut transition to avoid tonal conflict' });
-  }
-
-  if (bDelta > 15) {
-    hints.push({ icon: '⚡', color: '#f59e0b', tip: `BPM jump of ${Math.round(bDelta)} — bridge with a filter sweep, acapella, or a break before bringing in the new tempo` });
-  } else if (bDelta > 8) {
-    hints.push({ icon: '⚡', color: '#94a3b8', tip: `BPM shift of ${Math.round(bDelta)} — nudge the tempo gradually during the mix-out or use a loop to align the grids` });
-  }
 
   if (eDelta > 0.2) {
     hints.push({ icon: '↑', color: '#22c55e', tip: 'Energy build — gradually open up the highs and layer in percussion before dropping the next track' });
@@ -88,7 +81,7 @@ function computeTransitionHints(prev: SetTrack, next: SetTrack): TransitionHint[
 
 // ─── Fit scoring ───────────────────────────────────────────────────────────────
 
-function computeFit(track: SetTrack, prevTrack: SetTrack | null, prefs: DJPreferences): FitInfo {
+function computeFit(track: SetTrack): FitInfo {
   const reasons: string[] = [];
   let worst: FitLevel = 'good';
 
@@ -98,28 +91,9 @@ function computeFit(track: SetTrack, prevTrack: SetTrack | null, prefs: DJPrefer
     else if (worst !== 'bad') worst = 'warn';
   }
 
-  if (track.harmonicWarning) {
-    flag('bad', 'Harmonic clash with previous track');
-  }
-
   const eDelta = Math.abs(track.energy - track.targetEnergy);
   if (eDelta > 0.35) flag('bad', `Energy ${(eDelta * 100).toFixed(0)}% off target`);
   else if (eDelta > 0.20) flag('warn', `Energy ${(eDelta * 100).toFixed(0)}% off target`);
-
-  if (prevTrack && track.bpm > 0 && prevTrack.bpm > 0) {
-    const bDelta = Math.abs(track.bpm - prevTrack.bpm);
-    if (bDelta > 20) flag('bad', `BPM jump of ${bDelta.toFixed(0)} from previous`);
-    else if (bDelta > 12) flag('warn', `BPM jump of ${bDelta.toFixed(0)} from previous`);
-  }
-
-  if (prefs.genre !== 'Any' && !matchesGenrePref(track, prefs.genre)) {
-    flag('warn', `Genre doesn't match filter (${prefs.genre.replace('~', '')})`);
-  }
-
-  const affinityKey = getAffinityKey(prefs.venueType, prefs.setPhase);
-  if (affinityKey && genreAffinityBonus(track, affinityKey) === 0) {
-    flag('warn', `Genre doesn't suit ${prefs.venueType} · ${prefs.setPhase}`);
-  }
 
   return { level: worst, reasons };
 }
@@ -150,7 +124,6 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordboxExport, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
-  const [cardOpen, setCardOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadVisibleColumns);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
@@ -205,21 +178,15 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
   }
 
   const duration = totalDurationMinutes(tracks);
-  const warnings = tracks.filter((t) => t.harmonicWarning).length;
-  const badFitCount = tracks.filter((t, i) =>
-    computeFit(t, i > 0 ? tracks[i - 1] : null, prefs).level === 'bad'
+  const badFitCount = tracks.filter((t) =>
+    computeFit(t).level === 'bad'
   ).length;
-  const warnFitCount = tracks.filter((t, i) =>
-    computeFit(t, i > 0 ? tracks[i - 1] : null, prefs).level === 'warn'
+  const warnFitCount = tracks.filter((t) =>
+    computeFit(t).level === 'warn'
   ).length;
 
   // Total column count for colSpan calculations
-  const totalCols = 6 + visibleColumns.size; // 6 mandatory + optional
-
-  function scrollToFirstWarning() {
-    const el = tableContainerRef.current?.querySelector('[data-warning="true"]');
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
+  const totalCols = 7 + visibleColumns.size; // 7 mandatory (#, Track, BPM, Key, Energy, Transition, Actions) + optional
 
   function scrollToFirstBadFit() {
     const el = tableContainerRef.current?.querySelector('[data-fit="bad"]');
@@ -260,15 +227,6 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
               title="Jump to first track with fit warnings"
             >
               ● {warnFitCount} {warnFitCount === 1 ? 'track has' : 'tracks have'} fit issues
-            </button>
-          )}
-          {warnings > 0 && badFitCount === 0 && warnFitCount === 0 && (
-            <button
-              onClick={scrollToFirstWarning}
-              className="text-[#f59e0b] hover:text-[#fbbf24] transition-colors cursor-pointer text-xs"
-              title="Jump to first harmonic warning"
-            >
-              ⚠ {warnings} harmonic {warnings === 1 ? 'warning' : 'warnings'}
             </button>
           )}
         </div>
@@ -350,13 +308,6 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
                   Export to Rekordbox
                 </button>
                 )}
-                <button
-                  onClick={() => { setCardOpen(true); setExportOpen(false); }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
-                >
-                  <ImageIcon size={14} className="shrink-0 opacity-60" />
-                  Export as Image
-                </button>
                 {onExportSpotify && (
                   <button
                     onClick={() => { onExportSpotify(); setExportOpen(false); }}
@@ -381,9 +332,9 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
                 <th className="py-2 pl-4 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">#</th>
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Track</th>
                 {visibleColumns.has('time') && (
-                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">Time</th>
+                  <th className="py-2 px-2 text-right text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">Time</th>
                 )}
-                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">BPM</th>
+                <th className="py-2 px-2 text-right text-[10px] font-semibold text-[#475569] uppercase tracking-wider">BPM</th>
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Key</th>
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Energy</th>
                 {visibleColumns.has('genre') && (
@@ -395,91 +346,55 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
                 {visibleColumns.has('comment') && (
                   <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Comments</th>
                 )}
+                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">Next</th>
                 <th className="py-2 pl-2 pr-4 text-right text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
               {tracks.map((track, idx) => {
-                const prevTrack = idx > 0 ? tracks[idx - 1] : null;
-                const bpmDelta = prevTrack && track.bpm > 0 && prevTrack.bpm > 0
-                  ? Math.abs(track.bpm - prevTrack.bpm)
+                const nextTrack = idx < tracks.length - 1 ? tracks[idx + 1] : null;
+
+                // Transition row renders AFTER the current track (attached to the source)
+                const bpmDelta = nextTrack && track.bpm > 0 && nextTrack.bpm > 0
+                  ? Math.abs(nextTrack.bpm - track.bpm)
                   : 0;
-                const bpmDir = prevTrack && track.bpm > 0 && prevTrack.bpm > 0
-                  ? (track.bpm >= prevTrack.bpm ? '▲' : '▼')
+                const bpmDir = nextTrack && track.bpm > 0 && nextTrack.bpm > 0
+                  ? (track.bpm >= nextTrack.bpm ? '▲' : '▼')
                   : '';
                 const bpmDeltaColor = bpmDelta <= 8 ? '#475569' : bpmDelta <= 15 ? '#f59e0b' : '#ef4444';
 
-                const transitionHints = prevTrack ? computeTransitionHints(prevTrack, track) : [];
+                const transitionHints = nextTrack ? computeTransitionHints(track, nextTrack) : [];
+
+                const transition: TransitionInfo | undefined = nextTrack
+                  ? { bpmDelta, bpmDir, bpmDeltaColor, hints: transitionHints }
+                  : undefined;
 
                 return (
-                  <React.Fragment key={track.file}>
-                    {prevTrack && (
-                      <tr>
-                        <td
-                          colSpan={totalCols}
-                          className="text-center"
-                          style={{ height: '18px', padding: '0 8px', lineHeight: '18px' }}
-                        >
-                          <div className="flex items-center justify-center gap-2">
-                            {bpmDelta > 0 && (
-                              <span
-                                style={{
-                                  fontSize: '10px',
-                                  color: bpmDeltaColor,
-                                  fontVariantNumeric: 'tabular-nums',
-                                  letterSpacing: '0.02em',
-                                }}
-                              >
-                                {bpmDir}{Math.round(bpmDelta)} BPM
-                              </span>
-                            )}
-                            <span style={{ width: '1px', height: '10px', background: '#1e1e2e', display: 'inline-block', flexShrink: 0 }} />
-                            {transitionHints.map((hint, hi) => (
-                              <span
-                                key={hi}
-                                title={hint.tip}
-                                style={{
-                                  fontSize: '11px',
-                                  color: hint.color ?? '#475569',
-                                  cursor: 'help',
-                                  opacity: 0.7,
-                                  lineHeight: 1,
-                                  userSelect: 'none',
-                                }}
-                                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.7'; }}
-                              >
-                                {hint.icon}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    <TrackRow
-                      track={track}
-                      index={idx}
-                      fitInfo={computeFit(track, prevTrack, prefs)}
-                      visibleColumns={visibleColumns}
-                      totalCols={totalCols}
-                      onSwap={() => onSwapTrack(idx)}
-                      onToggleLock={() => onToggleLock(idx)}
-                      onRemove={() => onRemoveTrack(idx)}
-                      onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}
-                      onDragStart={() => setDraggingIdx(idx)}
-                      onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
-                      onDragOver={(e) => { e.preventDefault(); if (draggingIdx !== null && draggingIdx !== idx) setDragOverIdx(idx); }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        if (draggingIdx !== null && draggingIdx !== idx) {
-                          onReorderTrack(draggingIdx, idx);
-                        }
-                        setDraggingIdx(null);
-                        setDragOverIdx(null);
-                      }}
-                      isDragOver={dragOverIdx === idx}
-                    />
-                  </React.Fragment>
+                  <TrackRow
+                    key={track.file}
+                    track={track}
+                    index={idx}
+                    fitInfo={computeFit(track)}
+                    transition={transition}
+                    visibleColumns={visibleColumns}
+                    totalCols={totalCols}
+                    onSwap={() => onSwapTrack(idx)}
+                    onToggleLock={() => onToggleLock(idx)}
+                    onRemove={() => onRemoveTrack(idx)}
+                    onUpdateTrack={(tags) => onUpdateTrack(idx, tags)}
+                    onDragStart={() => setDraggingIdx(idx)}
+                    onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
+                    onDragOver={(e) => { e.preventDefault(); if (draggingIdx !== null && draggingIdx !== idx) setDragOverIdx(idx); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (draggingIdx !== null && draggingIdx !== idx) {
+                        onReorderTrack(draggingIdx, idx);
+                      }
+                      setDraggingIdx(null);
+                      setDragOverIdx(null);
+                    }}
+                    isDragOver={dragOverIdx === idx}
+                  />
                 );
               })}
             </tbody>
@@ -488,9 +403,6 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
       </div>
     </div>
 
-    {cardOpen && (
-      <SetCardExport tracks={tracks} onClose={() => setCardOpen(false)} />
-    )}
     </>
   );
 }

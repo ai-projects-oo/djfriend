@@ -3,12 +3,13 @@ import { RefreshCcw, Trash2, Pencil, Check, X, MoreVertical, RotateCcw, FolderOp
 import type { SetTrack } from '../types';
 import { parseCamelot } from '../lib/camelot';
 import { camelotColor } from '../lib/camelotColors';
-import type { FitInfo, ColumnKey } from './SetTracklist';
+import type { FitInfo, ColumnKey, TransitionInfo } from './SetTracklist';
 
 interface Props {
   track: SetTrack;
   index: number;
   fitInfo?: FitInfo;
+  transition?: TransitionInfo;
   visibleColumns: Set<ColumnKey>;
   totalCols: number;
   onSwap: () => void;
@@ -74,12 +75,10 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, visibleColumns, totalCols, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
-  const [showHarmonicTooltip, setShowHarmonicTooltip] = useState(false);
+export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showFitTooltip, setShowFitTooltip] = useState(false);
   const [showTags, setShowTags] = useState(false);
-  const [showReasons, setShowReasons] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -212,7 +211,6 @@ async function handleReanalyze() {
       <tr
         className={`border-b border-[#1e1e2e] group ${swapFlash ? 'bg-green-900/20' : track.locked ? 'bg-[#f59e0b08]' : 'hover:bg-[#12121a]'} ${isDragOver ? 'border-t-2 border-t-[#7c3aed]' : ''}`}
         style={rowStyle}
-        data-warning={track.harmonicWarning ? 'true' : undefined}
         data-fit={fitInfo && fitInfo.level !== 'good' ? fitInfo.level : undefined}
         draggable={!editing}
         onDragStart={onDragStart}
@@ -222,39 +220,41 @@ async function handleReanalyze() {
       >
         {/* # */}
         <td className="py-3 pl-4 pr-2 w-10">
-          <div className="flex flex-col items-center gap-1">
-            {/* Number / play toggle */}
-            <div className="relative w-5 h-4 flex items-center justify-center">
-              <span
-                className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
-                title="Drag to reorder"
+          <div className="relative w-5 h-4 flex items-center justify-center">
+            <span
+              className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
+              title="Drag to reorder"
+            >
+              {index + 1}
+            </span>
+            <div className="hidden group-hover:flex items-center gap-1">
+              <button
+                onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+                className="flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+                title="Play in Apple Music"
               >
-                {index + 1}
-              </span>
-              <div className="hidden group-hover:flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </button>
+              {track.filePath && (
                 <button
-                  onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
-                  className="flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-                  title="Play in Apple Music"
+                  onClick={() => void fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath }) })}
+                  className="flex items-center justify-center text-[#475569] hover:text-[#94a3b8] cursor-pointer transition-colors"
+                  title="Reveal in Finder"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 </button>
-                {track.filePath && (
-                  <button
-                    onClick={() => void fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath }) })}
-                    className="flex items-center justify-center text-[#475569] hover:text-[#94a3b8] cursor-pointer transition-colors"
-                    title="Reveal in Finder"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                  </button>
-                )}
-              </div>
+              )}
             </div>
-            {/* Fit dot — always visible when there's an issue */}
+          </div>
+        </td>
+
+        {/* Title / Artist */}
+        <td className="py-3 px-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             {fitInfo && fitInfo.level !== 'good' && (
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <span
-                  className="cursor-default text-[8px] leading-none select-none block"
+                  className="cursor-default text-[10px] leading-none select-none block"
                   style={{ color: fitInfo.level === 'bad' ? '#ef4444' : '#f59e0b' }}
                   onMouseEnter={() => setShowFitTooltip(true)}
                   onMouseLeave={() => setShowFitTooltip(false)}
@@ -284,44 +284,22 @@ async function handleReanalyze() {
                 )}
               </div>
             )}
-          </div>
-        </td>
-
-        {/* Title / Artist */}
-        <td className="py-3 px-2 min-w-0">
-          <div className="flex items-center gap-2">
             <div className="min-w-0">
               <div className="text-sm font-medium text-[#e2e8f0] truncate">{track.title}</div>
               <div className="text-xs text-[#64748b] truncate">{track.artist}</div>
             </div>
-            {track.harmonicWarning && (
-              <div className="relative flex-shrink-0">
-                <span
-                  className="text-[#f59e0b] cursor-default text-base"
-                  onMouseEnter={() => setShowHarmonicTooltip(true)}
-                  onMouseLeave={() => setShowHarmonicTooltip(false)}
-                >
-                  ⚠
-                </span>
-                {showHarmonicTooltip && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-48 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none">
-                    Harmonic clash — this transition may sound dissonant. Consider pitch-shifting or adding an EQ breakdown.
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </td>
 
         {/* Duration — optional */}
         {visibleColumns.has('time') && (
-          <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
+          <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap text-right">
             {track.duration != null ? formatDuration(track.duration) : '—'}
           </td>
         )}
 
         {/* BPM */}
-        <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap">
+        <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap text-right">
           {track.bpm > 0 ? track.bpm.toFixed(0) : '—'}
         </td>
 
@@ -362,39 +340,30 @@ async function handleReanalyze() {
           </div>
         </td>
 
-        {/* Energy bar + decimal */}
+        {/* Energy bar */}
         <td className="py-3 px-2 pr-4">
-          <div className="flex items-center gap-2">
-            {/* Bar container: 56px wide, 4px tall, with target tick overlay */}
+          <div
+            className="relative rounded-full bg-[#1e1e2e]"
+            style={{ width: 56, height: 4 }}
+            title={`Energy: ${Math.round(track.energy * 100)}% · Target: ${Math.round(track.targetEnergy * 100)}%`}
+          >
             <div
-              className="relative flex-shrink-0 rounded-full bg-[#1e1e2e]"
-              style={{ width: 56, height: 4 }}
-              title={`Energy: ${Math.round(track.energy * 100)}% · Target: ${Math.round(track.targetEnergy * 100)}%`}
-            >
-              {/* Filled portion */}
-              <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  width: `${Math.min(track.energy * 100, 100).toFixed(1)}%`,
-                  backgroundColor: barColor,
-                }}
-              />
-              {/* Target energy tick: 1px wide, 6px tall, centred vertically on the 4px bar */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
-                style={{
-                  left: `${Math.min(Math.max(track.targetEnergy * 100, 0), 100).toFixed(1)}%`,
-                  width: 1,
-                  height: 6,
-                  backgroundColor: 'rgba(255,255,255,0.4)',
-                  transform: 'translate(-50%, -50%)',
-                }}
-              />
-            </div>
-            {/* Energy percentage */}
-            <span className="text-[10px] text-[#64748b] tabular-nums">
-              {Math.round(track.energy * 100)}
-            </span>
+              className="h-full rounded-full transition-all"
+              style={{
+                width: `${Math.min(track.energy * 100, 100).toFixed(1)}%`,
+                backgroundColor: barColor,
+              }}
+            />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{
+                left: `${Math.min(Math.max(track.targetEnergy * 100, 0), 100).toFixed(1)}%`,
+                width: 1,
+                height: 6,
+                backgroundColor: 'rgba(255,255,255,0.4)',
+                transform: 'translate(-50%, -50%)',
+              }}
+            />
           </div>
         </td>
 
@@ -435,12 +404,50 @@ async function handleReanalyze() {
           </td>
         )}
 
+        {/* Transition → next track */}
+        <td className="py-3 px-2 whitespace-nowrap">
+          {transition ? (
+            <div className="flex items-center gap-1.5">
+              {transition.bpmDelta > 0 && (
+                <span
+                  style={{
+                    fontSize: '10px',
+                    color: transition.bpmDeltaColor,
+                    fontVariantNumeric: 'tabular-nums',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {transition.bpmDir}{Math.round(transition.bpmDelta)}
+                </span>
+              )}
+              {transition.hints.map((hint, hi) => (
+                <span
+                  key={hi}
+                  title={hint.tip}
+                  style={{
+                    fontSize: '11px',
+                    color: hint.color ?? '#475569',
+                    cursor: 'help',
+                    opacity: 0.7,
+                    lineHeight: 1,
+                    userSelect: 'none',
+                  }}
+                >
+                  {hint.icon}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-[10px] text-[#2a2a3a]">—</span>
+          )}
+        </td>
+
         {/* Actions — kebab menu */}
         <td className="py-3 pl-2 pr-4 text-right">
           <div className="relative flex items-center justify-end gap-1" ref={menuRef}>
             {/* Active state indicators (small dots) */}
             {track.locked && <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] flex-shrink-0" title="Locked" />}
-            {(showTags || showReasons || editing) && <span className="w-1.5 h-1.5 rounded-full bg-[#7c3aed] flex-shrink-0" title="Panel open" />}
+            {(showTags || editing) && <span className="w-1.5 h-1.5 rounded-full bg-[#7c3aed] flex-shrink-0" title="Panel open" />}
             {reanalyzing && <span className="text-[10px] text-[#475569] animate-pulse">…</span>}
 
             <button
@@ -529,7 +536,7 @@ async function handleReanalyze() {
                 )}
 
                 {/* ── Info panels ── */}
-                {(track.semanticTags || (track.selectionReason && track.selectionReason.length > 0)) && (
+                {track.semanticTags && (
                   <div className="h-px bg-[#1e1e2e] my-1" />
                 )}
 
@@ -540,16 +547,6 @@ async function handleReanalyze() {
                   >
                     <span className="w-3.5 text-center text-[11px]">✦</span>
                     {showTags ? 'Hide AI tags' : 'Show AI tags'}
-                  </button>
-                )}
-
-                {track.selectionReason && track.selectionReason.length > 0 && (
-                  <button
-                    onClick={() => { setShowReasons(s => !s); setMenuOpen(false); }}
-                    className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${showReasons ? 'text-[#7dd3fc] bg-[#38bdf80d]' : 'text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0]'}`}
-                  >
-                    <span className="w-3.5 text-center text-[11px]">ⓘ</span>
-                    {showReasons ? 'Hide reasons' : 'Why chosen?'}
                   </button>
                 )}
 
@@ -602,22 +599,6 @@ async function handleReanalyze() {
                 <span className="text-[9px] uppercase tracking-widest text-[#334155]">Vocal</span>
                 <TagPill label={track.semanticTags.vocalType} type="vocal" />
               </div>
-            </div>
-          </td>
-        </tr>
-      )}
-
-      {/* Selection reason row */}
-      {showReasons && track.selectionReason && track.selectionReason.length > 0 && (
-        <tr className="border-b border-[#1e1e2e] bg-[#0a0a12]">
-          <td colSpan={totalCols} className="px-4 py-2">
-            <div className="flex items-start gap-2">
-              <span className="text-[10px] uppercase tracking-widest text-[#38bdf8] mt-0.5 shrink-0">Why chosen</span>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1">
-                {track.selectionReason.map((reason, i) => (
-                  <li key={i} className="text-[11px] text-[#64748b]">{reason}</li>
-                ))}
-              </ul>
             </div>
           </td>
         </tr>

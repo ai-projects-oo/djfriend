@@ -89,14 +89,6 @@ export interface DJPreferences {
   dateFilter: DateFilter;
 }
 
-export interface CrateGap {
-  setPosition:     number;   // 0–1, fractional position in the set where the gap appears
-  targetEnergy:    number;   // 0–1, energy level needed at this position
-  camelotNeeded:   string[]; // compatible Camelot keys for a smooth transition
-  bpmRange:        { min: number; max: number };
-  suggestedSearch: string;   // ready-to-use search string
-}
-
 export interface PlayStats {
   playCount:      number;   // how many times this track appeared in any saved set
   lastPlayed:     string;   // ISO date of most recent set containing this track

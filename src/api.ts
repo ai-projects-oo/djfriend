@@ -289,17 +289,18 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
   const existing = readExistingResultsFile(APPLE_RESULTS_PATH)
   const resultsJson: Record<string, AppSong> = { ...existing }
   let completed = 0
-  for (const track of tracks) {
+  let nextIdx = 0
+  const CONCURRENCY = 3
+
+  async function processTrack(track: typeof tracks[number]): Promise<void> {
     const key = normalizePathKey(track.filePath)
-    completed += 1
-    writeEvent({ type: 'progress', completed, total: tracks.length, folder: 'Apple Music', file: track.file })
-    await new Promise<void>(r => setImmediate(r)) // yield: flush progress event before heavy work
     const cached = existing[key]
     if (cached) {
       if (cached.duration == null && track.duration != null) cached.duration = track.duration
       else if (cached.duration == null) { try { const meta = await mm.parseFile(track.filePath, { duration: true }); if (meta.format.duration != null) cached.duration = meta.format.duration } catch { /* ignore */ } }
       if (track.dateAdded != null && cached.dateAdded == null) cached.dateAdded = track.dateAdded
-      resultsJson[key] = cached; continue
+      resultsJson[key] = cached
+      return
     }
     try {
       let localGenres: string[] = []
@@ -309,18 +310,30 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
       const genres = localGenres.length > 0 ? localGenres : spotifyGenres
 
       let features = localFeatures
-      // Fallback: if local audio decode failed (e.g. FLAC), use Spotify audio features
       if (!features && match?.spotifyId && token) {
         const sf = await getAudioFeatures(match.spotifyId, token)
         if (sf) features = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
       }
-      if (!features) continue
+      if (!features) return
 
       const keyInfo = toCamelot(features.pitchClass, features.mode)
-      if (!keyInfo) continue
+      if (!keyInfo) return
       resultsJson[key] = { filePath: track.filePath, file: track.filePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), ...(track.dateAdded != null ? { dateAdded: track.dateAdded } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
     } catch { /* skip */ }
   }
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const idx = nextIdx++
+      if (idx >= tracks.length) return
+      const track = tracks[idx]
+      completed += 1
+      writeEvent({ type: 'progress', completed, total: tracks.length, folder: 'Apple Music', file: track.file })
+      await processTrack(track)
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tracks.length) }, () => worker()))
   const aiConfig = getAIConfig()
   if (aiConfig) {
     writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
@@ -888,96 +901,6 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to update tags' })) }
   })
 
-  // ── Bulk BPM fix ──────────────────────────────────────────────────────────────
-  middlewares.use('/api/bulk-fix-bpm', async (req, res, next) => {
-    if (req.method !== 'POST') { next(); return }
-    res.setHeader('Content-Type', 'application/json')
-    try {
-      const body = await readJsonBody(req) as Record<string, unknown>
-      const fixes = body.fixes as Array<{ file: string; bpm: number }>
-      if (!Array.isArray(fixes) || fixes.length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing fixes array' })); return }
-
-      const patchFile = (resultsPath: string, keyFn: (f: string) => string) => {
-        if (!fs.existsSync(resultsPath)) return
-        try {
-          const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
-          let dirty = false
-          for (const { file, bpm } of fixes) {
-            const key = keyFn(file)
-            if (results[key]) { results[key].bpm = bpm; dirty = true }
-          }
-          if (dirty) fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
-        } catch { /* ignore */ }
-      }
-
-      if (songsFolder) patchFile(path.join(songsFolder, 'results.json'), f => path.relative(songsFolder!, f).replace(/\\/g, '/'))
-      patchFile(APPLE_RESULTS_PATH, f => f)
-
-      res.end(JSON.stringify({ ok: true, count: fixes.length }))
-    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Bulk BPM fix failed' })) }
-  })
-
-  // ── Energy normalization ───────────────────────────────────────────────────────
-  // MixedInKey filename pattern: optional track# then KEY - ENERGY(1-10) - TITLE
-  const MIK_PREFIX_RE = /^(?:\d+[-\s]+)?[0-9]{1,2}[AB]\s*-\s*(10|[1-9])\s*-\s*/i
-
-  function parseMikEnergy(filePath: string): number | null {
-    const fname = path.basename(filePath)
-    const m = MIK_PREFIX_RE.exec(fname)
-    if (!m) return null
-    return parseInt(m[1], 10) / 10  // normalize 1-10 → 0.1-1.0
-  }
-
-  middlewares.use('/api/normalize-energy', async (req, res, next) => {
-    if (req.method !== 'POST') { next(); return }
-    res.setHeader('Content-Type', 'application/json')
-    try {
-      const targetPath = fs.existsSync(APPLE_RESULTS_PATH) ? APPLE_RESULTS_PATH
-        : songsFolder ? path.join(songsFolder, 'results.json') : null
-      if (!targetPath) { res.statusCode = 404; res.end(JSON.stringify({ error: 'No results.json found' })); return }
-
-      const results = JSON.parse(fs.readFileSync(targetPath, 'utf-8')) as Record<string, AppSong>
-      const allKeys = Object.keys(results).filter(k => typeof results[k].energy === 'number')
-      if (allKeys.length < 4) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Not enough tracks to normalize' })); return }
-
-      let mikCount = 0
-
-      // Pass 1: set energy directly from MIK filename tag where available (ground truth)
-      for (const k of allKeys) {
-        const mik = parseMikEnergy(k) ?? parseMikEnergy(results[k].filePath ?? '')
-        if (mik !== null) {
-          results[k].energy = Math.round(mik * 1000) / 1000
-          mikCount++
-        }
-      }
-
-      // Pass 2: for tracks without MIK tag, use percentile rank anchored to MIK-calibrated values
-      // Build reference: what percentile do MIK-tagged tracks occupy in the raw energy distribution?
-      const untaggedKeys = allKeys.filter(k => {
-        const mik = parseMikEnergy(k) ?? parseMikEnergy(results[k].filePath ?? '')
-        return mik === null
-      })
-
-      if (untaggedKeys.length > 0) {
-        // Sort ALL keys by their current energy (MIK tracks now have correct values)
-        const sorted = [...allKeys].sort((a, b) => results[a].energy - results[b].energy)
-        const n = sorted.length
-        const untaggedSet = new Set(untaggedKeys)
-
-        // For untagged tracks, interpolate their energy from their rank among all tracks
-        for (let i = 0; i < n; i++) {
-          if (!untaggedSet.has(sorted[i])) continue
-          const percentile = i / (n - 1)
-          // Map percentile to 0.1–1.0 to match MIK scale floor
-          results[sorted[i]].energy = Math.round((0.1 + percentile * 0.9) * 1000) / 1000
-        }
-      }
-
-      fs.writeFileSync(targetPath, JSON.stringify(results, null, 2), 'utf-8')
-
-      res.end(JSON.stringify({ ok: true, count: allKeys.length, mikCount, untaggedCount: untaggedKeys.length }))
-    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Normalization failed' })) }
-  })
 
   middlewares.use('/api/lookup-bpm', async (req, res, next) => {
     if (req.method !== 'POST') { next(); return }

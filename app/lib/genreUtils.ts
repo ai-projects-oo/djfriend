@@ -84,7 +84,7 @@ export const DEFAULT_PREFS: DJPreferences = {
   setDuration: 60,
   venueType: "Club",
   setPhase: "Peak time",
-  genre: "Any",
+  genres: [],
   tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] },
   dateFilter: { field: 'dateAdded' as const, preset: 'all' as const },
 };
@@ -182,4 +182,10 @@ export function matchesGenrePref(song: Song, genre: string): boolean {
     const gl = g.toLowerCase();
     return gl.includes(needle) || needle.includes(gl);
   });
+}
+
+/** Returns true when the song matches ANY of the selected genres. Empty / undefined = "Any" (pass-through). */
+export function matchesGenrePrefs(song: Song, genres: string[] | undefined): boolean {
+  if (!genres || genres.length === 0) return true;
+  return genres.some(g => matchesGenrePref(song, g));
 }

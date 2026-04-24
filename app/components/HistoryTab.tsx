@@ -103,7 +103,7 @@ export default function HistoryTab({
           `${entry.prefs.setDuration} min`,
           entry.prefs.venueType,
           entry.prefs.setPhase,
-          ...(entry.prefs.genre !== "Any" ? [entry.prefs.genre] : []),
+          ...(entry.prefs.genres ?? []),
         ];
 
         return (

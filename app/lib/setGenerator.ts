@@ -2,7 +2,7 @@ import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, SetPhase, Ta
 import { camelotHarmonyScore, isHarmonicWarning, isCamelotClockwise } from './camelot';
 import { computePlayStats, familiarityScore } from './historyStats';
 import { sampleCurve } from './curveInterpolation';
-import { matchesGenrePref } from './genreUtils';
+import { matchesGenrePrefs } from './genreUtils';
 
 const GAP_SECONDS = 10;
 
@@ -117,7 +117,7 @@ export function generateSet(
 ): SetTrack[] {
   if (songs.length === 0) return [];
 
-  const genreFilteredSongs = songs.filter((song) => matchesGenrePref(song, prefs.genre));
+  const genreFilteredSongs = songs.filter((song) => matchesGenrePrefs(song, prefs.genres));
   let candidatePool = genreFilteredSongs.length > 0 ? genreFilteredSongs : songs;
 
   // Date filter — works on dateAdded (Unix seconds) or year (ID3 release year)

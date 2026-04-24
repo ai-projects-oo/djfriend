@@ -84,7 +84,7 @@ export interface DJPreferences {
   setDuration: number | null; // minutes; null = unlimited (all matching tracks)
   venueType: VenueType;
   setPhase: SetPhase;
-  genre: string;
+  genres: string[]; // empty = "Any" (no genre filter)
   tagFilters: TagFilters;
   dateFilter: DateFilter;
 }

@@ -141,7 +141,7 @@ describe('generateSet determinism', () => {
     audienceAgeRange: 'Mixed',
     audiencePurpose: 'Dancing',
     occasionType: 'Peak time',
-    genre: 'Any',
+    genres: [],
   }
 
   const curve: CurvePoint[] = [
@@ -164,7 +164,7 @@ describe('generateSet determinism', () => {
   })
 
   it('produces identical results with a genre filter', () => {
-    const filtered = { ...prefs, genre: 'House' }
+    const filtered = { ...prefs, genres: ["House"] }
     const set1 = generateSet(songs, filtered, curve)
     const set2 = generateSet(songs, filtered, curve)
     expect(set1.map(t => t.file)).toEqual(set2.map(t => t.file))

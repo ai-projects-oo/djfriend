@@ -25,7 +25,7 @@ const defaultPrefs: DJPreferences = {
   audienceAgeRange: 'Mixed',
   audiencePurpose: 'Dancing',
   occasionType: 'Peak time',
-  genre: 'Any',
+  genres: [],
 }
 
 const flatCurve: CurvePoint[] = [{ x: 0, y: 0.5 }, { x: 1, y: 0.5 }]
@@ -67,13 +67,13 @@ describe('generateSet', () => {
       makeSong({ file: 'techno.mp3', genres: ['Techno'] }),
       makeSong({ file: 'jazz.mp3', genres: ['Jazz'] }),
     ]
-    const set = generateSet(songs, { ...defaultPrefs, genre: 'Techno' }, flatCurve)
+    const set = generateSet(songs, { ...defaultPrefs, genres: ["Techno"] }, flatCurve)
     expect(set.every(t => t.genres.some(g => g.toLowerCase().includes('techno')))).toBe(true)
   })
 
   it('falls back to full library when no songs match genre filter', () => {
     const songs = [makeSong({ file: 'a.mp3', genres: ['Jazz'] })]
-    expect(generateSet(songs, { ...defaultPrefs, genre: 'Techno' }, flatCurve).length).toBeGreaterThan(0)
+    expect(generateSet(songs, { ...defaultPrefs, genres: ["Techno"] }, flatCurve).length).toBeGreaterThan(0)
   })
 
   it('prefers harmonically compatible tracks over incompatible ones', () => {

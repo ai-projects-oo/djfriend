@@ -390,7 +390,7 @@ function AppInner() {
           ...p,
           venueType: plan.venueType as import("./types").VenueType,
         }));
-      if (plan.genre) setPrefs((p) => ({ ...p, genre: plan.genre! }));
+      if (plan.genre) setPrefs((p) => ({ ...p, genres: [plan.genre!] }));
       if (plan.setDuration)
         setPrefs((p) => ({ ...p, setDuration: plan.setDuration! }));
       setChatOpen(false);
@@ -400,9 +400,16 @@ function AppInner() {
 
   const handleLoadHistoryEntry = useCallback(
     (entry: HistoryEntry) => {
-      // Migrate old history entries that used addedTimeFilter instead of dateFilter
+      // Migrate old history entries
+      const raw = entry.prefs as unknown as Record<string, unknown>;
       const migratedPrefs: DJPreferences = {
         ...entry.prefs,
+        // genre: string → genres: string[] (old format had a single genre string)
+        genres: Array.isArray(entry.prefs.genres)
+          ? entry.prefs.genres
+          : typeof raw["genre"] === "string" && raw["genre"] !== "Any"
+            ? [raw["genre"] as string]
+            : [],
         dateFilter: entry.prefs.dateFilter ?? {
           field: "dateAdded",
           preset: "all",
@@ -411,6 +418,7 @@ function AppInner() {
       delete (migratedPrefs as unknown as Record<string, unknown>)[
         "addedTimeFilter"
       ];
+      delete (migratedPrefs as unknown as Record<string, unknown>)["genre"];
       setPrefs(migratedPrefs);
       setCurve(entry.curve);
       setGeneratedSet(entry.tracks);
@@ -1793,27 +1801,30 @@ function AppInner() {
                             <div>
                               <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">
                                 Genre
+                                {prefs.genres.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => selectGenre("Any")}
+                                    className="ml-2 text-[#6b7280] hover:text-[#9ca3af] transition-colors"
+                                  >
+                                    clear
+                                  </button>
+                                )}
                               </span>
                               <div className="flex flex-wrap gap-1.5">
                                 {genreGroups.map((label) => {
                                   const value = `~${label}`;
-                                  const active = prefs.genre === value;
+                                  const active = prefs.genres.includes(value);
                                   return (
                                     <button
                                       key={value}
                                       type="button"
-                                      onClick={() =>
-                                        selectGenre(active ? "Any" : value)
-                                      }
+                                      onClick={() => selectGenre(value)}
                                       className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
                                       style={{
-                                        backgroundColor: active
-                                          ? "#7c3aed"
-                                          : "transparent",
+                                        backgroundColor: active ? "#7c3aed" : "transparent",
                                         color: active ? "#fff" : "#a78bfa",
-                                        borderColor: active
-                                          ? "#7c3aed"
-                                          : "#4c1d95",
+                                        borderColor: active ? "#7c3aed" : "#4c1d95",
                                       }}
                                     >
                                       {label}
@@ -1827,28 +1838,27 @@ function AppInner() {
                             <div>
                               <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">
                                 User Genre
+                                {prefs.genres.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => selectGenre("Any")}
+                                    className="ml-2 text-[#6b7280] hover:text-[#9ca3af] transition-colors"
+                                  >
+                                    clear
+                                  </button>
+                                )}
                               </span>
                               <div className="flex flex-wrap gap-1.5">
-                                {["Any", ...availableGenres].map((genre) => {
-                                  const umbrellaActive =
-                                    prefs.genre.startsWith("~") &&
-                                    genre !== "Any" &&
-                                    genreMatchesUmbrella(genre, prefs.genre);
-                                  const active =
-                                    prefs.genre === genre || umbrellaActive;
+                                {availableGenres.map((genre) => {
+                                  const umbrellaActive = prefs.genres.some(
+                                    g => g.startsWith("~") && genreMatchesUmbrella(genre, g)
+                                  );
+                                  const active = prefs.genres.includes(genre) || umbrellaActive;
                                   return (
                                     <button
                                       key={genre}
                                       type="button"
-                                      onClick={() =>
-                                        selectGenre(
-                                          active &&
-                                            !umbrellaActive &&
-                                            genre !== "Any"
-                                            ? "Any"
-                                            : genre,
-                                        )
-                                      }
+                                      onClick={() => selectGenre(genre)}
                                       className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
                                       style={{
                                         backgroundColor: umbrellaActive

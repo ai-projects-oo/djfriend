@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useMemo } from "react";
-import type { Song, SetTrack, DJPreferences, CurvePoint, ScoringWeights, HistoryEntry } from "../types";
-import { DEFAULT_PREFS, matchesGenrePref, genreMatchesUmbrella, TAG_GROUPS, BEATPORT_UMBRELLAS } from "../lib/genreUtils";
+import type { Song, SetTrack, DJPreferences, CurvePoint, ScoringWeights, HistoryEntry, TagFilters } from "../types";
+import { DEFAULT_PREFS, matchesGenrePref, matchesGenrePrefs, genreMatchesUmbrella, TAG_GROUPS, BEATPORT_UMBRELLAS } from "../lib/genreUtils";
 import { clamp } from "../lib/genreUtils";
 import { DEFAULT_CURVE } from "../components/EnergyCurveEditor";
 import { generateSet, getAffinityKey, genreAffinityBonus, semanticAffinityBonus } from "../lib/setGenerator";
@@ -40,6 +40,8 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     () => BEATPORT_UMBRELLAS.filter(u => library.some(s => matchesGenrePref(s, `~${u.label}`))).map(u => u.label),
     [library],
   );
+
+  const CLEARED_TAGS = (): TagFilters => ({ vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] });
 
   const availableTags = useMemo(() => {
     const vibe = new Set<string>(), mood = new Set<string>(), vocal = new Set<string>();
@@ -110,17 +112,16 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   // How many tracks fit in the current set duration given the filtered pool
   const filteredTrackCount = useMemo(() => {
-    const filtered = library.filter(s => matchesGenrePref(s, prefs.genre));
+    const filtered = library.filter(s => matchesGenrePrefs(s, prefs.genres));
     const pool = filtered.length > 0 ? filtered : library;
     if (pool.length === 0) return 0;
     const avgDur = pool.reduce((sum, s) => sum + (s.duration ?? FALLBACK_DURATION), 0) / pool.length;
-    if (prefs.setDuration === null) return pool.length; // unlimited — all tracks fit
+    if (prefs.setDuration === null) return pool.length;
     return Math.max(1, Math.floor((prefs.setDuration * 60) / (avgDur + GAP_SECONDS)));
-  }, [library, prefs.genre, prefs.setDuration]);
+  }, [library, prefs.genres, prefs.setDuration]);
 
-  // "Generate new" is enabled when the filtered pool has more tracks than fit in one set
   const canGenerateNew = library.length > 0 &&
-    library.filter(s => matchesGenrePref(s, prefs.genre)).length > filteredTrackCount;
+    library.filter(s => matchesGenrePrefs(s, prefs.genres)).length > filteredTrackCount;
 
   const runGenerate = useCallback(
     (songs: Song[], p: DJPreferences, c: CurvePoint[], extraOpts?: { jitter?: number; excludeFiles?: Set<string> }) => {
@@ -174,33 +175,38 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   const selectGenre = useCallback((genre: string) => {
     if (genre === 'Any') {
-      setPrefs(p => ({ ...p, genre: 'Any', tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] } }));
+      setPrefs(p => ({ ...p, genres: [], tagFilters: CLEARED_TAGS() }));
       return;
     }
-    // For umbrella genres, only collect tags from songs whose genres belong
-    // exclusively to this umbrella (not shared with another Beatport umbrella).
-    const matching = library.filter(s =>
-      matchesGenrePref(s, genre) &&
-      s.semanticTags &&
-      (!genre.startsWith('~') || s.genres.some(g => genreMatchesUmbrella(g, genre)))
-    );
-    const vibe = new Set<string>(), mood = new Set<string>(), vocal = new Set<string>();
-    const venue = new Set<string>(), time = new Set<string>();
-    for (const s of matching) {
-      const t = s.semanticTags!;
-      t.vibeTags.forEach(x => vibe.add(x));
-      t.moodTags.forEach(x => mood.add(x));
-      vocal.add(t.vocalType);
-      t.venueTags.forEach(x => venue.add(x));
-      t.timeOfNightTags.forEach(x => time.add(x));
-    }
-    setPrefs(p => ({ ...p, genre, tagFilters: {
-      vibeTags: [...vibe],
-      moodTags: [...mood],
-      vocalTypes: [...vocal],
-      venueTags: [...venue],
-      timeOfNightTags: [...time],
-    }}));
+    setPrefs(p => {
+      const already = p.genres.includes(genre);
+      const newGenres = already ? p.genres.filter(g => g !== genre) : [...p.genres, genre];
+      if (newGenres.length === 0) return { ...p, genres: [], tagFilters: CLEARED_TAGS() };
+
+      // Collect semantic tags from songs matching ANY of the newly selected genres
+      const matching = library.filter(s =>
+        matchesGenrePrefs(s, newGenres) &&
+        s.semanticTags &&
+        newGenres.every(g => !g.startsWith('~') || s.genres.some(sg => genreMatchesUmbrella(sg, g)))
+      );
+      const vibe = new Set<string>(), mood = new Set<string>(), vocal = new Set<string>();
+      const venue = new Set<string>(), time = new Set<string>();
+      for (const s of matching) {
+        const t = s.semanticTags!;
+        t.vibeTags.forEach(x => vibe.add(x));
+        t.moodTags.forEach(x => mood.add(x));
+        vocal.add(t.vocalType);
+        t.venueTags.forEach(x => venue.add(x));
+        t.timeOfNightTags.forEach(x => time.add(x));
+      }
+      return { ...p, genres: newGenres, tagFilters: {
+        vibeTags: [...vibe],
+        moodTags: [...mood],
+        vocalTypes: [...vocal],
+        venueTags: [...venue],
+        timeOfNightTags: [...time],
+      }};
+    });
   }, [library]);
 
   const handleCurveChange = useCallback(

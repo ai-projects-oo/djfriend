@@ -1,5 +1,11 @@
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { execFile as execFileCb } from 'child_process';
+import { promisify } from 'util';
 import { createRequire } from 'module';
+
+const execFile = promisify(execFileCb);
 
 const require = createRequire(import.meta.url);
 
@@ -192,12 +198,14 @@ function fft(re: Float64Array, im: Float64Array): void {
 const FFT_SIZE = 2048;
 const NUM_FRAMES = 60;
 const ENERGY_BANDS = [
+  { name: 'bass',    lo: 60,   hi: 500  },  // kick + sub — essential for R&B/hip-hop energy
   { name: 'mid',     lo: 1000, hi: 4000 },
   { name: 'highMid', lo: 4000, hi: 8000 },
   { name: 'high',    lo: 8000, hi: 20000 },
 ] as const;
 
 interface MultiBandFeatures {
+  bassDb: number;
   midDb: number;
   highMidDb: number;
   highDb: number;
@@ -216,7 +224,7 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
   const hop = Math.max(FFT_SIZE, Math.floor((N - FFT_SIZE) / (NUM_FRAMES - 1)));
   const nFrames = Math.min(NUM_FRAMES, Math.floor((N - FFT_SIZE) / hop) + 1);
 
-  const bandPower: Record<string, number> = { mid: 0, highMid: 0, high: 0 };
+  const bandPower: Record<string, number> = { bass: 0, mid: 0, highMid: 0, high: 0 };
   let frameCount = 0;
 
   const re = new Float64Array(FFT_SIZE);
@@ -228,7 +236,7 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
     fft(re, im);
 
     let framePower = 0;
-    const frameBandPower: Record<string, number> = { mid: 0, highMid: 0, high: 0 };
+    const frameBandPower: Record<string, number> = { bass: 0, mid: 0, highMid: 0, high: 0 };
 
     for (let k = 1; k < halfFFT; k++) {
       const power = re[k] * re[k] + im[k] * im[k];
@@ -246,9 +254,10 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
   }
 
   // Band dBFS (absolute energy per band)
-  const midDb = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.mid / frameCount : 1e-18, 1e-18));
+  const bassDb    = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.bass    / frameCount : 1e-18, 1e-18));
+  const midDb     = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.mid     / frameCount : 1e-18, 1e-18));
   const highMidDb = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.highMid / frameCount : 1e-18, 1e-18));
-  const highDb = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.high / frameCount : 1e-18, 1e-18));
+  const highDb    = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.high    / frameCount : 1e-18, 1e-18));
 
   // Zero-crossing rate (full resolution for accuracy)
   let zc = 0;
@@ -257,7 +266,7 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
   }
   const zcRate = zc / N;
 
-  return { midDb, highMidDb, highDb, zcRate };
+  return { bassDb, midDb, highMidDb, highDb, zcRate };
 }
 
 /** Normalized RMS of a slice (same dBFS scale as overall energy). */
@@ -316,6 +325,23 @@ export function computeEnergyProfile(channelData: Float32Array, sampleRate: numb
   return { intro, body, peak, outro, variance, dropStrength };
 }
 
+// Fallback decoder for formats not supported by audio-decode (e.g. M4A/AAC).
+// Uses macOS's built-in afconvert to transcode to 16-bit mono 44100 Hz WAV,
+// then feeds the WAV through the normal audio-decode pipeline.
+async function afconvertDecode(
+  filePath: string,
+  decodeAudio: (buf: Buffer) => Promise<AudioBuffer>,
+): Promise<AudioBuffer> {
+  const tmp = path.join(os.tmpdir(), `djfriend-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`);
+  try {
+    await execFile('afconvert', ['-f', 'WAVE', '-d', 'LEI16@44100', '-c', '1', filePath, tmp]);
+    const wavBuf = fs.readFileSync(tmp);
+    return await decodeAudio(wavBuf);
+  } finally {
+    try { fs.unlinkSync(tmp); } catch { /* cleanup failure is non-fatal */ }
+  }
+}
+
 export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures | null> {
   try {
     const decodeAudio = (require('audio-decode') as { default: (buf: Buffer) => Promise<AudioBuffer> }).default;
@@ -332,9 +358,18 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
       if (rawComment && rawComment.length > 0) tagComment = rawComment[0].text ?? undefined;
     } catch { /* tag read failure is non-fatal */ }
 
-
     const fileBuffer = fs.readFileSync(filePath);
-    const audioBuffer = await decodeAudio(fileBuffer);
+    let audioBuffer: AudioBuffer;
+    try {
+      audioBuffer = await decodeAudio(fileBuffer);
+    } catch (decodeErr) {
+      const msg = decodeErr instanceof Error ? decodeErr.message : String(decodeErr);
+      if (msg.includes('Missing decoder for') || msg.includes('Cannot detect audio format')) {
+        audioBuffer = await afconvertDecode(filePath, decodeAudio);
+      } else {
+        throw decodeErr;
+      }
+    }
 
     // Essentia algorithms require mono 44100 Hz PCM
     let channelData = audioBuffer.getChannelData(0);
@@ -403,32 +438,33 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     }
     const pitchClass = best.pitchClass;
     const mode = best.mode;
-    // Energy v3 — Multi-band spectral analysis + OLS regression
+    // Energy v4 — Multi-band spectral analysis including bass band
     //
-    // Calibrated against 259 MixedInKey-tagged tracks via OLS regression.
-    // Uses FFT-based multi-band dB values (mid 1-4kHz, highMid 4-8kHz, high 8-20kHz)
-    // plus zero-crossing rate. The 4-8kHz band captures hi-hat/brightness that
-    // MIK energy is most sensitive to.
+    // v3 was calibrated on electronic music (MixedInKey corpus); the original
+    // formula rewarded hi-hat/brightness (4–20 kHz) and penalised bass-heavy
+    // genres like R&B and hip-hop that lack high-frequency content but are
+    // clearly energetic.  v4 adds a bass band (60–500 Hz, kick + sub) with a
+    // weight derived from the same OLS scaling as the other bands.  All means
+    // and stds for the original bands are unchanged; the bass band uses
+    // estimated values (mean=37.0, std=4.5) consistent with typical tracks.
+    // Library-wide percentile normalisation (normalizeLibraryEnergy) is applied
+    // after all tracks are scored, so only relative ordering matters here.
     //
-    // Performance: r=0.513, MAE=0.52 MIK units (n=259)
-    //   highMidDb  r=+0.479  ← strongest individual predictor
-    //   highDb     r=+0.477
-    //   midDb      r=+0.410
-    //   zcRate     r=+0.314
-    //
-    // OLS coefficients (intercept=0.5838, features centred on training means):
-    //   highMidDb  w=+0.0107  mean=28.454  std=5.648
-    //   highDb     w=+0.0209  mean=26.545  std=6.372
-    //   midDb      w=+0.0141  mean=32.203  std=4.492
-    //   zcRate     w=+0.0016  mean=0.064   std=0.029
+    // Coefficients (v3 preserved, bass added):
+    //   bassDb     w=+0.0130  mean=37.0   std=4.5   ← new: 60–500 Hz
+    //   highMidDb  w=+0.0107  mean=28.454 std=5.648
+    //   highDb     w=+0.0209  mean=26.545 std=6.372
+    //   midDb      w=+0.0141  mean=32.203 std=4.492
+    //   zcRate     w=+0.0016  mean=0.064  std=0.029
     const energyData = channelData.slice(0, analysisEnd);
     const mbFeats = extractMultiBandFeatures(energyData, 44100);
     const energy = Math.round(Math.max(0, Math.min(1,
       0.5838
+      + (mbFeats.bassDb    - 37.0  ) / 4.5   * 0.0130
       + (mbFeats.highMidDb - 28.454) / 5.648 * 0.0107
-      + (mbFeats.highDb - 26.545) / 6.372 * 0.0209
-      + (mbFeats.midDb - 32.203) / 4.492 * 0.0141
-      + (mbFeats.zcRate - 0.064) / 0.029 * 0.0016
+      + (mbFeats.highDb    - 26.545) / 6.372 * 0.0209
+      + (mbFeats.midDb     - 32.203) / 4.492 * 0.0141
+      + (mbFeats.zcRate    - 0.064 ) / 0.029 * 0.0016
     )) * 1000) / 1000;
 
     const energyProfile = computeEnergyProfile(channelData, 44100);

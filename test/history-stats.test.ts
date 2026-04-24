@@ -6,7 +6,7 @@ import type { HistoryEntry, DJPreferences, SetTrack, CurvePoint } from '../app/t
 const basePart: Omit<DJPreferences, 'venueType'> = {
   setDuration: 60,
   setPhase: 'Peak time',
-  genre: 'Any',
+  genres: [],
   tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] },
   dateFilter: { field: 'dateAdded' as const, preset: 'all' as const },
 }

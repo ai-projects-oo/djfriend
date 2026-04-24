@@ -40,7 +40,7 @@ const defaultPrefs: DJPreferences = {
   audienceAgeRange: 'Mixed',
   audiencePurpose: 'Dancing',
   occasionType: 'Peak time',
-  genre: 'Any',
+  genres: [],
 }
 
 const flatCurve: CurvePoint[] = [{ x: 0, y: 0.7 }, { x: 1, y: 0.7 }]

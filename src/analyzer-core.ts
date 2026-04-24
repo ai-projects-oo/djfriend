@@ -364,7 +364,7 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
       audioBuffer = await decodeAudio(fileBuffer);
     } catch (decodeErr) {
       const msg = decodeErr instanceof Error ? decodeErr.message : String(decodeErr);
-      if (msg.includes('Missing decoder for') || msg.includes('Cannot detect audio format')) {
+      if ((msg.includes('Missing decoder for') || msg.includes('Cannot detect audio format')) && process.platform === 'darwin') {
         audioBuffer = await afconvertDecode(filePath, decodeAudio);
       } else {
         throw decodeErr;

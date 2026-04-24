@@ -40,10 +40,14 @@ function resolveTrackPath(track: SetTrack, songsFolder: string): string {
 function toLocation(absolutePath: string): string {
   // Normalise Windows backslashes
   const forward = absolutePath.replace(/\\/g, '/');
-  // Encode each path segment individually (preserve slashes)
+  // Encode each path segment individually (preserve slashes).
+  // Windows drive letters (e.g. "C:") must keep their colon unencoded.
   const encoded = forward
     .split('/')
-    .map(seg => encodeURIComponent(seg).replace(/%2F/gi, '/'))
+    .map(seg => {
+      const e = encodeURIComponent(seg).replace(/%2F/gi, '/');
+      return /^[A-Za-z]%3A$/.test(e) ? e.replace('%3A', ':') : e;
+    })
     .join('/');
   // macOS/Linux: /Users/... → file://localhost/Users/...
   // Windows:     C:/...    → file://localhost/C:/...

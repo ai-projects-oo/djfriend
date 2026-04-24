@@ -1193,6 +1193,52 @@ function AppInner() {
                         </span>
                       )}
                     </div>
+
+                    {/* BPM range */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                          BPM Range
+                        </span>
+                        {(prefs.bpmMin != null || prefs.bpmMax != null) && (
+                          <button
+                            type="button"
+                            onClick={() => setPrefs(p => ({ ...p, bpmMin: undefined, bpmMax: undefined }))}
+                            className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
+                          >
+                            clear
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={40}
+                          max={250}
+                          placeholder="Min"
+                          value={prefs.bpmMin ?? ""}
+                          onChange={e => {
+                            const v = e.target.value === "" ? undefined : Number(e.target.value);
+                            setPrefs(p => ({ ...p, bpmMin: v }));
+                          }}
+                          className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
+                        />
+                        <span className="text-[#4b5568] text-xs flex-shrink-0">–</span>
+                        <input
+                          type="number"
+                          min={40}
+                          max={250}
+                          placeholder="Max"
+                          value={prefs.bpmMax ?? ""}
+                          onChange={e => {
+                            const v = e.target.value === "" ? undefined : Number(e.target.value);
+                            setPrefs(p => ({ ...p, bpmMax: v }));
+                          }}
+                          className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
+                        />
+                      </div>
+                    </div>
+
                     {/* Primary CTA — Generate */}
                     <button
                       onClick={() => {

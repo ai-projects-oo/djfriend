@@ -342,7 +342,7 @@ async function afconvertDecode(
   }
 }
 
-export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures | null> {
+export async function analyzeAudio(filePath: string, bpmHint?: { min: number; max: number }): Promise<LocalAudioFeatures | null> {
   try {
     const decodeAudio = (require('audio-decode') as { default: (buf: Buffer) => Promise<AudioBuffer> }).default;
     // Read BPM tag before audio analysis — used to disambiguate ×2/÷2 detection errors
@@ -388,11 +388,21 @@ export async function analyzeAudio(filePath: string): Promise<LocalAudioFeatures
     const e = getEssentia();
 
     // BPM — trust ID3 tag if present and in a valid DJ range (60–200).
-    // For untagged tracks, run the internal onset-autocorrelation detector
-    // then apply tag-based octave correction as a final sanity check.
-    const bpm = (tagBpm && tagBpm >= 60 && tagBpm <= 200)
+    // For untagged tracks, run the internal onset-autocorrelation detector,
+    // then apply tag-based octave correction. If a BPM range hint is provided
+    // (e.g. derived from the playlist genre), use it to resolve remaining
+    // half-time / double-time ambiguity for tracks without a BPM tag.
+    let bpm = (tagBpm && tagBpm >= 60 && tagBpm <= 200)
       ? Math.round(tagBpm * 10) / 10
       : correctBpmWithTag(detectBpm(grooveData.slice(0, 30 * 44100), 44100), tagBpm);
+    if (bpmHint && !tagBpm) {
+      if (bpm < bpmHint.min || bpm > bpmHint.max) {
+        const halved  = Math.round((bpm / 2)  * 10) / 10;
+        const doubled = Math.round((bpm * 2)  * 10) / 10;
+        if (halved  >= bpmHint.min && halved  <= bpmHint.max) bpm = halved;
+        else if (doubled >= bpmHint.min && doubled <= bpmHint.max) bpm = doubled;
+      }
+    }
 
     // Key consensus — 5 segments spread across the first 75 % of the track × 4 profiles.
     // Proportional spacing means we hit the main drop, verse and chorus regardless of

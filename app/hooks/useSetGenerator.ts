@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useMemo } from "react";
 import type { Song, SetTrack, DJPreferences, CurvePoint, ScoringWeights, HistoryEntry, TagFilters } from "../types";
 import { DEFAULT_PREFS, matchesGenrePref, matchesGenrePrefs, genreMatchesUmbrella, TAG_GROUPS, BEATPORT_UMBRELLAS } from "../lib/genreUtils";
+import { suggestBpmRange } from "../lib/bpmRanges";
 import { clamp } from "../lib/genreUtils";
 import { DEFAULT_CURVE } from "../components/EnergyCurveEditor";
 import { generateSet, getAffinityKey, genreAffinityBonus, semanticAffinityBonus } from "../lib/setGenerator";
@@ -175,13 +176,19 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   const selectGenre = useCallback((genre: string) => {
     if (genre === 'Any') {
-      setPrefs(p => ({ ...p, genres: [], tagFilters: CLEARED_TAGS() }));
+      setPrefs(p => ({ ...p, genres: [], bpmMin: undefined, bpmMax: undefined, tagFilters: CLEARED_TAGS() }));
       return;
     }
     setPrefs(p => {
       const already = p.genres.includes(genre);
       const newGenres = already ? p.genres.filter(g => g !== genre) : [...p.genres, genre];
-      if (newGenres.length === 0) return { ...p, genres: [], tagFilters: CLEARED_TAGS() };
+      if (newGenres.length === 0) return { ...p, genres: [], bpmMin: undefined, bpmMax: undefined, tagFilters: CLEARED_TAGS() };
+
+      // Suggest BPM range from the genres present in matching songs
+      const matchingGenreStrings = library
+        .filter(s => matchesGenrePrefs(s, newGenres))
+        .flatMap(s => s.genres);
+      const suggested = suggestBpmRange(matchingGenreStrings);
 
       // Collect semantic tags from songs matching ANY of the newly selected genres
       const matching = library.filter(s =>
@@ -199,13 +206,20 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
         t.venueTags.forEach(x => venue.add(x));
         t.timeOfNightTags.forEach(x => time.add(x));
       }
-      return { ...p, genres: newGenres, tagFilters: {
-        vibeTags: [...vibe],
-        moodTags: [...mood],
-        vocalTypes: [...vocal],
-        venueTags: [...venue],
-        timeOfNightTags: [...time],
-      }};
+      return {
+        ...p,
+        genres: newGenres,
+        ...(suggested && p.bpmMin == null && p.bpmMax == null
+          ? { bpmMin: suggested.min, bpmMax: suggested.max }
+          : {}),
+        tagFilters: {
+          vibeTags: [...vibe],
+          moodTags: [...mood],
+          vocalTypes: [...vocal],
+          venueTags: [...venue],
+          timeOfNightTags: [...time],
+        },
+      };
     });
   }, [library]);
 

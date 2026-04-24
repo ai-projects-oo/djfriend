@@ -120,6 +120,14 @@ export function generateSet(
   const genreFilteredSongs = songs.filter((song) => matchesGenrePrefs(song, prefs.genres));
   let candidatePool = genreFilteredSongs.length > 0 ? genreFilteredSongs : songs;
 
+  // BPM range hard filter — applied after genre filter, before date filter
+  if (prefs.bpmMin != null || prefs.bpmMax != null) {
+    const lo = prefs.bpmMin ?? 0;
+    const hi = prefs.bpmMax ?? Infinity;
+    const bpmFiltered = candidatePool.filter(s => s.bpm >= lo && s.bpm <= hi);
+    if (bpmFiltered.length > 0) candidatePool = bpmFiltered;
+  }
+
   // Date filter — works on dateAdded (Unix seconds) or year (ID3 release year)
   const df = prefs.dateFilter ?? { field: 'dateAdded' as const, preset: 'all' as const };
   if (df.preset !== 'all') {

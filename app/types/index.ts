@@ -85,6 +85,8 @@ export interface DJPreferences {
   venueType: VenueType;
   setPhase: SetPhase;
   genres: string[]; // empty = "Any" (no genre filter)
+  bpmMin?: number;  // optional hard floor for candidate pool
+  bpmMax?: number;  // optional hard ceiling for candidate pool
   tagFilters: TagFilters;
   dateFilter: DateFilter;
 }

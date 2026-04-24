@@ -68,15 +68,15 @@ function getWorkers(): Worker[] | null {
   }
 }
 
-export async function analyzeAudio(filePath: string): Promise<Result> {
+export async function analyzeAudio(filePath: string, bpmHint?: { min: number; max: number }): Promise<Result> {
   const workers = getWorkers();
-  if (!workers || workers.length === 0) return analyzeAudioDirect(filePath); // fallback
+  if (!workers || workers.length === 0) return analyzeAudioDirect(filePath, bpmHint); // fallback
   const id = _nextId++;
   const worker = workers[_nextWorker % workers.length];
   _nextWorker++;
   return new Promise<Result>(resolve => {
     _pending.set(id, resolve);
     _pendingOwner.set(id, worker);
-    worker.postMessage({ id, filePath });
+    worker.postMessage({ id, filePath, bpmHint });
   });
 }

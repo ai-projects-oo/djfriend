@@ -8,10 +8,10 @@ import { analyzeAudio } from './analyzer-core.js';
 // Each link catches its own errors so one failed track can't poison the chain.
 let _chain: Promise<void> = Promise.resolve();
 
-parentPort!.on('message', ({ id, filePath }: { id: number; filePath: string }) => {
+parentPort!.on('message', ({ id, filePath, bpmHint }: { id: number; filePath: string; bpmHint?: { min: number; max: number } }) => {
   _chain = _chain.then(async () => {
     try {
-      const result = await analyzeAudio(filePath);
+      const result = await analyzeAudio(filePath, bpmHint);
       parentPort!.postMessage({ id, result });
     } catch (err) {
       console.error(`[analyzer-worker] analyzeAudio threw for "${filePath}":`, err instanceof Error ? err.message : err);

@@ -336,6 +336,9 @@ export async function enrichTracks(
   const toEnrich = Object.entries(resultsMap).filter(([, song]) => !song.semanticTags)
   if (toEnrich.length === 0) return
 
+  // Emit the real total up-front so the UI can show 0/N instead of indeterminate
+  onProgress?.(0, toEnrich.length)
+
   const limiter = new RateLimiter(1000)
   let completed = 0
 

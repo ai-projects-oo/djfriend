@@ -3,7 +3,19 @@
 import { parentPort } from 'worker_threads';
 import { analyzeAudio } from './analyzer-core.js';
 
-parentPort!.on('message', async ({ filePath }: { filePath: string }) => {
-  const result = await analyzeAudio(filePath);
-  parentPort!.postMessage(result);
+// Serialize message processing — the audio decoder keeps shared singleton state
+// (decoder.reset() then decoder.decode()) that races when handlers interleave.
+// Each link catches its own errors so one failed track can't poison the chain.
+let _chain: Promise<void> = Promise.resolve();
+
+parentPort!.on('message', ({ id, filePath }: { id: number; filePath: string }) => {
+  _chain = _chain.then(async () => {
+    try {
+      const result = await analyzeAudio(filePath);
+      parentPort!.postMessage({ id, result });
+    } catch (err) {
+      console.error(`[analyzer-worker] analyzeAudio threw for "${filePath}":`, err instanceof Error ? err.message : err);
+      parentPort!.postMessage({ id, result: null });
+    }
+  });
 });

@@ -83,6 +83,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [hasAiKey, setHasAiKey] = useState(false)
   const [savingAi, setSavingAi] = useState(false)
   const [aiSaved, setAiSaved] = useState(false)
+  const [useAllCores, setUseAllCores] = useState(false)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -109,13 +110,14 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasAIKey: boolean; hasSecret: boolean; aiProvider?: string }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasAIKey: boolean; hasSecret: boolean; aiProvider?: string; useAllCores?: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
         setRekordboxFolder(d.rekordboxFolder ?? '')
         setMusicFolderStatus('idle')
         setRekordboxFolderStatus('idle')
         setHasAiKey(d.hasAIKey ?? false)
         if (d.aiProvider) setAiProvider(d.aiProvider)
+        setUseAllCores(d.useAllCores === true)
         setHasSpotifySecret(d.hasSecret ?? false)
       })
       .catch(() => {})
@@ -128,7 +130,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim() }),
+        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), useAllCores }),
       })
       if (!r.ok) throw new Error('Save failed')
       onSaved()
@@ -348,6 +350,25 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               {savingSpotify ? 'Connecting…' : 'Connect Spotify'}
             </button>
           )}
+        </div>
+
+        {/* ── Performance ───────────────────────────────────────────── */}
+        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Performance</h3>
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={useAllCores}
+              onChange={(e) => setUseAllCores(e.target.checked)}
+              className="mt-0.5 w-4 h-4 cursor-pointer accent-[#7c3aed]"
+            />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm text-[#e2e8f0]">Use all CPU cores for analysis</span>
+              <span className="text-[11px] text-[#64748b]">
+                Spawns one audio worker per core (like Rekordbox). Much faster on large libraries but uses more CPU. Requires app restart to take effect.
+              </span>
+            </div>
+          </label>
         </div>
 
         {/* ── Danger Zone (both platforms) ─────────────────────────── */}

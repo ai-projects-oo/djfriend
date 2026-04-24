@@ -696,43 +696,56 @@ function AppInner() {
             {analysisQueue.length > 0 && (
               <div className="hidden sm:flex flex-col gap-1">
                 {analysisQueue.slice(0, 3).map((item) => {
-                  const isAI =
-                    item.status === "analyzing" && enrichmentStatus !== null;
-                  const pct = isAI
-                    ? enrichmentStatus!.total > 0
-                      ? Math.round(
-                          (enrichmentStatus!.completed /
-                            enrichmentStatus!.total) *
-                            100,
-                        )
-                      : 100
-                    : item.total > 0
-                      ? Math.min(
+                  const aiActive =
+                    item.status === "analyzing" &&
+                    enrichmentStatus !== null &&
+                    enrichmentStatus.total > 0;
+                  const aiPct = aiActive
+                    ? Math.round(
+                        (enrichmentStatus!.completed /
+                          enrichmentStatus!.total) *
                           100,
-                          Math.round((item.completed / item.total) * 100),
-                        )
-                      : 0;
+                      )
+                    : 0;
+                  const trackPct = item.total > 0
+                    ? Math.min(
+                        100,
+                        Math.round((item.completed / item.total) * 100),
+                      )
+                    : 0;
                   return (
                     <div
                       key={item.playlistName}
                       className="flex items-center gap-1.5"
                     >
+                      {aiActive && (
+                        <div
+                          className="flex items-center gap-1 flex-shrink-0"
+                          title={`AI ${enrichmentStatus!.completed}/${enrichmentStatus!.total}`}
+                        >
+                          <span className="text-[9px] uppercase tracking-wider text-[#22c55e] font-semibold">
+                            AI
+                          </span>
+                          <div className="w-10 h-1 rounded-full bg-[#1f2937] overflow-hidden">
+                            <div
+                              className="h-full bg-[#22c55e] transition-all"
+                              style={{ width: `${aiPct}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                       <div className="w-24 h-1.5 rounded-full bg-[#1f2937] overflow-hidden flex-shrink-0">
                         <div
-                          className={`h-full transition-all ${isAI ? "bg-[#22c55e]" : item.status === "analyzing" ? "bg-[#7c3aed]" : "bg-[#334155]"}`}
-                          style={{ width: `${pct}%` }}
+                          className={`h-full transition-all ${item.status === "analyzing" ? "bg-[#7c3aed]" : "bg-[#334155]"}`}
+                          style={{ width: `${trackPct}%` }}
                         />
                       </div>
                       <span
-                        className={`text-[10px] tabular-nums truncate max-w-[80px] ${isAI ? "text-[#22c55e]" : item.status === "analyzing" ? "text-[#94a3b8]" : "text-[#475569]"}`}
+                        className={`text-[10px] tabular-nums truncate max-w-[80px] ${item.status === "analyzing" ? "text-[#94a3b8]" : "text-[#475569]"}`}
                       >
-                        {isAI
-                          ? enrichmentStatus!.total > 0
-                            ? `AI ${enrichmentStatus!.completed}/${enrichmentStatus!.total}`
-                            : "AI…"
-                          : item.status === "queued"
-                            ? item.playlistName
-                            : `${item.completed}/${item.total}`}
+                        {item.status === "queued"
+                          ? item.playlistName
+                          : `${item.completed}/${item.total}`}
                       </span>
                       <button
                         onClick={() => cancelQueueItem(item.playlistName)}

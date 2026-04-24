@@ -11,7 +11,7 @@ import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
-import { enrichTracks, analyzeTracksWithAI, planSet } from './ai.js'
+import { enrichTracks, enrichTrackBatch, ENRICHMENT_BATCH_SIZE, analyzeTracksWithAI, planSet } from './ai.js'
 import type { SemanticTags, AIConfig } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -211,145 +211,286 @@ async function parseUploadedFolder(req: NodeJS.ReadableStream & { headers: Recor
   return { tempRoot, rootPath, rootLabel }
 }
 
-async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (e: Record<string, unknown>) => void) {
-  const { spotifyClientId: SPOTIFY_CLIENT_ID, spotifyClientSecret: SPOTIFY_CLIENT_SECRET } = readSettings()
-  const hasSpotify = !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET)
-  const audioFolders = collectAudioDirs(rootPath)
-  const folderTracks = new Map<string, Awaited<ReturnType<typeof scanFolder>>>()
-  let total = 0
-  for (const folder of audioFolders) {
-    const tracks = await scanFolder(folder)
-    if (tracks.length > 0) { folderTracks.set(folder, tracks); total += tracks.length }
-  }
-  if (total === 0) throw new Error('No audio files found in selected folder.')
-  writeEvent({ type: 'start', total })
-  let token: string | null = null
-  if (hasSpotify) {
-    try { token = await authenticate(SPOTIFY_CLIENT_ID!, SPOTIFY_CLIENT_SECRET!) } catch { /* Spotify auth failed — continue without it */ }
-  }
-  const existing = readExistingResults(rootPath)
-  let completed = 0
-  const resultsJson: Record<string, AppSong> = { ...existing }
-  for (const [folder, tracks] of folderTracks.entries()) {
-    const relativeToRoot = path.relative(rootPath, folder).replace(/\\/g, '/')
-    const folderKey = relativeToRoot ? `${rootLabel}/${relativeToRoot}` : rootLabel
-    for (const track of tracks) {
-      const relativeFilePath = path.relative(rootPath, track.filePath).replace(/\\/g, '/')
-      completed += 1
-      writeEvent({ type: 'progress', completed, total, folder: folderKey, file: track.file })
-      await new Promise<void>(r => setImmediate(r)) // yield: flush progress event before heavy work
-      const cached = existing[relativeFilePath]
-      if (cached) {
-        if (cached.duration == null) { try { const meta = await mm.parseFile(track.filePath, { duration: true }); if (meta.format.duration != null) cached.duration = meta.format.duration } catch { /* ignore */ } }
-        resultsJson[relativeFilePath] = cached; continue
-      }
-      try {
-        const match = token ? await searchTrack(track.artist, track.title, token) : null
-        const [localFeatures, genres] = await Promise.all([analyzeAudio(track.filePath), track.localGenres.length === 0 && match?.artistId && token ? getArtistGenres(match.artistId, token) : Promise.resolve([])])
-        let features = localFeatures
-        // Fallback: if local audio decode failed (e.g. native module issue on Windows), use Spotify audio features
-        if (!features && match?.spotifyId && token) {
-          const sf = await getAudioFeatures(match.spotifyId, token)
-          if (sf) features = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
-        }
-        if (!features) continue
-        const keyInfo = toCamelot(features.pitchClass, features.mode)
-        if (!keyInfo) continue
-        const finalGenres = track.localGenres.length > 0 ? track.localGenres : genres
-        resultsJson[relativeFilePath] = { filePath: relativeFilePath, file: relativeFilePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, finalGenres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres: finalGenres, ...(track.localGenres.length === 0 && genres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
-      } catch { /* skip */ }
-    }
-    writeEvent({ type: 'folder_done', folder: folderKey })
-  }
-  const aiConfig = getAIConfig()
-  if (aiConfig) {
-    writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
-    try {
-      await enrichTracks(resultsJson, aiConfig, (completed, total) => {
-        writeEvent({ type: 'enrich_progress', completed, total })
-      })
-    } catch { /* enrichment is optional — don't fail the whole analysis */ }
-  }
-  normalizeLibraryEnergy(resultsJson)
-  fs.writeFileSync(path.join(rootPath, 'results.json'), JSON.stringify(resultsJson, null, 2), 'utf-8')
-  const songs = Object.values(resultsJson)
-  return { total, analyzed: songs.length, songs, resultsJson }
+// ─── Shared audio-analysis pipeline ───────────────────────────────────────────
+// Handles: parallel audio decode (per-core worker pool) + concurrent AI drainer
+// + Spotify lookups + cache fast-path + error logging + failure counts.
+// Used by /api/analyze-folder, /api/analyze-apple-music, /api/analyze-paths.
+
+export interface PipelineTrack {
+  filePath: string
+  file: string              // display name
+  cacheKey: string          // key into results.json
+  artist: string | null     // may be null — Spotify search will use title only
+  title: string
+  duration?: number
+  dateAdded?: number
+  localGenres?: string[]    // if caller already read ID3 tags
 }
 
-async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Record<string, unknown>) => void) {
+export interface PipelineOptions {
+  tracks: PipelineTrack[]
+  existing: Record<string, AppSong>
+  resultsPath: string
+  label: string
+  folderFor?: (track: PipelineTrack) => string   // for progress events on multi-folder scans
+}
+
+export interface PipelineResult {
+  total: number
+  analyzed: number
+  songs: AppSong[]
+  resultsJson: Record<string, AppSong>
+  failures: { decode: number; key: number; exception: number }
+}
+
+const AUDIO_CONCURRENCY = 3  // main-thread concurrency — audio workers own the real parallelism
+
+async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<string, unknown>) => void): Promise<PipelineResult> {
+  const { tracks, existing, resultsPath, label, folderFor } = opts
+  const t0 = Date.now()
   const { spotifyClientId: SPOTIFY_CLIENT_ID, spotifyClientSecret: SPOTIFY_CLIENT_SECRET } = readSettings()
   const hasSpotify = !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET)
-  const tracks = await listAppleMusicTracks(playlistName)
-  if (tracks.length === 0) throw new Error('No Apple Music local file tracks were found.')
-  writeEvent({ type: 'start', total: tracks.length })
   let token: string | null = null
   if (hasSpotify) {
-    try { token = await authenticate(SPOTIFY_CLIENT_ID!, SPOTIFY_CLIENT_SECRET!) } catch { /* continue without Spotify */ }
+    try { token = await authenticate(SPOTIFY_CLIENT_ID!, SPOTIFY_CLIENT_SECRET!) }
+    catch (err) { console.warn(`[analyzer] Spotify auth failed — continuing without Spotify lookups:`, err instanceof Error ? err.message : err) }
   }
-  const existing = readExistingResultsFile(APPLE_RESULTS_PATH)
+
   const resultsJson: Record<string, AppSong> = { ...existing }
+  const cachedCount = tracks.filter(t => !!existing[t.cacheKey]).length
+  console.log(`[analyzer] "${label}" — ${tracks.length} tracks (${cachedCount} cached, ${tracks.length - cachedCount} to decode · spotify=${hasSpotify ? (token ? 'on' : 'auth-failed') : 'off'})`)
+
+  const failures = { decode: 0, key: 0, exception: 0 }
   let completed = 0
   let nextIdx = 0
-  const CONCURRENCY = 3
 
-  async function processTrack(track: typeof tracks[number]): Promise<void> {
-    const key = normalizePathKey(track.filePath)
+  async function processTrack(t: PipelineTrack): Promise<void> {
+    const key = t.cacheKey
     const cached = existing[key]
     if (cached) {
-      if (cached.duration == null && track.duration != null) cached.duration = track.duration
-      else if (cached.duration == null) { try { const meta = await mm.parseFile(track.filePath, { duration: true }); if (meta.format.duration != null) cached.duration = meta.format.duration } catch { /* ignore */ } }
-      if (track.dateAdded != null && cached.dateAdded == null) cached.dateAdded = track.dateAdded
+      // Merge optional fields from fresh track metadata into cached entry
+      if (cached.duration == null && t.duration != null) cached.duration = t.duration
+      else if (cached.duration == null) { try { const meta = await mm.parseFile(t.filePath, { duration: true }); if (meta.format.duration != null) cached.duration = meta.format.duration } catch { /* tag read non-fatal */ } }
+      if (t.dateAdded != null && cached.dateAdded == null) cached.dateAdded = t.dateAdded
       resultsJson[key] = cached
       return
     }
+    const trackLabel = `${t.artist ?? '?'} — ${t.title}`
     try {
-      let localGenres: string[] = []
-      try { const meta = await mm.parseFile(track.filePath, { duration: false }); localGenres = meta.common.genre ?? [] } catch { /* ignore */ }
-      const match = token ? await searchTrack(track.artist, track.title, token) : null
-      const [localFeatures, spotifyGenres] = await Promise.all([analyzeAudio(track.filePath), localGenres.length === 0 && match?.artistId && token ? getArtistGenres(match.artistId, token) : Promise.resolve([])])
+      let localGenres: string[] = t.localGenres ?? []
+      if (localGenres.length === 0) {
+        try { const meta = await mm.parseFile(t.filePath, { duration: false }); localGenres = meta.common.genre ?? [] } catch { /* ignore */ }
+      }
+      const match = token ? await searchTrack(t.artist, t.title, token).catch(err => {
+        console.warn(`[analyzer] Spotify search failed for "${trackLabel}":`, err instanceof Error ? err.message : err)
+        return null
+      }) : null
+      const [localFeatures, spotifyGenres] = await Promise.all([
+        analyzeAudio(t.filePath).catch(err => {
+          console.warn(`[analyzer] audio decode failed for "${trackLabel}":`, err instanceof Error ? err.message : err)
+          return null
+        }),
+        localGenres.length === 0 && match?.artistId && token
+          ? getArtistGenres(match.artistId, token).catch(() => [])
+          : Promise.resolve([])
+      ])
       const genres = localGenres.length > 0 ? localGenres : spotifyGenres
 
       let features = localFeatures
       if (!features && match?.spotifyId && token) {
-        const sf = await getAudioFeatures(match.spotifyId, token)
-        if (sf) features = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
+        try {
+          const sf = await getAudioFeatures(match.spotifyId, token)
+          if (sf) features = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
+        } catch (err) {
+          console.warn(`[analyzer] Spotify audio-features fallback failed for "${trackLabel}":`, err instanceof Error ? err.message : err)
+        }
       }
-      if (!features) return
-
+      if (!features) {
+        failures.decode++
+        console.warn(`[analyzer] skipped "${trackLabel}" — no usable audio features`)
+        return
+      }
       const keyInfo = toCamelot(features.pitchClass, features.mode)
-      if (!keyInfo) return
-      resultsJson[key] = { filePath: track.filePath, file: track.filePath, artist: track.artist ?? 'Unknown artist', title: track.title, ...(track.duration != null ? { duration: track.duration } : {}), ...(track.dateAdded != null ? { dateAdded: track.dateAdded } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(features.bpm, features.energy, genres, features.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(features.year != null ? { year: features.year } : {}), ...(features.comment ? { comment: features.comment } : {}), ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}) }
-    } catch { /* skip */ }
+      if (!keyInfo) {
+        failures.key++
+        console.warn(`[analyzer] skipped "${trackLabel}" — could not resolve Camelot key (pitchClass=${features.pitchClass}, mode=${features.mode})`)
+        return
+      }
+      resultsJson[key] = {
+        filePath: t.filePath, file: t.file,
+        artist: t.artist ?? 'Unknown artist', title: t.title,
+        ...(t.duration != null ? { duration: t.duration } : {}),
+        ...(t.dateAdded != null ? { dateAdded: t.dateAdded } : {}),
+        spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle,
+        bpm: normalizeBpm(features.bpm, features.energy, genres, features.tagBpm),
+        key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy,
+        genres,
+        ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}),
+        ...(features.year != null ? { year: features.year } : {}),
+        ...(features.comment ? { comment: features.comment } : {}),
+        ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}),
+      }
+    } catch (err) {
+      failures.exception++
+      console.error(`[analyzer] unexpected error on "${trackLabel}":`, err instanceof Error ? err.stack ?? err.message : err)
+    }
   }
 
   async function worker(): Promise<void> {
     while (true) {
       const idx = nextIdx++
       if (idx >= tracks.length) return
-      const track = tracks[idx]
+      const t = tracks[idx]
       completed += 1
-      writeEvent({ type: 'progress', completed, total: tracks.length, folder: 'Apple Music', file: track.file })
-      await processTrack(track)
+      writeEvent({ type: 'progress', completed, total: tracks.length, folder: folderFor ? folderFor(t) : label, file: t.file })
+      await processTrack(t)
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tracks.length) }, () => worker()))
   const aiConfig = getAIConfig()
-  if (aiConfig) {
+
+  const audioPromise = Promise.all(
+    Array.from({ length: Math.min(AUDIO_CONCURRENCY, tracks.length) }, () => worker())
+  ).then(() => { /* no return */ })
+
+  // AI drainer — runs concurrently with audio.
+  const enrichPromise = aiConfig ? (async () => {
     writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
-    try {
-      await enrichTracks(resultsJson, aiConfig, (completed, total) => {
-        writeEvent({ type: 'enrich_progress', completed, total })
-      })
-    } catch { /* enrichment is optional — don't fail the whole analysis */ }
-  }
+    console.log(`[enrich] drainer started (provider=${aiConfig.provider}, batch=${ENRICHMENT_BATCH_SIZE})`)
+    const enrichedKeys = new Set<string>(Object.keys(resultsJson).filter(k => resultsJson[k].semanticTags))
+    let totalEnriched = 0
+    let batchNum = 0
+    let audioDone = false
+    audioPromise.then(() => { audioDone = true })
+
+    const isAudioReady = (k: string): boolean => {
+      const s = resultsJson[k]
+      return !!s && !!s.camelot && typeof s.bpm === 'number'
+    }
+
+    while (true) {
+      const pending = Object.keys(resultsJson).filter(k => !enrichedKeys.has(k) && !resultsJson[k].semanticTags && isAudioReady(k))
+      if (pending.length === 0) {
+        if (audioDone) break
+        await new Promise<void>(r => setTimeout(r, 300))
+        continue
+      }
+      if (pending.length < ENRICHMENT_BATCH_SIZE && !audioDone) {
+        await new Promise<void>(r => setTimeout(r, 400))
+        continue
+      }
+      const batchKeys = pending.slice(0, ENRICHMENT_BATCH_SIZE)
+      batchNum++
+      const batchT0 = Date.now()
+      console.log(`[enrich] batch ${batchNum} sending (${batchKeys.length} tracks, audioDone=${audioDone})`)
+      try {
+        const tags = await Promise.race([
+          enrichTrackBatch(
+            batchKeys.map(k => {
+              const s = resultsJson[k]
+              return { file: k, artist: s.artist, title: s.title, bpm: s.bpm, key: s.key, energy: s.energy, genres: s.genres }
+            }),
+            aiConfig
+          ),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('enrichTrackBatch timed out after 30s')), 30000)),
+        ])
+        let tagged = 0
+        for (const k of batchKeys) {
+          const tg = tags.get(k)
+          if (tg) { resultsJson[k].semanticTags = tg; tagged++ }
+          enrichedKeys.add(k)
+          totalEnriched++
+        }
+        const remaining = Object.keys(resultsJson).filter(k => !enrichedKeys.has(k) && isAudioReady(k)).length
+        const total = totalEnriched + remaining + (audioDone ? 0 : Math.max(0, tracks.length - Object.keys(resultsJson).length))
+        console.log(`[enrich] batch ${batchNum}: ${tagged}/${batchKeys.length} tagged in ${Date.now() - batchT0}ms (total ${totalEnriched}/${Math.max(total, totalEnriched)})`)
+        writeEvent({ type: 'enrich_progress', completed: totalEnriched, total: Math.max(total, totalEnriched) })
+      } catch (err) {
+        console.error(`[enrich] batch ${batchNum} failed:`, err instanceof Error ? err.message : err)
+        for (const k of batchKeys) enrichedKeys.add(k)
+      }
+    }
+    console.log(`[enrich] drainer done — ${totalEnriched} tracks enriched across ${batchNum} batch(es)`)
+  })() : Promise.resolve()
+
+  await Promise.all([audioPromise, enrichPromise])
+  if (!aiConfig) console.warn('[analyzer] no AI config — skipping enrichment')
+
   normalizeLibraryEnergy(resultsJson)
-  fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
-  fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
+  fs.mkdirSync(path.dirname(resultsPath), { recursive: true })
+  fs.writeFileSync(resultsPath, JSON.stringify(resultsJson, null, 2), 'utf-8')
   const songs = Object.values(resultsJson)
-  // Return the file paths that belong to this specific playlist (not the whole library)
-  const playlistFiles = tracks.map(t => t.filePath)
-  return { total: tracks.length, analyzed: songs.length, songs, resultsJson, playlistFiles }
+  const enrichedCount = songs.filter(s => s.semanticTags).length
+  const failureSummary = failures.decode + failures.key + failures.exception > 0
+    ? ` · failures: ${failures.decode} decode, ${failures.key} key, ${failures.exception} unexpected`
+    : ''
+  console.log(`[analyzer] "${label}" complete in ${((Date.now() - t0) / 1000).toFixed(1)}s — ${songs.length} tracks (${enrichedCount} AI-enriched)${failureSummary}`)
+  return { total: tracks.length, analyzed: songs.length, songs, resultsJson, failures }
+}
+
+async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (e: Record<string, unknown>) => void) {
+  const audioFolders = collectAudioDirs(rootPath)
+  const tracks: PipelineTrack[] = []
+  const folderByPath = new Map<string, string>()
+  for (const folder of audioFolders) {
+    const scanned = await scanFolder(folder)
+    const relativeToRoot = path.relative(rootPath, folder).replace(/\\/g, '/')
+    const folderKey = relativeToRoot ? `${rootLabel}/${relativeToRoot}` : rootLabel
+    for (const t of scanned) {
+      const relativeFilePath = path.relative(rootPath, t.filePath).replace(/\\/g, '/')
+      folderByPath.set(t.filePath, folderKey)
+      tracks.push({
+        filePath: t.filePath,
+        file: relativeFilePath,
+        cacheKey: relativeFilePath,
+        artist: t.artist,
+        title: t.title,
+        ...(t.duration != null ? { duration: t.duration } : {}),
+        localGenres: t.localGenres,
+      })
+    }
+  }
+  if (tracks.length === 0) throw new Error('No audio files found in selected folder.')
+  writeEvent({ type: 'start', total: tracks.length })
+  const existing = readExistingResults(rootPath)
+  const result = await runAudioPipeline({
+    tracks,
+    existing,
+    resultsPath: path.join(rootPath, 'results.json'),
+    label: rootLabel,
+    folderFor: t => folderByPath.get(t.filePath) ?? rootLabel,
+  }, writeEvent)
+  return { total: result.total, analyzed: result.analyzed, songs: result.songs, resultsJson: result.resultsJson }
+}
+
+async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Record<string, unknown>) => void) {
+  const amTracks = await listAppleMusicTracks(playlistName)
+  if (amTracks.length === 0) throw new Error('No Apple Music local file tracks were found.')
+  writeEvent({ type: 'start', total: amTracks.length })
+  const tracks: PipelineTrack[] = amTracks.map(t => ({
+    filePath: t.filePath,
+    file: t.file,
+    cacheKey: normalizePathKey(t.filePath),
+    artist: t.artist,
+    title: t.title,
+    ...(t.duration != null ? { duration: t.duration } : {}),
+    ...(t.dateAdded != null ? { dateAdded: t.dateAdded } : {}),
+  }))
+  // Apple Music stores the absolute filePath as `file`, not the cache key — match legacy shape
+  const existing = readExistingResultsFile(APPLE_RESULTS_PATH)
+  const result = await runAudioPipeline({
+    tracks,
+    existing,
+    resultsPath: APPLE_RESULTS_PATH,
+    label: `playlist "${playlistName}"`,
+  }, writeEvent)
+  // Apple Music legacy: `file` field stored the absolute filePath, overwrite for consistency
+  for (const t of amTracks) {
+    const key = normalizePathKey(t.filePath)
+    if (result.resultsJson[key]) result.resultsJson[key].file = t.filePath
+  }
+  const playlistFiles = amTracks.map(t => t.filePath)
+  return { total: result.total, analyzed: result.analyzed, songs: result.songs, resultsJson: result.resultsJson, playlistFiles }
 }
 
 export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: string | null): void {
@@ -400,7 +541,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'GET') {
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', hasAIKey: !!(s.aiApiKey || s.groqApiKey), aiProvider: s.aiProvider ?? (s.groqApiKey ? 'groq' : '') }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', hasAIKey: !!(s.aiApiKey || s.groqApiKey), aiProvider: s.aiProvider ?? (s.groqApiKey ? 'groq' : ''), useAllCores: s.useAllCores === true }))
       return
     }
     if (req.method === 'POST') {
@@ -413,6 +554,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (typeof body.aiApiKey === 'string' && body.aiApiKey.trim()) updates.aiApiKey = body.aiApiKey.trim()
       if (typeof body.aiProvider === 'string' && ['groq', 'openai', 'openrouter', 'custom'].includes(body.aiProvider)) updates.aiProvider = body.aiProvider as import('./settings.js').AIProvider
       if (typeof body.aiBaseUrl === 'string') updates.aiBaseUrl = body.aiBaseUrl.trim()
+      if (typeof body.useAllCores === 'boolean') updates.useAllCores = body.useAllCores
       // Legacy support
       if (typeof body.groqApiKey === 'string' && body.groqApiKey.trim()) { updates.aiApiKey = body.groqApiKey.trim(); updates.aiProvider = 'groq' }
       writeSettings(updates)
@@ -853,7 +995,11 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const analysis = await analyzeAppleMusicLibrary(playlistName, writeEvent)
       writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: 'Apple Music', songs: analysis.songs, resultsJson: analysis.resultsJson, playlistFiles: analysis.playlistFiles })
       res.end()
-    } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Apple Music analysis failed.' }); res.end() }
+    } catch (err) {
+      console.error('[analyze-apple-music] fatal error:', err instanceof Error ? err.stack ?? err.message : err)
+      writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Apple Music analysis failed.' })
+      res.end()
+    }
   })
 
   middlewares.use('/api/update-tags', async (req, res, next) => {

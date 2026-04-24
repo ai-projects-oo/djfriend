@@ -25,6 +25,7 @@ export interface Settings {
   aiProvider?: AIProvider
   aiApiKey?: string
   aiBaseUrl?: string            // only used when aiProvider === 'custom'
+  useAllCores?: boolean         // spawn one audio worker per core (default false = single worker)
 }
 
 // Migrate legacy groqApiKey → aiProvider + aiApiKey

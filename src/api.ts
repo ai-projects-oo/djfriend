@@ -232,6 +232,7 @@ export interface PipelineOptions {
   existing: Record<string, AppSong>
   resultsPath: string
   label: string
+  bpmHint?: { min: number; max: number }         // optional octave-correction hint for untagged tracks
   folderFor?: (track: PipelineTrack) => string   // for progress events on multi-folder scans
 }
 
@@ -246,7 +247,7 @@ export interface PipelineResult {
 const AUDIO_CONCURRENCY = 3  // main-thread concurrency — audio workers own the real parallelism
 
 async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<string, unknown>) => void): Promise<PipelineResult> {
-  const { tracks, existing, resultsPath, label, folderFor } = opts
+  const { tracks, existing, resultsPath, label, bpmHint, folderFor } = opts
   const t0 = Date.now()
   const { spotifyClientId: SPOTIFY_CLIENT_ID, spotifyClientSecret: SPOTIFY_CLIENT_SECRET } = readSettings()
   const hasSpotify = !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET)
@@ -286,7 +287,7 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
         return null
       }) : null
       const [localFeatures, spotifyGenres] = await Promise.all([
-        analyzeAudio(t.filePath).catch(err => {
+        analyzeAudio(t.filePath, bpmHint).catch(err => {
           console.warn(`[analyzer] audio decode failed for "${trackLabel}":`, err instanceof Error ? err.message : err)
           return null
         }),
@@ -463,7 +464,7 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
   return { total: result.total, analyzed: result.analyzed, songs: result.songs, resultsJson: result.resultsJson }
 }
 
-async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Record<string, unknown>) => void) {
+async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Record<string, unknown>) => void, bpmHint?: { min: number; max: number }) {
   const amTracks = await listAppleMusicTracks(playlistName)
   if (amTracks.length === 0) throw new Error('No Apple Music local file tracks were found.')
   writeEvent({ type: 'start', total: amTracks.length })
@@ -483,6 +484,7 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
     existing,
     resultsPath: APPLE_RESULTS_PATH,
     label: `playlist "${playlistName}"`,
+    bpmHint,
   }, writeEvent)
   // Apple Music legacy: `file` field stored the absolute filePath, overwrite for consistency
   for (const t of amTracks) {
@@ -989,10 +991,14 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
     if (process.platform !== 'darwin') { writeEvent({ type: 'error', message: 'Apple Music is only available on macOS.' }); res.end(); return }
     try {
-      const body = await readJsonBody(req)
-      const playlistName = typeof (body as Record<string, unknown>)?.playlistName === 'string' ? ((body as Record<string, unknown>).playlistName as string).trim() : ''
+      const body = await readJsonBody(req) as Record<string, unknown>
+      const playlistName = typeof body?.playlistName === 'string' ? (body.playlistName as string).trim() : ''
       if (!playlistName) { writeEvent({ type: 'error', message: 'Missing playlistName.' }); res.end(); return }
-      const analysis = await analyzeAppleMusicLibrary(playlistName, writeEvent)
+      const rawHint = body?.bpmHint as { min?: unknown; max?: unknown } | undefined
+      const bpmHint = (rawHint && typeof rawHint.min === 'number' && typeof rawHint.max === 'number')
+        ? { min: rawHint.min, max: rawHint.max }
+        : undefined
+      const analysis = await analyzeAppleMusicLibrary(playlistName, writeEvent, bpmHint)
       writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: 'Apple Music', songs: analysis.songs, resultsJson: analysis.resultsJson, playlistFiles: analysis.playlistFiles })
       res.end()
     } catch (err) {

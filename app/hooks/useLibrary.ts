@@ -48,6 +48,7 @@ export interface QueueItem {
   status: 'queued' | 'analyzing';
   completed: number;
   total: number;
+  bpmHint?: { min: number; max: number };
 }
 
 export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
@@ -58,7 +59,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   const isAnalyzingRef = useRef(false);
   const currentPlaylistRef = useRef<string | null>(null);
   const analysisQueueRef = useRef<QueueItem[]>([]);
-  const runAppleMusicInternalRef = useRef<(name: string) => Promise<void>>(null!);
+  const runAppleMusicInternalRef = useRef<(name: string, bpmHint?: { min: number; max: number }) => Promise<void>>(null!);
 
   const [library, setLibrary] = useState<Song[]>([]);
   const [libraryName, setLibraryName] = useState<string>("");
@@ -146,7 +147,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   }, []);
 
   // Internal: actually runs one playlist analysis. Called by drain loop.
-  const runAppleMusicInternal = useCallback(async (playlistName: string) => {
+  const runAppleMusicInternal = useCallback(async (playlistName: string, bpmHint?: { min: number; max: number }) => {
     currentPlaylistRef.current = playlistName;
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -161,7 +162,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
       const response = await apiFetch("/api/analyze-apple-music", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playlistName }),
+        body: JSON.stringify({ playlistName, bpmHint }),
         signal: controller.signal,
       });
 
@@ -216,7 +217,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
       // Drain: start next queued item
       const next = analysisQueueRef.current.find(item => item.status === 'queued');
       if (next) {
-        void runAppleMusicInternalRef.current(next.playlistName);
+        void runAppleMusicInternalRef.current(next.playlistName, next.bpmHint);
       } else {
         isAnalyzingRef.current = false;
         setIsAnalyzing(false);
@@ -230,10 +231,10 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   }, [runAppleMusicInternal]);
 
   // Public: enqueue a playlist for analysis
-  const runAppleMusicAnalysis = useCallback((playlistName: string) => {
+  const runAppleMusicAnalysis = useCallback((playlistName: string, bpmHint?: { min: number; max: number }) => {
     if (analysisQueueRef.current.some(item => item.playlistName === playlistName)) return;
 
-    const newItem: QueueItem = { playlistName, status: 'queued', completed: 0, total: 0 };
+    const newItem: QueueItem = { playlistName, status: 'queued', completed: 0, total: 0, bpmHint };
     analysisQueueRef.current = [...analysisQueueRef.current, newItem];
     setAnalysisQueueState([...analysisQueueRef.current]);
 
@@ -244,7 +245,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     if (!isAnalyzingRef.current) {
       isAnalyzingRef.current = true;
       setIsAnalyzing(true);
-      void runAppleMusicInternalRef.current(playlistName);
+      void runAppleMusicInternalRef.current(playlistName, bpmHint);
     }
   }, []);
 

@@ -7,6 +7,7 @@ import AIPlannerPanel from "./components/AIPlannerPanel";
 import CalendarPicker from "./components/CalendarPicker";
 import HistoryTab from "./components/HistoryTab";
 import { genreMatchesUmbrella, TAG_GROUPS } from "./lib/genreUtils";
+import { GENRE_BPM_RANGES } from "./lib/bpmRanges";
 import {
   exchangeCodeForToken,
   storeToken,
@@ -162,6 +163,7 @@ function AppInner() {
   const [analyzeMenuOpen, setAnalyzeMenuOpen] = useState(false);
   const [playlistSearch, setPlaylistSearch] = useState("");
   const [selectedPlaylists, setSelectedPlaylists] = useState<string[]>([]);
+  const [playlistBpmHints, setPlaylistBpmHints] = useState<Map<string, { min: number; max: number } | undefined>>(new Map());
   const MAX_APPLE_PLAYLISTS = 3;
   const [manualMatchKey, setManualMatchKey] = useState<string | null>(null);
   const [manualMatchQuery, setManualMatchQuery] = useState("");
@@ -2746,6 +2748,7 @@ function AppInner() {
             setPlaylistPicker(null);
             setPlaylistSearch("");
             setSelectedPlaylists([]);
+            setPlaylistBpmHints(new Map());
           }}
         >
           <div
@@ -2765,6 +2768,7 @@ function AppInner() {
                   setPlaylistPicker(null);
                   setPlaylistSearch("");
                   setSelectedPlaylists([]);
+                  setPlaylistBpmHints(new Map());
                 }}
               >
                 Close
@@ -2796,98 +2800,94 @@ function AppInner() {
                 ) : (
                   <div className="flex flex-col gap-1 max-h-[55vh] overflow-y-auto">
                     {filtered.map((playlist) => {
-                      const imported =
-                        analyzedApplePlaylists.has(playlist.name);
-                      const selected = selectedPlaylists.includes(
-                        playlist.name,
-                      );
-                      const atLimit =
-                        selectedPlaylists.length >= MAX_APPLE_PLAYLISTS;
-                      const disabled = !selected && atLimit;
+                      const imported = analyzedApplePlaylists.has(playlist.name);
+                      const selected = selectedPlaylists.includes(playlist.name);
+                      const atLimit = selectedPlaylists.length >= MAX_APPLE_PLAYLISTS;
+                      const disabled = imported || (!selected && atLimit);
+                      const hint = playlistBpmHints.get(playlist.name);
                       return (
-                        <button
-                          key={playlist.name}
-                          disabled={disabled}
-                          onClick={() => {
-                            setSelectedPlaylists((prev) =>
-                              prev.includes(playlist.name)
-                                ? prev.filter((n) => n !== playlist.name)
-                                : prev.length < MAX_APPLE_PLAYLISTS
-                                  ? [...prev, playlist.name]
-                                  : prev,
-                            );
-                          }}
-                          className="w-full text-left rounded-md border px-3 py-2.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{
-                            borderColor: selected
-                              ? "#7c3aed"
-                              : imported
-                                ? "#16a34a"
-                                : "#2a2a3a",
-                            backgroundColor: selected
-                              ? "#1a0d2e"
-                              : imported
-                                ? "#0d1f13"
-                                : "#0d0d14",
-                          }}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm text-[#e2e8f0] flex items-center gap-2">
+                        <div key={playlist.name} className="flex flex-col gap-1.5">
+                          <button
+                            disabled={disabled}
+                            onClick={() => {
+                              if (imported) return;
+                              setSelectedPlaylists((prev) =>
+                                prev.includes(playlist.name)
+                                  ? prev.filter((n) => n !== playlist.name)
+                                  : prev.length < MAX_APPLE_PLAYLISTS
+                                    ? [...prev, playlist.name]
+                                    : prev,
+                              );
+                            }}
+                            className="w-full text-left rounded-md border px-3 py-2.5 transition-colors disabled:cursor-not-allowed"
+                            style={{
+                              cursor: imported ? "default" : "pointer",
+                              opacity: !imported && !selected && atLimit ? 0.4 : 1,
+                              borderColor: selected ? "#7c3aed" : "#2a2a3a",
+                              backgroundColor: selected ? "#1a0d2e" : "#0d0d14",
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              {/* Checkbox */}
                               <span
                                 className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0"
                                 style={{
-                                  borderColor: selected
-                                    ? "#7c3aed"
-                                    : "#2a2a3a",
-                                  backgroundColor: selected
-                                    ? "#7c3aed"
-                                    : "transparent",
+                                  borderColor: imported ? "#374151" : selected ? "#7c3aed" : "#2a2a3a",
+                                  backgroundColor: imported ? "#1f2937" : selected ? "#7c3aed" : "transparent",
                                 }}
                               >
-                                {selected && (
+                                {(selected || imported) && (
                                   <svg
-                                    className="w-2.5 h-2.5 text-white"
+                                    className="w-2.5 h-2.5"
+                                    style={{ color: imported ? "#6b7280" : "#fff" }}
                                     fill="none"
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
                                     strokeWidth={3}
                                   >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      d="M4.5 12.75l6 6 9-13.5"
-                                    />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                                   </svg>
                                 )}
                               </span>
-                              {playlist.name}
-                            </span>
-                            {imported && !selected && (
-                              <svg
-                                className="w-4 h-4 text-[#22c55e] flex-shrink-0"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2.5}
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M4.5 12.75l6 6 9-13.5"
-                                />
-                              </svg>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-[#475569] mt-0.5 pl-[22px]">
-                            {playlist.count} track
-                            {playlist.count === 1 ? "" : "s"}
-                            {imported && (
-                              <span className="text-[#16a34a] ml-1.5">
-                                · imported
+                              <span className="text-sm flex-1 min-w-0 truncate" style={{ color: imported ? "#6b7280" : "#e2e8f0" }}>
+                                {playlist.name}
                               </span>
-                            )}
-                          </div>
-                        </button>
+                              <span className="text-[11px] flex-shrink-0" style={{ color: imported ? "#4b5563" : "#475569" }}>
+                                {imported ? "in library" : `${playlist.count} track${playlist.count === 1 ? "" : "s"}`}
+                              </span>
+                            </div>
+                          </button>
+
+                          {/* BPM hint dropdown — only for non-imported, selected playlists */}
+                          {selected && !imported && (
+                            <select
+                              value={hint ? `${hint.min}-${hint.max}` : ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setPlaylistBpmHints(prev => {
+                                  const next = new Map(prev);
+                                  if (!val) { next.delete(playlist.name); }
+                                  else {
+                                    const [min, max] = val.split("-").map(Number);
+                                    next.set(playlist.name, { min, max });
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="w-full rounded px-2 py-1 text-xs bg-[#0d0d14] border border-[#2a2a3a] text-[#94a3b8] focus:outline-none focus:border-[#7c3aed]"
+                            >
+                              <option value="">BPM range: Auto-detect</option>
+                              {GENRE_BPM_RANGES.map(({ keywords, range }) => {
+                                const label = keywords[0].replace(/\b\w/g, c => c.toUpperCase());
+                                return (
+                                  <option key={`${range.min}-${range.max}`} value={`${range.min}-${range.max}`}>
+                                    {label} ({range.min}–{range.max} BPM)
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
@@ -2903,10 +2903,12 @@ function AppInner() {
                   disabled={selectedPlaylists.length === 0}
                   onClick={() => {
                     const toAnalyze = [...selectedPlaylists];
+                    const hintsSnapshot = new Map(playlistBpmHints);
                     setSelectedPlaylists([]);
                     setPlaylistSearch("");
+                    setPlaylistBpmHints(new Map());
                     for (const name of toAnalyze) {
-                      runAppleMusicAnalysis(name);
+                      runAppleMusicAnalysis(name, hintsSnapshot.get(name));
                     }
                   }}
                   className="text-xs font-medium px-3 py-1.5 rounded-md bg-[#7c3aed] text-white hover:bg-[#9333ea] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"

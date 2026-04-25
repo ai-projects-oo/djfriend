@@ -127,7 +127,7 @@ export default function HistoryTab({
             </div>
             {/* Tags + mini curve (always visible) */}
             <div className="px-5 pt-1 pb-3 flex items-stretch gap-4">
-              <div className="flex flex-wrap gap-1.5 flex-1">
+              <div className="flex flex-wrap gap-1.5 flex-1 self-start pt-1">
                 {prefTags.map((tag) => (
                   <span
                     key={tag}

@@ -3,7 +3,7 @@ import { camelotColor } from "../lib/camelotColors";
 import { buildSvgPath } from "../lib/curveInterpolation";
 import { downloadM3U } from "../lib/m3uExport";
 import { downloadRekordboxXml } from "../lib/rekordboxExport";
-import { computeSetScore } from "../lib/setScore";
+import { computeSetScore, SCORE_THRESHOLDS } from "../lib/setScore";
 
 import { SpotifyIcon, RekordboxIcon, M3UIcon } from "./Icons";
 import { ARC_PRESETS } from "./EnergyCurveEditor";
@@ -99,8 +99,8 @@ export default function HistoryTab({
           ? `${miniPath} L ${miniW} ${miniH} L 0 ${miniH} Z`
           : "";
         const curveTitle = getCurvePresetName(entry.curve);
-        const score = entry.tracks.length > 0 ? computeSetScore(entry.tracks) : null;
-        const scoreColor = score === null ? '' : score.total >= 80 ? 'text-green-400 border-green-400/30' : score.total >= 60 ? 'text-amber-400 border-amber-400/30' : 'text-red-400 border-red-400/30';
+        const score = computeSetScore(entry.tracks);
+        const scoreColor = score === null ? '' : score.total >= SCORE_THRESHOLDS.good ? 'text-green-400 border-green-400/30' : score.total >= SCORE_THRESHOLDS.fair ? 'text-amber-400 border-amber-400/30' : 'text-red-400 border-red-400/30';
         const scoreTooltip = score ? `Harmonic: ${Math.round((1 - score.harmonicRate) * 100)}% · Energy fit: ${Math.round((1 - score.avgEnergyError) * 100)}% · BPM flow: ${Math.round(score.bpmSmoothness * 100)}%` : '';
 
         const prefTags = [
@@ -141,6 +141,8 @@ export default function HistoryTab({
                 <div
                   className={`shrink-0 self-center px-2.5 py-1 rounded-full border text-xs font-bold tabular-nums ${scoreColor}`}
                   title={scoreTooltip}
+                  aria-label={`Set quality score ${score.total} out of 100. ${scoreTooltip}`}
+                  role="status"
                 >
                   {score.total}
                 </div>

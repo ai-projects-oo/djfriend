@@ -2045,60 +2045,76 @@ function AppInner() {
                   }
                 />
 
-                {crateGaps.length > 0 && (
+                {generatedSet.length >= 2 && (
                   <div className="mt-4 rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
                     <button
                       onClick={() => setCrateOpen(o => !o)}
                       className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                        </svg>
+                        {crateGaps.length > 0 ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                          </svg>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/>
+                          </svg>
+                        )}
                         <span className="text-xs font-semibold text-[#e2e8f0]">Crate Suggestions</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] font-bold">{crateGaps.length}</span>
+                        {crateGaps.length > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] font-bold">{crateGaps.length}</span>
+                        )}
                       </div>
                       <span className="text-[10px] text-[#475569]">{crateOpen ? "▲" : "▼"}</span>
                     </button>
                     {crateOpen && (
-                      <div className="border-t border-[#1e1e2e] divide-y divide-[#1e1e2e]">
-                        {crateGaps.map((gap) => {
-                          const slotTimeSec = generatedSet.slice(0, gap.slot).reduce(
-                            (s, t) => s + Math.max(0, (t.duration ?? 210) - MIX_OVERLAP_SEC),
-                            0,
-                          );
-                          const slotMm = Math.floor(slotTimeSec / 60);
-                          const slotSs = Math.round(slotTimeSec % 60).toString().padStart(2, '0');
-                          return (
-                          <div key={gap.slot} className="flex items-center gap-4 px-4 py-2.5">
-                            <span className="text-[10px] text-[#475569] w-14 shrink-0 tabular-nums">
-                              ~{slotMm}:{slotSs}
-                            </span>
-                            <div className="flex gap-1 shrink-0">
-                              {gap.camelotNeeded.slice(0, 3).map(k => (
-                                <span
-                                  key={k}
-                                  className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                                  style={{ background: camelotColor(k) + '33', color: camelotColor(k), border: `1px solid ${camelotColor(k)}55` }}
-                                >
-                                  {k}
-                                </span>
-                              ))}
-                            </div>
-                            {gap.bpmRange && (
-                              <span className="text-[10px] text-[#64748b] shrink-0">{gap.bpmRange.min}–{gap.bpmRange.max} BPM</span>
-                            )}
-                            <span className="text-[10px] text-[#94a3b8] flex-1 truncate font-mono">{gap.suggestedSearch}</span>
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(gap.suggestedSearch).catch(() => {}); }}
-                              className="shrink-0 text-[10px] text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer"
-                              title="Copy search"
-                            >
-                              ⎘
-                            </button>
+                      <div className="border-t border-[#1e1e2e]">
+                        {crateGaps.length === 0 ? (
+                          <div className="flex items-center gap-2 px-4 py-3">
+                            <span className="text-xs text-[#4b5568]">All slots covered — your library has good options for every position in this set.</span>
                           </div>
-                          );
-                        })}
+                        ) : (
+                          <div className="divide-y divide-[#1e1e2e]">
+                            {crateGaps.map((gap) => {
+                              const slotTimeSec = generatedSet.slice(0, gap.slot).reduce(
+                                (s, t) => s + Math.max(0, (t.duration ?? 210) - MIX_OVERLAP_SEC),
+                                0,
+                              );
+                              const slotMm = Math.floor(slotTimeSec / 60);
+                              const slotSs = Math.round(slotTimeSec % 60).toString().padStart(2, '0');
+                              return (
+                                <div key={gap.slot} className="flex items-center gap-4 px-4 py-2.5">
+                                  <span className="text-[10px] text-[#475569] w-14 shrink-0 tabular-nums">
+                                    ~{slotMm}:{slotSs}
+                                  </span>
+                                  <div className="flex gap-1 shrink-0">
+                                    {gap.camelotNeeded.slice(0, 3).map(k => (
+                                      <span
+                                        key={k}
+                                        className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                                        style={{ background: camelotColor(k) + '33', color: camelotColor(k), border: `1px solid ${camelotColor(k)}55` }}
+                                      >
+                                        {k}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  {gap.bpmRange && (
+                                    <span className="text-[10px] text-[#64748b] shrink-0">{gap.bpmRange.min}–{gap.bpmRange.max} BPM</span>
+                                  )}
+                                  <span className="text-[10px] text-[#94a3b8] flex-1 truncate font-mono">{gap.suggestedSearch}</span>
+                                  <button
+                                    onClick={() => { navigator.clipboard.writeText(gap.suggestedSearch).catch(() => {}); }}
+                                    className="shrink-0 text-[10px] text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer"
+                                    title="Copy search"
+                                  >
+                                    ⎘
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

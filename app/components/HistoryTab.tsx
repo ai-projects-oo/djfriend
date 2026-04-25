@@ -126,7 +126,7 @@ export default function HistoryTab({
               />
             </div>
             {/* Tags + mini curve (always visible) */}
-            <div className="px-5 pt-1 pb-3 flex items-start gap-4">
+            <div className="px-5 pt-1 pb-3 flex items-stretch gap-4">
               <div className="flex flex-wrap gap-1.5 flex-1">
                 {prefTags.map((tag) => (
                   <span
@@ -137,11 +137,11 @@ export default function HistoryTab({
                   </span>
                 ))}
               </div>
-              <div className="w-44 shrink-0 rounded-md overflow-hidden border border-[#1e1e2e] bg-[#0d0d14]" title={curveTitle}>
+              <div className="w-44 shrink-0 self-stretch rounded-md overflow-hidden border border-[#1e1e2e] bg-[#0d0d14]" title={curveTitle}>
                 <svg
                   viewBox={`0 0 ${miniW} ${miniH}`}
                   width="100%"
-                  height={miniH}
+                  height="100%"
                   preserveAspectRatio="none"
                   style={{ display: "block" }}
                 >

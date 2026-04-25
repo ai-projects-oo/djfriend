@@ -33,6 +33,7 @@ import { findCrateGaps } from "./lib/crateBuilder";
 import type { CrateGap } from "./types";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
+const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
 
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -1114,12 +1115,17 @@ function AppInner() {
               {/* Card 3: Duration + Actions */}
               {(() => {
                 const FALLBACK_DURATION = 210;
-                const GAP = 10;
-                const setTotalSeconds = generatedSet.reduce(
-                  (s, t) => s + (t.duration ?? FALLBACK_DURATION) + GAP,
+                const rawPlaylistSec = generatedSet.reduce(
+                  (s, t) => s + (t.duration ?? FALLBACK_DURATION),
                   0,
                 );
-                const setTotalMinutes = setTotalSeconds / 60;
+                const transitions = Math.max(0, generatedSet.length - 1);
+                const estSetSec = rawPlaylistSec - MIX_OVERLAP_SEC * transitions;
+                const setTotalMinutes = estSetSec / 60;
+                const fmtMin = (s: number) => {
+                  const m = Math.round(s / 60);
+                  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+                };
                 return (
                   <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1203,6 +1209,15 @@ function AppInner() {
                         </span>
                       )}
                     </div>
+                    {generatedSet.length >= 2 && (
+                      <div className="flex items-center gap-3 text-[10px] text-[#475569] border-t border-[#1e1e2e] pt-2">
+                        <span title="Sum of all track durations">Playlist: <span className="text-[#64748b] font-semibold">{fmtMin(rawPlaylistSec)}</span></span>
+                        <span className="text-[#1e1e2e]">·</span>
+                        <span title="Estimated actual set length accounting for 2-min crossfades">Est. set: <span className="text-[#94a3b8] font-semibold">{fmtMin(estSetSec)}</span></span>
+                        <span className="text-[#1e1e2e]">·</span>
+                        <span className="text-[#4b5568]">{generatedSet.length} tracks</span>
+                      </div>
+                    )}
 
                     {/* BPM range */}
                     <div>
@@ -2047,10 +2062,17 @@ function AppInner() {
                     </button>
                     {crateOpen && (
                       <div className="border-t border-[#1e1e2e] divide-y divide-[#1e1e2e]">
-                        {crateGaps.map((gap, i) => (
-                          <div key={i} className="flex items-center gap-4 px-4 py-2.5">
-                            <span className="text-[10px] text-[#475569] w-10 shrink-0">
-                              #{Math.round(gap.setPosition * (generatedSet.length - 1)) + 1}
+                        {crateGaps.map((gap) => {
+                          const slotTimeSec = generatedSet.slice(0, gap.slot).reduce(
+                            (s, t) => s + Math.max(0, (t.duration ?? 210) - MIX_OVERLAP_SEC),
+                            0,
+                          );
+                          const slotMm = Math.floor(slotTimeSec / 60);
+                          const slotSs = Math.round(slotTimeSec % 60).toString().padStart(2, '0');
+                          return (
+                          <div key={gap.slot} className="flex items-center gap-4 px-4 py-2.5">
+                            <span className="text-[10px] text-[#475569] w-14 shrink-0 tabular-nums">
+                              ~{slotMm}:{slotSs}
                             </span>
                             <div className="flex gap-1 shrink-0">
                               {gap.camelotNeeded.slice(0, 3).map(k => (
@@ -2063,17 +2085,20 @@ function AppInner() {
                                 </span>
                               ))}
                             </div>
-                            <span className="text-[10px] text-[#64748b] shrink-0">{gap.bpmRange.min}–{gap.bpmRange.max} BPM</span>
+                            {gap.bpmRange && (
+                              <span className="text-[10px] text-[#64748b] shrink-0">{gap.bpmRange.min}–{gap.bpmRange.max} BPM</span>
+                            )}
                             <span className="text-[10px] text-[#94a3b8] flex-1 truncate font-mono">{gap.suggestedSearch}</span>
                             <button
-                              onClick={() => void navigator.clipboard.writeText(gap.suggestedSearch)}
+                              onClick={() => { navigator.clipboard.writeText(gap.suggestedSearch).catch(() => {}); }}
                               className="shrink-0 text-[10px] text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer"
                               title="Copy search"
                             >
                               ⎘
                             </button>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

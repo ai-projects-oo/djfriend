@@ -53,10 +53,11 @@ export interface SetScore {
 }
 
 export interface CrateGap {
+  slot: number;                           // 0-indexed position in the set (use directly, don't recompute)
   setPosition: number;                    // 0–1, normalized slot position
   targetEnergy: number;
   camelotNeeded: string[];                // compatible Camelot keys adjacent to surrounding tracks
-  bpmRange: { min: number; max: number };
+  bpmRange: { min: number; max: number } | null; // null when BPM data is unavailable
   suggestedSearch: string;                // e.g. "house 120–128 BPM 7A/7B energy 0.7+"
 }
 

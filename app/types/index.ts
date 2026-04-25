@@ -52,14 +52,6 @@ export interface SetScore {
   bpmSmoothness: number;  // 0–1, 1 = perfectly smooth BPM flow
 }
 
-export interface CrateGap {
-  slot: number;                           // 0-indexed position in the set (use directly, don't recompute)
-  setPosition: number;                    // 0–1, normalized slot position
-  targetEnergy: number;
-  camelotNeeded: string[];                // compatible Camelot keys adjacent to surrounding tracks
-  bpmRange: { min: number; max: number } | null; // null when BPM data is unavailable
-  suggestedSearch: string;                // e.g. "house 120–128 BPM 7A/7B energy 0.7+"
-}
 
 export interface CurvePoint {
   x: number; // 0.0 – 1.0 (position in set timeline)

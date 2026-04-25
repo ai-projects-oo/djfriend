@@ -3,6 +3,7 @@ import { camelotColor } from "../lib/camelotColors";
 import { buildSvgPath } from "../lib/curveInterpolation";
 import { downloadM3U } from "../lib/m3uExport";
 import { downloadRekordboxXml } from "../lib/rekordboxExport";
+import { computeSetScore, SCORE_THRESHOLDS } from "../lib/setScore";
 
 import { SpotifyIcon, RekordboxIcon, M3UIcon } from "./Icons";
 import { ARC_PRESETS } from "./EnergyCurveEditor";
@@ -98,6 +99,9 @@ export default function HistoryTab({
           ? `${miniPath} L ${miniW} ${miniH} L 0 ${miniH} Z`
           : "";
         const curveTitle = getCurvePresetName(entry.curve);
+        const score = computeSetScore(entry.tracks);
+        const scoreColor = score === null ? '' : score.total >= SCORE_THRESHOLDS.good ? 'text-green-400 border-green-400/30' : score.total >= SCORE_THRESHOLDS.fair ? 'text-amber-400 border-amber-400/30' : 'text-red-400 border-red-400/30';
+        const scoreTooltip = score ? `Harmonic: ${Math.round((1 - score.harmonicRate) * 100)}% · Energy fit: ${Math.round((1 - score.avgEnergyError) * 100)}% · BPM flow: ${Math.round(score.bpmSmoothness * 100)}%` : '';
 
         const prefTags = [
           `${entry.prefs.setDuration} min`,
@@ -122,8 +126,8 @@ export default function HistoryTab({
               />
             </div>
             {/* Tags + mini curve (always visible) */}
-            <div className="px-5 pt-1 pb-3 flex items-start gap-4">
-              <div className="flex flex-wrap gap-1.5 flex-1">
+            <div className="px-5 pt-1 pb-3 flex items-stretch gap-4">
+              <div className="flex flex-wrap gap-1.5 flex-1 self-start pt-1">
                 {prefTags.map((tag) => (
                   <span
                     key={tag}
@@ -133,11 +137,11 @@ export default function HistoryTab({
                   </span>
                 ))}
               </div>
-              <div className="w-44 shrink-0 rounded-md overflow-hidden border border-[#1e1e2e] bg-[#0d0d14]" title={curveTitle}>
+              <div className="w-44 shrink-0 self-stretch rounded-md overflow-hidden border border-[#1e1e2e] bg-[#0d0d14]" title={curveTitle}>
                 <svg
                   viewBox={`0 0 ${miniW} ${miniH}`}
                   width="100%"
-                  height={miniH}
+                  height="100%"
                   preserveAspectRatio="none"
                   style={{ display: "block" }}
                 >
@@ -169,6 +173,33 @@ export default function HistoryTab({
                   ))}
                 </svg>
               </div>
+              {score !== null && (
+                <div
+                  className="shrink-0 self-center flex items-center gap-3 px-3 py-2 rounded-lg border border-[#1e1e2e] bg-[#0d0d14]"
+                  role="status"
+                  aria-label={`Set quality score ${score.total} out of 100. ${scoreTooltip}`}
+                >
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#64748b]">Score</span>
+                    <span className={`text-lg font-bold tabular-nums leading-none ${scoreColor.split(' ')[0]}`}>{score.total}</span>
+                  </div>
+                  <div className="w-px h-9 bg-[#1e1e2e]" />
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-[#64748b]">Harmonic</span>
+                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.harmonicRate) * 100)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-[#64748b]">Energy</span>
+                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.avgEnergyError) * 100)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-[#64748b]">BPM flow</span>
+                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round(score.bpmSmoothness * 100)}%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center border-t border-[#1e1e2e]">

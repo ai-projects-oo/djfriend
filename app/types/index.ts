@@ -45,6 +45,13 @@ export interface SetTrack extends Song {
   selectionReason?: string[];  // human-readable breakdown of why this track was chosen
 }
 
+export interface SetScore {
+  total: number;          // 0–100 overall quality score
+  harmonicRate: number;   // 0–1, fraction of transitions with harmonic warnings
+  avgEnergyError: number; // 0–1, average |energy - targetEnergy| across all tracks
+  bpmSmoothness: number;  // 0–1, 1 = perfectly smooth BPM flow
+}
+
 export interface CurvePoint {
   x: number; // 0.0 – 1.0 (position in set timeline)
   y: number; // 0.0 – 1.0 (energy level)

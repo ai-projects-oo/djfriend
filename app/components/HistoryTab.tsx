@@ -138,31 +138,28 @@ export default function HistoryTab({
                 ))}
               </div>
               {score !== null && (
-                <div className="shrink-0 self-center flex flex-col items-center gap-0.5 group relative">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">Score</span>
-                  <div
-                    className={`px-2.5 py-1 rounded-full border text-xs font-bold tabular-nums cursor-default ${scoreColor}`}
-                    aria-label={`Set quality score ${score.total} out of 100. ${scoreTooltip}`}
-                    role="status"
-                  >
-                    {score.total}
+                <div
+                  className="shrink-0 self-center flex items-center gap-3 px-3 py-1.5 rounded-lg border border-[#1e1e2e] bg-[#0d0d14]"
+                  role="status"
+                  aria-label={`Set quality score ${score.total} out of 100. ${scoreTooltip}`}
+                >
+                  <div className="flex flex-col items-center">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#64748b]">Score</span>
+                    <span className={`text-base font-bold tabular-nums leading-none mt-0.5 ${scoreColor.split(' ')[0]}`}>{score.total}</span>
                   </div>
-                  {/* Custom tooltip — opens downward to avoid overflow clipping */}
-                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 hidden group-hover:flex flex-col gap-1 bg-[#1a1a2e] border border-[#2a2a3a] rounded-lg px-3 py-2 shadow-xl w-48 pointer-events-none">
-                    {/* Caret */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-[#2a2a3a]" />
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#64748b] mb-0.5">Set Quality</div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-[#94a3b8]">Harmonic</span>
-                      <span className="font-semibold text-[#e2e8f0]">{Math.round((1 - score.harmonicRate) * 100)}%</span>
+                  <div className="w-px h-8 bg-[#1e1e2e]" />
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-[#64748b] w-16">Harmonic</span>
+                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.harmonicRate) * 100)}%</span>
                     </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-[#94a3b8]">Energy fit</span>
-                      <span className="font-semibold text-[#e2e8f0]">{Math.round((1 - score.avgEnergyError) * 100)}%</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-[#64748b] w-16">Energy</span>
+                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.avgEnergyError) * 100)}%</span>
                     </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-[#94a3b8]">BPM flow</span>
-                      <span className="font-semibold text-[#e2e8f0]">{Math.round(score.bpmSmoothness * 100)}%</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-[#64748b] w-16">BPM flow</span>
+                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round(score.bpmSmoothness * 100)}%</span>
                     </div>
                   </div>
                 </div>

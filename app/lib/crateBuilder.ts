@@ -1,16 +1,11 @@
 import type { SetTrack, DJPreferences, CrateGap } from '../types';
 import { parseCamelot } from './camelot';
-import { computeSetScore } from './setScore';
 
 const ENERGY_GAP_THRESHOLD = 0.15;
 // Dedup radius: adjacent flagged slots within this distance collapse into one suggestion.
 // O(g²) over gap count g which is bounded by set length — acceptable for typical set sizes.
 const DEDUP_SLOT_RADIUS = 2;
 const BPM_TOLERANCE = 0.03;
-
-// Panel-level gate: only surface suggestions when the set has meaningful aggregate issues.
-const HARMONIC_RATE_GATE = 0.20;
-const ENERGY_ERROR_GATE = 0.15;
 
 function camelotNeighbors(camelot: string): string[] {
   const p = parseCamelot(camelot);
@@ -35,12 +30,6 @@ function safeBpm(b: number | undefined): number | null {
 
 export function findCrateGaps(set: SetTrack[], prefs: DJPreferences): CrateGap[] {
   if (set.length < 2) return [];
-
-  // Gate: only show the panel when the set has aggregate quality issues
-  const score = computeSetScore(set);
-  if (score && score.harmonicRate <= HARMONIC_RATE_GATE && score.avgEnergyError <= ENERGY_ERROR_GATE) {
-    return [];
-  }
 
   const genres = prefs.genres ?? [];
   const genreLabel = genres.length === 1 ? genres[0] : genres.length > 1 ? genres.join('/') : '';

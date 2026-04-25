@@ -52,6 +52,7 @@ export interface SetScore {
   bpmSmoothness: number;  // 0–1, 1 = perfectly smooth BPM flow
 }
 
+
 export interface CurvePoint {
   x: number; // 0.0 – 1.0 (position in set timeline)
   y: number; // 0.0 – 1.0 (energy level)

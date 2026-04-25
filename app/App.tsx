@@ -31,6 +31,7 @@ import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
 import { camelotColor } from "./lib/camelotColors";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
+const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
 
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -364,6 +365,12 @@ function AppInner() {
     handleLoadToSet,
     handleAppendTracks,
   } = useSetGenerator(library, setLibrary, playlistFilterFiles, history);
+
+  const energyIssues = useMemo(
+    () => generatedSet.filter(t => Math.abs(t.energy - t.targetEnergy) > 0.12),
+    [generatedSet],
+  );
+  const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
 
   // Wire setGeneratedSet into the bridge ref so useLibrary can reset the set on new analysis
   useEffect(() => {
@@ -1106,12 +1113,17 @@ function AppInner() {
               {/* Card 3: Duration + Actions */}
               {(() => {
                 const FALLBACK_DURATION = 210;
-                const GAP = 10;
-                const setTotalSeconds = generatedSet.reduce(
-                  (s, t) => s + (t.duration ?? FALLBACK_DURATION) + GAP,
+                const rawPlaylistSec = generatedSet.reduce(
+                  (s, t) => s + (t.duration ?? FALLBACK_DURATION),
                   0,
                 );
-                const setTotalMinutes = setTotalSeconds / 60;
+                const transitions = Math.max(0, generatedSet.length - 1);
+                const estSetSec = rawPlaylistSec - MIX_OVERLAP_SEC * transitions;
+                const setTotalMinutes = estSetSec / 60;
+                const fmtMin = (s: number) => {
+                  const m = Math.round(s / 60);
+                  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+                };
                 return (
                   <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1195,6 +1207,15 @@ function AppInner() {
                         </span>
                       )}
                     </div>
+                    {generatedSet.length >= 2 && (
+                      <div className="flex items-center gap-3 text-[10px] text-[#475569] border-t border-[#1e1e2e] pt-2">
+                        <span title="Sum of all track durations">Playlist: <span className="text-[#64748b] font-semibold">{fmtMin(rawPlaylistSec)}</span></span>
+                        <span className="text-[#1e1e2e]">·</span>
+                        <span title="Estimated actual set length accounting for 2-min crossfades">Est. set: <span className="text-[#94a3b8] font-semibold">{fmtMin(estSetSec)}</span></span>
+                        <span className="text-[#1e1e2e]">·</span>
+                        <span className="text-[#4b5568]">{generatedSet.length} tracks</span>
+                      </div>
+                    )}
 
                     {/* BPM range */}
                     <div>
@@ -2021,6 +2042,82 @@ function AppInner() {
                       : undefined
                   }
                 />
+
+                {generatedSet.length >= 2 && (
+                  <div className="mt-4 rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
+                    <button
+                      onClick={() => setEnergyCheckOpen(o => !o)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        {energyIssues.length > 0 ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                          </svg>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/>
+                          </svg>
+                        )}
+                        <span className="text-xs font-semibold text-[#e2e8f0]">Energy Check</span>
+                        {energyIssues.length > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] font-bold">{energyIssues.length}</span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-[#475569]">{energyCheckOpen ? "▲" : "▼"}</span>
+                    </button>
+                    {energyCheckOpen && (
+                      <div className="border-t border-[#1e1e2e]">
+                        {energyIssues.length === 0 ? (
+                          <div className="flex items-center gap-2 px-4 py-3.5">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span className="text-xs text-[#4b5568]">Energy curve followed — all tracks are within range.</span>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-[#1e1e2e]">
+                            {energyIssues.map((track) => {
+                              const actual = Math.round(track.energy * 100);
+                              const target = Math.round(track.targetEnergy * 100);
+                              const tooLow = track.energy < track.targetEnergy;
+                              return (
+                                <div key={track.slot} className="px-4 py-3 flex items-center gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-[#e2e8f0] truncate">{track.artist} — {track.title}</p>
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                      {/* Mini energy bar */}
+                                      <div className="relative rounded-full bg-[#1e1e2e]" style={{ width: 64, height: 4 }}>
+                                        <div
+                                          className="absolute inset-y-0 left-0 rounded-full"
+                                          style={{ width: `${track.energy * 100}%`, backgroundColor: tooLow ? '#f59e0b' : '#ef4444' }}
+                                        />
+                                        <div
+                                          className="absolute inset-y-0 w-0.5 bg-white/60 rounded-full"
+                                          style={{ left: `${track.targetEnergy * 100}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-[10px] text-[#64748b] tabular-nums">
+                                        {actual}% <span className="text-[#334155]">→</span> {target}%
+                                        <span className={`ml-1 font-semibold ${tooLow ? 'text-[#f59e0b]' : 'text-[#ef4444]'}`}>
+                                          {tooLow ? '↓ too low' : '↑ too high'}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => handleSwapTrack(track.slot)}
+                                    className="shrink-0 px-2.5 py-1 text-[10px] font-medium rounded border border-[#2a2a3a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#a78bfa] transition-colors cursor-pointer"
+                                  >
+                                    Swap
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </div>
             </div>

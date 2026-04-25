@@ -325,7 +325,7 @@ async function handleReanalyze() {
               </button>
             )}
             {showKeyTooltip && track.camelot && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1">
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1">
                 {compatibleKeys.length > 0 && (
                   <span><span className="text-[#64748b]">Compatible: </span>{compatibleKeys.join(', ')}</span>
                 )}

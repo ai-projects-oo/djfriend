@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sprint 7 — Manual QA Test Plan</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d0d14;color:#e2e8f0;padding:32px;line-height:1.6}
+  h1{font-size:1.5rem;font-weight:700;color:#a78bfa;margin-bottom:4px}
+  .subtitle{color:#64748b;font-size:.85rem;margin-bottom:32px}
+  h2{font-size:1rem;font-weight:600;color:#94a3b8;margin:24px 0 12px;text-transform:uppercase;letter-spacing:.08em}
+  table{width:100%;border-collapse:collapse;margin-bottom:24px;font-size:.85rem}
+  th{text-align:left;padding:8px 12px;background:#12121a;color:#64748b;font-weight:600;border-bottom:1px solid #1e1e2e;font-size:.75rem;text-transform:uppercase;letter-spacing:.06em}
+  td{padding:10px 12px;border-bottom:1px solid #1e1e2e;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .pass{color:#34d399;font-weight:600}
+  .fail{color:#f87171;font-weight:600}
+  .skip{color:#64748b}
+  .badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:.72rem;font-weight:600;border:1px solid}
+  .badge-green{color:#34d399;border-color:#34d399;background:#34d39910}
+  .badge-amber{color:#f59e0b;border-color:#f59e0b;background:#f59e0b10}
+  .badge-red{color:#f87171;border-color:#f87171;background:#f87171;color:#fff}
+  .note{background:#12121a;border:1px solid #1e1e2e;border-radius:8px;padding:12px 16px;font-size:.82rem;color:#94a3b8;margin-bottom:16px}
+  .checkbox{width:18px;height:18px;border:2px solid #2a2a3a;border-radius:4px;display:inline-block;flex-shrink:0}
+  .section{background:#12121a;border:1px solid #1e1e2e;border-radius:12px;padding:20px;margin-bottom:20px}
+  code{background:#1e1e2e;padding:2px 6px;border-radius:4px;font-size:.8rem;font-family:'SF Mono',monospace;color:#c084fc}
+</style>
+</head>
+<body>
+<h1>Sprint 7 — Smart Crate Builder &amp; Mix-Time Duration</h1>
+<p class="subtitle">Manual QA Test Plan · Branch: sprint_7 · Date: 2026-04-24</p>
+
+<div class="note">
+  <strong>Setup:</strong> Run <code>npm run electron:dev</code> in a terminal. Make sure you have a library with at least 10 tracks scanned. All tests assume the app is open and library is loaded.
+</div>
+
+<div class="section">
+<h2>1. Crate Suggestions Panel — Visibility Gate</h2>
+<table>
+  <tr><th>✓</th><th>Step</th><th>Expected</th></tr>
+  <tr><td><span class="checkbox"></span></td><td>Generate a set with good harmonic flow and energy on curve (all tracks matching well)</td><td>No "Crate Suggestions" panel appears below the set list</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Generate a set that intentionally has harmonic clashes (e.g. force a short duration with mixed genres)</td><td>"Crate Suggestions" panel appears with at least 1 entry</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Click the "Crate Suggestions" header</td><td>Panel collapses (rows disappear); click again to expand</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Click "Generate Set" again</td><td>Panel updates to reflect new set; previous suggestions replaced</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>2. Crate Suggestions — Row Content</h2>
+<table>
+  <tr><th>✓</th><th>Step</th><th>Expected</th></tr>
+  <tr><td><span class="checkbox"></span></td><td>Open Crate Suggestions panel, inspect rows</td><td>Each row shows a time position like <code>~4:00</code> (minutes:seconds), not a slot number</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>First row time position</td><td>First row at ~0:00 or small value (first few tracks have early times)</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Inspect Camelot key pills on a row</td><td>Colored pills (up to 3) matching Camelot wheel colors; e.g. "7A", "8B"</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Check BPM range on a row where BPM data is available</td><td>Shows e.g. <code>124–136 BPM</code> with 3% tolerance applied</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Click the ⎘ copy button on a row</td><td>Search string copied to clipboard (paste to verify)</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Check suggested search string content</td><td>Contains genre, BPM range, Camelot keys, and energy target</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>3. Duration Selector — Playlist Time &amp; Est. Set Time</h2>
+<table>
+  <tr><th>✓</th><th>Step</th><th>Expected</th></tr>
+  <tr><td><span class="checkbox"></span></td><td>Generate a set with &ge;2 tracks</td><td>Below the duration pills, a line appears: <code>Playlist: Xm · Est. set: Ym · N tracks</code></td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Verify "Est. set" is shorter than "Playlist" time</td><td>Est. set = Playlist minus (N−1 × 2 minutes). E.g. 10 tracks: Est. set should be ~18 min less than playlist total</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Generate with 1 track (edge case)</td><td>Time line does NOT appear (requires ≥2 tracks)</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Generate a long set (&ge;30 tracks), check hour display</td><td>Times ≥ 60m show as <code>1h 5m</code> format</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Hover over "Playlist:" label</td><td>Tooltip: "Sum of all track durations"</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Hover over "Est. set:" label</td><td>Tooltip mentions "2-min crossfades"</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>4. Duration Pills — Disable Logic</h2>
+<table>
+  <tr><th>✓</th><th>Step</th><th>Expected</th></tr>
+  <tr><td><span class="checkbox"></span></td><td>Generate a 60-minute set; select the "30m" pill</td><td>30m pill is disabled (set is longer than 30m estimated)</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Tooltip on a disabled shorter pill</td><td>Shows <code>Current set is ~Xm — select a longer duration</code></td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>5. Regression — Sprint A Score Badge</h2>
+<table>
+  <tr><th>✓</th><th>Step</th><th>Expected</th></tr>
+  <tr><td><span class="checkbox"></span></td><td>Navigate to History tab</td><td>Each entry shows the 0–100 score badge on the right</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Score color for a good set</td><td>Green for ≥80, amber for 60–79, red for &lt;60</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Score card shows Harmonic %, Energy %, BPM flow %</td><td>Values present and sum to a coherent story</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>6. Regression — General Set Generation</h2>
+<table>
+  <tr><th>✓</th><th>Step</th><th>Expected</th></tr>
+  <tr><td><span class="checkbox"></span></td><td>Generate a set, lock a track, regenerate</td><td>Locked track stays in position; rest regenerates</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Export to M3U</td><td>M3U file downloads; tracks listed correctly</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Save set to History</td><td>Entry appears in History tab with name and track count</td></tr>
+  <tr><td><span class="checkbox"></span></td><td>Columns toggle in set list header</td><td>Column visibility toggles correctly without JS errors</td></tr>
+</table>
+</div>
+
+<div class="note" style="margin-top:24px">
+  <strong>Pass criteria:</strong> All checkboxes ticked with no unexpected errors in the browser console. Report any ❌ items with a screenshot before approving the merge.
+</div>
+</body>
+</html>

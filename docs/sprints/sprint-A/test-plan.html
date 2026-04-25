@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprint A — Manual QA Test Plan</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0f; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.7; padding: 2rem; max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; font-weight: 800; color: #a78bfa; }
+  .subtitle { color: #64748b; font-size: 0.85rem; margin-top: 0.2rem; margin-bottom: 2rem; }
+  h2 { font-size: 1rem; font-weight: 700; color: #7c3aed; margin: 2rem 0 0.75rem; padding: 0.4rem 0.75rem; border-left: 3px solid #7c3aed; background: #12121a; border-radius: 0 6px 6px 0; }
+  .tc { background: #12121a; border: 1px solid #1e1e2e; border-radius: 10px; margin: 0.75rem 0; overflow: hidden; }
+  .tc-header { display: flex; align-items: center; gap: 0.75rem; padding: 0.7rem 1rem; border-bottom: 1px solid #1e1e2e; }
+  .tc-id { font-size: 0.7rem; font-weight: 700; font-family: monospace; color: #7c3aed; background: rgba(124,58,237,0.1); border: 1px solid rgba(124,58,237,0.3); border-radius: 4px; padding: 0.1rem 0.5rem; }
+  .tc-title { font-weight: 600; font-size: 0.9rem; }
+  .tc-body { padding: 0.75rem 1rem; }
+  .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 0.3rem; margin-top: 0.75rem; }
+  .label:first-child { margin-top: 0; }
+  ol, ul { padding-left: 1.4rem; }
+  li { font-size: 0.875rem; color: #94a3b8; margin: 0.25rem 0; }
+  .pass { color: #34d399; font-weight: 600; }
+  .fail { color: #f87171; font-weight: 600; }
+  code { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.78rem; background: #1a1a2e; color: #a78bfa; padding: 0.1em 0.35em; border-radius: 3px; border: 1px solid #2a2a3a; }
+  .note { background: #0d0d14; border: 1px solid #2a2a3a; border-radius: 6px; padding: 0.6rem 0.9rem; margin-top: 0.6rem; font-size: 0.82rem; color: #64748b; }
+  .check-row { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.35rem 0; border-bottom: 1px solid #0d0d14; }
+  .check-row:last-child { border-bottom: none; }
+  .check-box { width: 16px; height: 16px; min-width: 16px; border: 1.5px solid #2a2a3a; border-radius: 3px; margin-top: 0.2rem; }
+  .check-text { font-size: 0.875rem; color: #94a3b8; flex: 1; }
+  .expected { font-size: 0.82rem; }
+  .expected .pass { font-size: 0.82rem; }
+  hr { border: none; border-top: 1px solid #1e1e2e; margin: 2rem 0; }
+  .legend { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
+  .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: #64748b; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-green { background: #34d399; }
+  .dot-amber { background: #f59e0b; }
+  .dot-red { background: #f87171; }
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.82rem; }
+  th { text-align: left; padding: 0.4rem 0.6rem; color: #64748b; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #1e1e2e; }
+  td { padding: 0.4rem 0.6rem; color: #94a3b8; border-bottom: 1px solid #0d0d14; vertical-align: top; }
+  td:first-child { font-family: monospace; color: #a78bfa; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<h1>Sprint A — Manual QA Test Plan</h1>
+<div class="subtitle">Post-Set Retrospective Score Badge &nbsp;·&nbsp; Branch: <code>sprint_A</code></div>
+
+<div class="note">
+  <strong>Before starting:</strong> run <code>npm run electron:dev</code> in a terminal. You need at least one set saved to History. If History is empty, generate a set → export as M3U (this auto-saves to History).
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="dot dot-green"></div> Score ≥ 80 → green badge</div>
+  <div class="legend-item"><div class="dot dot-amber"></div> Score 60–79 → amber badge</div>
+  <div class="legend-item"><div class="dot dot-red"></div> Score &lt; 60 → red badge</div>
+</div>
+
+<h2>TC-A1 · Badge appears on existing history entries</h2>
+<div class="tc">
+  <div class="tc-header"><span class="tc-id">TC-A1</span><span class="tc-title">Badge renders for saved sets</span></div>
+  <div class="tc-body">
+    <div class="label">Steps</div>
+    <ol>
+      <li>Open the app → click the <strong>History</strong> tab</li>
+      <li>Look at the summary bar of any entry that has tracks</li>
+    </ol>
+    <div class="label">Expected</div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — A small pill badge with a number (0–100) appears between the tag pills and the mini energy curve</div></div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — Badge color is green, amber, or red based on the score value</div></div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — Badge is visible without expanding the entry</div></div>
+    <div class="note">If History is empty this test is N/A — create a set first (see prerequisite above).</div>
+  </div>
+</div>
+
+<h2>TC-A2 · Tooltip shows component breakdown</h2>
+<div class="tc">
+  <div class="tc-header"><span class="tc-id">TC-A2</span><span class="tc-title">Hover tooltip displays score components</span></div>
+  <div class="tc-body">
+    <div class="label">Steps</div>
+    <ol>
+      <li>Hover your mouse over the score badge on any history entry</li>
+    </ol>
+    <div class="label">Expected</div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — A native browser tooltip appears with format: <code>Harmonic: X% · Energy fit: Y% · BPM flow: Z%</code></div></div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — All three values are between 0% and 100%</div></div>
+  </div>
+</div>
+
+<h2>TC-A3 · Green badge — high-quality set</h2>
+<div class="tc">
+  <div class="tc-header"><span class="tc-id">TC-A3</span><span class="tc-title">Well-matched set scores green (≥80)</span></div>
+  <div class="tc-body">
+    <div class="label">Steps</div>
+    <ol>
+      <li>Go to the <strong>Generator</strong> tab</li>
+      <li>Set harmonic compatibility to maximum (e.g. pick a single starting key or let the algorithm choose)</li>
+      <li>Generate a set — verify most/all tracks show no harmonic warning icons in the track list</li>
+      <li>Export as M3U (this saves to History)</li>
+      <li>Go to History → check the badge on this new entry</li>
+    </ol>
+    <div class="label">Expected</div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — Badge is <strong>green</strong> and the number is ≥ 80</div></div>
+    <div class="note">A well-generated set typically scores 85–95. If your library is small, scores may vary.</div>
+  </div>
+</div>
+
+<h2>TC-A4 · Score reflects harmonic warnings</h2>
+<div class="tc">
+  <div class="tc-header"><span class="tc-id">TC-A4</span><span class="tc-title">Sets with many harmonic warnings score lower</span></div>
+  <div class="tc-body">
+    <div class="label">Steps</div>
+    <ol>
+      <li>Generate a set — note which tracks show harmonic warning indicators in the tracklist</li>
+      <li>Count the warnings (red/orange key indicators)</li>
+      <li>Export as M3U → go to History → find the entry</li>
+      <li>Hover the badge → read the <strong>Harmonic: X%</strong> value</li>
+    </ol>
+    <div class="label">Expected</div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — Harmonic % in the tooltip is inversely proportional to the number of warning tracks you counted (more warnings = lower Harmonic %)</div></div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — Overall score is lower than a set with no warnings</div></div>
+  </div>
+</div>
+
+<h2>TC-A5 · Multiple entries — each badge is independent</h2>
+<div class="tc">
+  <div class="tc-header"><span class="tc-id">TC-A5</span><span class="tc-title">Each history entry shows its own score</span></div>
+  <div class="tc-body">
+    <div class="label">Steps</div>
+    <ol>
+      <li>If you have 2+ entries in History, compare their badges side by side</li>
+      <li>Verify that different sets show different scores (unless they happen to be identical)</li>
+    </ol>
+    <div class="label">Expected</div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — Each entry has its own independent score, not the same value on every row</div></div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — Score does not change when you collapse/expand the entry</div></div>
+  </div>
+</div>
+
+<h2>TC-A6 · No badge for single-track entries</h2>
+<div class="tc">
+  <div class="tc-header"><span class="tc-id">TC-A6</span><span class="tc-title">Single-track or empty entries show no badge</span></div>
+  <div class="tc-body">
+    <div class="label">Steps</div>
+    <ol>
+      <li>If you have a history entry with only 1 track, verify no badge appears</li>
+      <li>(This is rare — most sets have multiple tracks. Skip if not applicable.)</li>
+    </ol>
+    <div class="label">Expected</div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — No score badge rendered for 0- or 1-track entries</div></div>
+  </div>
+</div>
+
+<h2>TC-A7 · Load entry does not affect score</h2>
+<div class="tc">
+  <div class="tc-header"><span class="tc-id">TC-A7</span><span class="tc-title">Loading a history entry into Generator doesn't corrupt score</span></div>
+  <div class="tc-body">
+    <div class="label">Steps</div>
+    <ol>
+      <li>In History, click <strong>Load</strong> on any entry (loads the set back into Generator tab)</li>
+      <li>Navigate back to the History tab</li>
+    </ol>
+    <div class="label">Expected</div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — Score badge on all entries still shows the same values as before loading</div></div>
+    <div class="check-row"><div class="check-box"></div><div class="check-text"><span class="pass">PASS</span> — No badge disappears or turns blank</div></div>
+  </div>
+</div>
+
+<hr>
+
+<h2>Score Reference Table</h2>
+<table>
+  <thead>
+    <tr><th>Score</th><th>Color</th><th>What it means</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>80–100</td><td><span class="pass">Green</span></td><td>Mostly harmonic, energy on curve, smooth BPM flow</td></tr>
+    <tr><td>60–79</td><td style="color:#f59e0b;font-weight:600;">Amber</td><td>Some harmonic jumps or energy deviation — playable but improvable</td></tr>
+    <tr><td>0–59</td><td><span class="fail">Red</span></td><td>Many harmonic mismatches or large energy errors — consider regenerating</td></tr>
+  </tbody>
+</table>
+
+<div class="note" style="margin-top:1.5rem;">
+  <strong>To approve:</strong> all TC-A1 through TC-A5 pass → tell the developer "ready to merge sprint_A".
+</div>
+
+</body>
+</html>

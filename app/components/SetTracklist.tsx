@@ -236,11 +236,13 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
           <div className="relative" ref={columnsDropdownRef}>
             <button
               onClick={() => setColumnsOpen((o) => !o)}
-              className="flex items-center gap-2 px-3 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-sm text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-xs text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
               title="Show/hide columns"
             >
-              ⊞
-              <span className="text-[10px]">▾</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+              </svg>
+              Columns
             </button>
             {columnsOpen && (
               <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden py-1">
@@ -273,9 +275,10 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
               onClick={() => setExportOpen((o) => !o)}
               className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-sm text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
             >
-              <span>↓</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
               Export
-              <span className="text-[10px]">▾</span>
             </button>
             {exportOpen && (
               <div className="absolute right-0 top-full mt-1 z-10 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">

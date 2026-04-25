@@ -21,10 +21,8 @@ export function computeSetScore(tracks: SetTrack[]): SetScore {
     for (let i = 1; i < validBpms.length; i++) {
       deltas.push(Math.abs(validBpms[i] - validBpms[i - 1]));
     }
-    const mean = deltas.reduce((s, d) => s + d, 0) / deltas.length;
-    const variance = deltas.reduce((s, d) => s + (d - mean) ** 2, 0) / deltas.length;
-    const stdDev = Math.sqrt(variance);
-    bpmSmoothness = clamp(1 - stdDev / 20, 0, 1);
+    const meanDelta = deltas.reduce((s, d) => s + d, 0) / deltas.length;
+    bpmSmoothness = clamp(1 - meanDelta / 20, 0, 1);
   }
 
   const total = Math.round(

@@ -147,8 +147,10 @@ export default function HistoryTab({
                   >
                     {score.total}
                   </div>
-                  {/* Custom tooltip */}
-                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 hidden group-hover:flex flex-col gap-1 bg-[#1a1a2e] border border-[#2a2a3a] rounded-lg px-3 py-2 shadow-xl w-48 pointer-events-none">
+                  {/* Custom tooltip — opens downward to avoid overflow clipping */}
+                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 hidden group-hover:flex flex-col gap-1 bg-[#1a1a2e] border border-[#2a2a3a] rounded-lg px-3 py-2 shadow-xl w-48 pointer-events-none">
+                    {/* Caret */}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-[#2a2a3a]" />
                     <div className="text-[10px] font-bold uppercase tracking-wider text-[#64748b] mb-0.5">Set Quality</div>
                     <div className="flex justify-between text-xs">
                       <span className="text-[#94a3b8]">Harmonic</span>
@@ -162,8 +164,6 @@ export default function HistoryTab({
                       <span className="text-[#94a3b8]">BPM flow</span>
                       <span className="font-semibold text-[#e2e8f0]">{Math.round(score.bpmSmoothness * 100)}%</span>
                     </div>
-                    {/* Caret */}
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-[#2a2a3a]" />
                   </div>
                 </div>
               )}

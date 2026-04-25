@@ -137,33 +137,6 @@ export default function HistoryTab({
                   </span>
                 ))}
               </div>
-              {score !== null && (
-                <div
-                  className="shrink-0 self-center flex items-center gap-3 px-3 py-1.5 rounded-lg border border-[#1e1e2e] bg-[#0d0d14]"
-                  role="status"
-                  aria-label={`Set quality score ${score.total} out of 100. ${scoreTooltip}`}
-                >
-                  <div className="flex flex-col items-center">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#64748b]">Score</span>
-                    <span className={`text-base font-bold tabular-nums leading-none mt-0.5 ${scoreColor.split(' ')[0]}`}>{score.total}</span>
-                  </div>
-                  <div className="w-px h-8 bg-[#1e1e2e]" />
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-[#64748b] w-16">Harmonic</span>
-                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.harmonicRate) * 100)}%</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-[#64748b] w-16">Energy</span>
-                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.avgEnergyError) * 100)}%</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-[#64748b] w-16">BPM flow</span>
-                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round(score.bpmSmoothness * 100)}%</span>
-                    </div>
-                  </div>
-                </div>
-              )}
               <div className="w-44 shrink-0 rounded-md overflow-hidden border border-[#1e1e2e] bg-[#0d0d14]" title={curveTitle}>
                 <svg
                   viewBox={`0 0 ${miniW} ${miniH}`}
@@ -200,6 +173,33 @@ export default function HistoryTab({
                   ))}
                 </svg>
               </div>
+              {score !== null && (
+                <div
+                  className="shrink-0 self-center flex items-center gap-3 px-3 py-2 rounded-lg border border-[#1e1e2e] bg-[#0d0d14]"
+                  role="status"
+                  aria-label={`Set quality score ${score.total} out of 100. ${scoreTooltip}`}
+                >
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#64748b]">Score</span>
+                    <span className={`text-lg font-bold tabular-nums leading-none ${scoreColor.split(' ')[0]}`}>{score.total}</span>
+                  </div>
+                  <div className="w-px h-9 bg-[#1e1e2e]" />
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-[#64748b]">Harmonic</span>
+                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.harmonicRate) * 100)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-[#64748b]">Energy</span>
+                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.avgEnergyError) * 100)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-[#64748b]">BPM flow</span>
+                      <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round(score.bpmSmoothness * 100)}%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center border-t border-[#1e1e2e]">

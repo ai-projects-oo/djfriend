@@ -18,13 +18,13 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "npm run build && npm run build:electron && npm run build:preload && npm run build:analyzer-worker && npx electron .",
-    "build:electron": "esbuild electron/main.ts --bundle --platform=node --target=node20 --format=esm --external:electron --external:connect --external:serve-static --external:busboy --external:music-metadata --external:node-id3 --external:essentia.js --external:audio-decode --external:axios --external:dotenv --external:openai --outfile=electron-compiled/main.js",
+    "build:electron": "esbuild electron/main.ts --bundle --platform=node --target=node20 --format=esm --external:electron --external:connect --external:serve-static --external:busboy --external:music-metadata --external:node-id3 --external:essentia.js --external:audio-decode --external:axios --external:dotenv --outfile=electron-compiled/main.js",
     "build:preload": "esbuild electron/preload.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=electron-compiled/preload.js",
     "build:analyzer-worker": "esbuild src/analyzer-worker.ts --bundle --platform=node --target=node20 --format=esm --external:essentia.js --external:audio-decode --outfile=electron-compiled/analyzer-worker.js",
     "dist": "npm run build && npm run build:electron && npm run build:analyzer-worker && electron-packager . DJFriend --platform=darwin --arch=universal --out=release --overwrite --ignore='^/release' --ignore='^/.git' --ignore='^/electron$' --ignore='^/src$'",
     "dist:win": "npm run build && npm run build:electron && electron-packager . DJFriend --platform=win32 --arch=x64 --out=release --overwrite --ignore='^/release' --ignore='^/.git' --ignore='^/electron$' --ignore='^/src$' --executable-name=DJFriend",
     "dist:win:installer": "npm run build && npm run build:electron && electron-builder --win --x64",
-    "build:server": "esbuild src/standalone-server.ts --bundle --platform=node --target=node20 --format=esm --external:connect --external:serve-static --external:busboy --external:music-metadata --external:node-id3 --external:essentia.js --external:audio-decode --external:axios --external:dotenv --external:openai --outfile=server-compiled/standalone-server.js",
+    "build:server": "esbuild src/standalone-server.ts --bundle --platform=node --target=node20 --format=esm --external:connect --external:serve-static --external:busboy --external:music-metadata --external:node-id3 --external:essentia.js --external:audio-decode --external:axios --external:dotenv --outfile=server-compiled/standalone-server.js",
     "start": "node server-compiled/standalone-server.js"
   },
   "build": {
@@ -108,7 +108,6 @@
     "lucide-react": "^0.575.0",
     "music-metadata": "^11.12.3",
     "node-id3": "^0.2.9",
-    "openai": "^6.33.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "serve-static": "^2.2.1",

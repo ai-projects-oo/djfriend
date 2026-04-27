@@ -13,28 +13,13 @@ function getSettingsDir(): string {
 const SETTINGS_DIR = getSettingsDir()
 const SETTINGS_PATH = path.join(SETTINGS_DIR, 'settings.json')
 
-export type AIProvider = 'groq' | 'openai' | 'openrouter' | 'custom'
-
 export interface Settings {
   spotifyClientId: string
   spotifyClientSecret: string
   musicFolder: string
   playlistsFolder: string
   rekordboxFolder?: string
-  groqApiKey?: string           // legacy — migrated to aiApiKey on read
-  aiProvider?: AIProvider
-  aiApiKey?: string
-  aiBaseUrl?: string            // only used when aiProvider === 'custom'
   useAllCores?: boolean         // spawn one audio worker per core (default false = single worker)
-}
-
-// Migrate legacy groqApiKey → aiProvider + aiApiKey
-function migrateGroqKey(s: Partial<Settings>): Partial<Settings> {
-  if (s.groqApiKey && !s.aiApiKey) {
-    s.aiProvider = 'groq'
-    s.aiApiKey = s.groqApiKey
-  }
-  return s
 }
 
 export function readSettings(): Partial<Settings> {
@@ -43,14 +28,13 @@ export function readSettings(): Partial<Settings> {
     ...(process.env.SPOTIFY_CLIENT_ID ? { spotifyClientId: process.env.SPOTIFY_CLIENT_ID } : {}),
     ...(process.env.SPOTIFY_CLIENT_SECRET ? { spotifyClientSecret: process.env.SPOTIFY_CLIENT_SECRET } : {}),
     ...(process.env.SONGS_FOLDER ? { musicFolder: process.env.SONGS_FOLDER } : {}),
-    ...(process.env.GROQ_API_KEY ? { groqApiKey: process.env.GROQ_API_KEY } : {}),
   }
   try {
-    if (!fs.existsSync(SETTINGS_PATH)) return migrateGroqKey(fromEnv)
+    if (!fs.existsSync(SETTINGS_PATH)) return fromEnv
     const fromFile = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')) as Partial<Settings>
-    return migrateGroqKey({ ...fromEnv, ...fromFile })
+    return { ...fromEnv, ...fromFile }
   } catch {
-    return migrateGroqKey(fromEnv)
+    return fromEnv
   }
 }
 

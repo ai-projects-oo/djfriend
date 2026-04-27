@@ -35,6 +35,14 @@ export interface LocalAudioFeatures {
   energyProfile?: EnergyProfile;
   year?: number;      // ID3 year tag
   comment?: string;   // ID3 first comment frame
+  // Spectral features for local semantic tag derivation (no API key needed)
+  spectral?: {
+    zcRate: number;
+    bassDb: number;
+    midDb: number;
+    highMidDb: number;
+    highDb: number;
+  };
 }
 
 // Essentia's KeyExtractor returns key names using sharps/flats
@@ -479,7 +487,7 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
 
     const energyProfile = computeEnergyProfile(channelData, 44100);
 
-    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, year: tagYear, comment: tagComment };
+    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb } };
   } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;

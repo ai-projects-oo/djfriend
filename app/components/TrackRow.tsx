@@ -490,7 +490,7 @@ async function handleReanalyze() {
                   style={{
                     fontSize: '11px',
                     color: hint.color ?? '#475569',
-                    cursor: 'help',
+                    cursor: 'default',
                     opacity: 0.7,
                     lineHeight: 1,
                     userSelect: 'none',

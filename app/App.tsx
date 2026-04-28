@@ -1214,6 +1214,47 @@ function AppInner() {
                         </div>
                       </div>
                     )}
+                    {/* Genre (umbrella) */}
+                    {genreGroups.length > 0 && (
+                      <div className="border-t border-[#1e1e2e] pt-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                            Genre
+                          </span>
+                          {prefs.genres.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => selectGenre("Any")}
+                              className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
+                            >
+                              clear
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {genreGroups.map((label) => {
+                            const value = `~${label}`;
+                            const active = prefs.genres.includes(value);
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => selectGenre(value)}
+                                className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                style={{
+                                  backgroundColor: active ? "#7c3aed" : "transparent",
+                                  color: active ? "#fff" : "#a78bfa",
+                                  borderColor: active ? "#7c3aed" : "#4c1d95",
+                                }}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="border-t border-[#1e1e2e] pt-3 flex items-center gap-2 flex-wrap">
                       <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
                         Duration
@@ -1505,47 +1546,6 @@ function AppInner() {
                   )}
                 </div>
               )}
-              {/* Umbrella genre pills — always visible, required to generate */}
-              {genreGroups.length > 0 && (
-                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl px-5 py-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
-                      Genre
-                    </span>
-                    {prefs.genres.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => selectGenre("Any")}
-                        className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
-                      >
-                        clear
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {genreGroups.map((label) => {
-                      const value = `~${label}`;
-                      const active = prefs.genres.includes(value);
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => selectGenre(value)}
-                          className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
-                          style={{
-                            backgroundColor: active ? "#7c3aed" : "transparent",
-                            color: active ? "#fff" : "#a78bfa",
-                            borderColor: active ? "#7c3aed" : "#4c1d95",
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Card 2: Filters (only when tag data exists) */}
               {availableTags.vibeTags.length +
                 availableTags.moodTags.length +

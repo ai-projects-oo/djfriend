@@ -13,6 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { createRequire } from 'module';
+import { isMainThread } from 'worker_threads';
 
 const require = createRequire(import.meta.url);
 
@@ -111,6 +112,12 @@ async function initialize(): Promise<void> {
         if (initState === 'ready' || initState === 'failed') { clearInterval(poll); resolve(); }
       }, 100);
     });
+    return;
+  }
+
+  // TF.js (browser build) does not work in Node.js worker_threads — use spectral fallback there
+  if (!isMainThread) {
+    initState = 'failed';
     return;
   }
 

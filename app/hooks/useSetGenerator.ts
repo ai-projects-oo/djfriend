@@ -382,9 +382,11 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     if (appended.length === 0) return;
     setGeneratedSet(prev => {
       const combined = [...prev, ...appended];
+      const n = combined.length;
       return combined.map((track, i) => ({
         ...track,
         slot: i,
+        targetEnergy: n > 1 ? sampleCurve(curve, i / (n - 1)) : sampleCurve(curve, 0.5),
         harmonicWarning: i > 0 ? isHarmonicWarning(combined[i - 1].camelot, track.camelot) : false,
       }));
     });

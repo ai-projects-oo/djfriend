@@ -353,7 +353,7 @@ async function handleReanalyze() {
               </button>
             )}
             {showHoverTips && showKeyTooltip && track.camelot && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1.5 min-w-[160px]">
+              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1.5 min-w-[160px]">
                 <div className="text-[9px] uppercase tracking-widest text-[#334155] mb-0.5">Next key options</div>
                 {compatibleKeys.length > 0 && (
                   <div className="flex items-center justify-between gap-4">

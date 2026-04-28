@@ -17,6 +17,7 @@ import os from 'os';
 
 const RESULTS_PATH   = path.join(os.homedir(), 'Music', 'djfriend-results-v3.json');
 const HISTORY_PATH   = path.join(os.homedir(), 'Music', 'djfriend-history.json');
+const LEVELDB_PATH   = path.join(os.homedir(), 'Library', 'Application Support', 'djfriend', 'Local Storage', 'leveldb');
 const MODEL_OUT_PATH = path.join(os.homedir(), 'Music', 'djfriend-transition-model.json');
 
 const H1 = 32, H2 = 32, INPUT = 18;
@@ -191,12 +192,60 @@ function backward(x, y, cache, w, lr, m) {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
+async function main() {
 console.log('Loading library…');
 const raw = JSON.parse(fs.readFileSync(RESULTS_PATH, 'utf8'));
 const tracks = Object.values(raw).filter(s =>
   s.bpm > 0 && s.camelot && s.energy > 0
 );
 console.log(`  ${tracks.length} usable tracks\n`);
+
+// ── History loading (disk file → LevelDB fallback) ───────────────────────────
+
+async function readHistory() {
+  // 1. Prefer the disk file written by the app
+  if (fs.existsSync(HISTORY_PATH)) {
+    const entries = JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8'));
+    if (entries.length > 0) {
+      console.log(`  Reading from ${HISTORY_PATH}`);
+      return entries;
+    }
+  }
+
+  // 2. Fall back to Electron's localStorage LevelDB directly
+  if (!fs.existsSync(LEVELDB_PATH)) return [];
+  try {
+    const { Level } = await import('level');
+    const db = new Level(LEVELDB_PATH, { createIfMissing: false });
+    await db.open({ passive: true });
+    let history = [];
+    for await (const [key, val] of db.iterator()) {
+      const k = typeof key === 'string' ? key : key.toString('utf8');
+      if (!k.includes('djfriend-history')) continue;
+      // Chromium stores: 0x01 prefix + UTF-8 JSON (compact ASCII strings)
+      // or 0x01 prefix + UTF-16 LE for non-ASCII
+      const raw = Buffer.isBuffer(val) ? val : Buffer.from(val);
+      const jsonStr = raw.slice(1).toString('utf8');
+      try {
+        history = JSON.parse(jsonStr);
+      } catch {
+        // Try UTF-16 LE (non-ASCII artist/title names)
+        history = JSON.parse(raw.slice(1).toString('utf16le'));
+      }
+      break;
+    }
+    await db.close();
+    if (history.length > 0) {
+      // Cache to disk so future runs are instant
+      fs.writeFileSync(HISTORY_PATH, JSON.stringify(history), 'utf8');
+      console.log(`  Read from LevelDB → cached to ${HISTORY_PATH}`);
+    }
+    return history;
+  } catch (e) {
+    console.log(`  LevelDB read failed: ${e.message}`);
+    return [];
+  }
+}
 
 // ── Real transitions from history (score = 1.0) ───────────────────────────────
 
@@ -212,9 +261,10 @@ for (const t of tracks) {
 }
 
 let realPairs = 0;
-if (fs.existsSync(HISTORY_PATH)) {
-  const history = JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8'));
-  console.log(`Found ${history.length} history entries`);
+console.log('Loading set history…');
+const history = await readHistory();
+if (history.length > 0) {
+  console.log(`  ${history.length} history entries`);
   for (const entry of history) {
     const set = entry.tracks ?? [];
     for (let i = 1; i < set.length; i++) {
@@ -240,9 +290,9 @@ if (fs.existsSync(HISTORY_PATH)) {
       realPairs++;
     }
   }
-  console.log(`  Extracted ${realPairs} real transitions → weighted 3× in training\n`);
+  console.log(`  ${realPairs} real transitions extracted → weighted 3× in training\n`);
 } else {
-  console.log('No history file found — training on synthetic data only\n');
+  console.log('  No history yet — training on synthetic data only\n');
 }
 
 // Oversample real pairs 3× so they outweigh synthetic
@@ -332,3 +382,6 @@ fs.writeFileSync(MODEL_OUT_PATH, JSON.stringify(model), 'utf8');
 const kb = (fs.statSync(MODEL_OUT_PATH).size / 1024).toFixed(1);
 console.log(`Model saved → ${MODEL_OUT_PATH} (${kb} KB)`);
 console.log(`  Params: ${H1 * INPUT + H1 + H2 * H1 + H2 + H2 + 1} total`);
+}
+
+main().catch(console.error);

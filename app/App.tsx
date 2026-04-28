@@ -29,7 +29,7 @@ import { useSpotifyImport } from "./hooks/useSpotifyImport";
 import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
 import { camelotColor } from "./lib/camelotColors";
 import { transitionFeatures } from "./lib/mlFeatures";
-import { blendModels } from "./lib/mlModel";
+import { blendModels, isValidModelWeights } from "./lib/mlModel";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -525,8 +525,8 @@ function AppInner() {
         // Fetch community model in background — blend if both available
         fetch('https://djfriend.onrender.com/api/community-model')
           .then(r => r.ok ? r.json() : null)
-          .then((community: import('./lib/mlModel').ModelWeights | null) => {
-            if (!community) return;
+          .then((community: unknown) => {
+            if (!isValidModelWeights(community)) return;
             setMlWeights(prev => prev ? blendModels(prev, community, 0.7) : community);
           })
           .catch(() => {});

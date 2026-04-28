@@ -2102,6 +2102,7 @@ function AppInner() {
                   tracks={generatedSet}
                   prefs={prefs}
                   libraryLoaded={library.length > 0}
+                  energyCheckThreshold={energyCheckThreshold}
                   showRekordboxExport={hasRekordboxFolder}
                   onSwapTrack={handleSwapTrack}
                   onToggleLock={handleToggleLock}

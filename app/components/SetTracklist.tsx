@@ -81,7 +81,7 @@ function computeTransitionHints(prev: SetTrack, next: SetTrack): TransitionHint[
 
 // ─── Fit scoring ───────────────────────────────────────────────────────────────
 
-function computeFit(track: SetTrack): FitInfo {
+function computeFit(track: SetTrack, warnThreshold: number): FitInfo {
   const reasons: string[] = [];
   let worst: FitLevel = 'good';
 
@@ -93,7 +93,7 @@ function computeFit(track: SetTrack): FitInfo {
 
   const eDelta = Math.abs(track.energy - track.targetEnergy);
   if (eDelta > 0.35) flag('bad', `Energy ${(eDelta * 100).toFixed(0)}% off target`);
-  else if (eDelta > 0.20) flag('warn', `Energy ${(eDelta * 100).toFixed(0)}% off target`);
+  else if (eDelta > warnThreshold) flag('warn', `Energy ${(eDelta * 100).toFixed(0)}% off target`);
 
   return { level: worst, reasons };
 }
@@ -104,6 +104,7 @@ interface Props {
   tracks: SetTrack[];
   prefs: DJPreferences;
   libraryLoaded: boolean;
+  energyCheckThreshold?: number;
   showRekordboxExport?: boolean;
   onSwapTrack: (index: number) => void;
   onToggleLock: (index: number) => void;
@@ -121,7 +122,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordboxExport, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadVisibleColumns);
@@ -179,10 +180,10 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
 
   const duration = totalDurationMinutes(tracks);
   const badFitCount = tracks.filter((t) =>
-    computeFit(t).level === 'bad'
+    computeFit(t, energyCheckThreshold).level === 'bad'
   ).length;
   const warnFitCount = tracks.filter((t) =>
-    computeFit(t).level === 'warn'
+    computeFit(t, energyCheckThreshold).level === 'warn'
   ).length;
 
   // Total column count for colSpan calculations
@@ -377,7 +378,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, showRekordb
                     key={track.file}
                     track={track}
                     index={idx}
-                    fitInfo={computeFit(track)}
+                    fitInfo={computeFit(track, energyCheckThreshold)}
                     transition={transition}
                     visibleColumns={visibleColumns}
                     totalCols={totalCols}

@@ -498,7 +498,7 @@ async function handleReanalyze() {
                 >
                   {hint.icon}
                   {showHoverTips && hoverHintIdx === hi && hint.tip && (
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap">
+                    <div className="absolute bottom-full right-0 mb-2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none w-max max-w-[220px] leading-snug">
                       {hint.tip}
                     </div>
                   )}

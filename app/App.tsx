@@ -1172,6 +1172,47 @@ function AppInner() {
                       </div>
                     )}
 
+                    {/* Genre (umbrella) */}
+                    {genreGroups.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                            Genre
+                          </span>
+                          {prefs.genres.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => selectGenre("Any")}
+                              className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
+                            >
+                              clear
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {genreGroups.map((label) => {
+                            const value = `~${label}`;
+                            const active = prefs.genres.includes(value);
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => selectGenre(value)}
+                                className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                style={{
+                                  backgroundColor: active ? "#7c3aed" : "transparent",
+                                  color: active ? "#fff" : "#a78bfa",
+                                  borderColor: active ? "#7c3aed" : "#4c1d95",
+                                }}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* BPM range */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
@@ -1524,28 +1565,12 @@ function AppInner() {
                   )}
                 </div>
               )}
-              {/* Card 1: Energy Curve */}
-              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
-                    Energy Curve
-                  </h2>
-                </div>
-                <EnergyCurveEditor
-                  points={curve}
-                  onChange={handleCurveChange}
-                  setTracks={generatedSet.length > 0 ? generatedSet : undefined}
-                  setLength={generatedSet.length}
-                />
-              </div>
-
               {/* Card 2: Filters (only when tag data exists) */}
               {availableTags.vibeTags.length +
                 availableTags.moodTags.length +
                 availableTags.venueTags.length +
                 availableTags.timeOfNightTags.length +
                 availableTags.vocalTypes.length +
-                genreGroups.length +
                 availableGenres.length >
                 0 &&
                 (() => {
@@ -1817,43 +1842,6 @@ function AppInner() {
                               </div>
                             )}
                           </div>
-                          {genreGroups.length > 0 && (
-                            <div>
-                              <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">
-                                Genre
-                                {prefs.genres.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => selectGenre("Any")}
-                                    className="ml-2 text-[#6b7280] hover:text-[#9ca3af] transition-colors"
-                                  >
-                                    clear
-                                  </button>
-                                )}
-                              </span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {genreGroups.map((label) => {
-                                  const value = `~${label}`;
-                                  const active = prefs.genres.includes(value);
-                                  return (
-                                    <button
-                                      key={value}
-                                      type="button"
-                                      onClick={() => selectGenre(value)}
-                                      className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
-                                      style={{
-                                        backgroundColor: active ? "#7c3aed" : "transparent",
-                                        color: active ? "#fff" : "#a78bfa",
-                                        borderColor: active ? "#7c3aed" : "#4c1d95",
-                                      }}
-                                    >
-                                      {label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
                           {availableGenres.length > 0 && (
                             <div>
                               <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">
@@ -1967,7 +1955,21 @@ function AppInner() {
             </div>
 
             {/* ── RIGHT: Generated Set ── */}
-            <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 min-w-0 flex flex-col gap-4">
+              {/* Energy Curve */}
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+                    Energy Curve
+                  </h2>
+                </div>
+                <EnergyCurveEditor
+                  points={curve}
+                  onChange={handleCurveChange}
+                  setTracks={generatedSet.length > 0 ? generatedSet : undefined}
+                  setLength={generatedSet.length}
+                />
+              </div>
               <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex flex-col flex-1">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">

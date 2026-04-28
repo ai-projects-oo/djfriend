@@ -149,6 +149,7 @@ function AppInner() {
   );
   const historyExportRef = useRef<HTMLDivElement | null>(null);
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string } | null>(null);
+  const [mlWeights, setMlWeights] = useState<import('./lib/mlModel').ModelWeights | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
@@ -362,7 +363,7 @@ function AppInner() {
     handleUpdateTrack,
     handleLoadToSet,
     handleAppendTracks,
-  } = useSetGenerator(library, setLibrary, playlistFilterFiles, history);
+  } = useSetGenerator(library, setLibrary, playlistFilterFiles, history, mlWeights);
 
   const energyIssues = useMemo(
     () => generatedSet.filter(t => Math.abs(t.energy - t.targetEnergy) > energyCheckThreshold),
@@ -491,6 +492,14 @@ function AppInner() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  // Load ML transition model weights once on mount
+  useEffect(() => {
+    apiFetch('/api/ml-model')
+      .then(r => r.ok ? r.json() : null)
+      .then(w => { if (w) setMlWeights(w) })
+      .catch(() => {});
+  }, []);
 
   // Check for app updates once on mount
   useEffect(() => {

@@ -19,7 +19,7 @@ export interface SwapBreakdown {
   hasSemanticTags: boolean;      // whether candidate has AI tags at all
 }
 
-export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<React.SetStateAction<Song[]>>, playlistFilterFiles?: Set<string>, history?: HistoryEntry[]) {
+export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<React.SetStateAction<Song[]>>, playlistFilterFiles?: Set<string>, history?: HistoryEntry[], mlWeights?: import('../lib/mlModel').ModelWeights | null) {
   const [prefs, setPrefs] = useState<DJPreferences>(DEFAULT_PREFS);
   const [curve, setCurve] = useState<CurvePoint[]>(DEFAULT_CURVE);
   const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
@@ -128,7 +128,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const runGenerate = useCallback(
     (songs: Song[], p: DJPreferences, c: CurvePoint[], extraOpts?: { jitter?: number; excludeFiles?: Set<string> }) => {
       if (songs.length === 0) return;
-      setGeneratedSet(generateSet(songs, p, c, { ...extraOpts, playlistFilterFiles, weights: scoringWeights, history }));
+      setGeneratedSet(generateSet(songs, p, c, { ...extraOpts, playlistFilterFiles, weights: scoringWeights, history, mlWeights }));
     },
     [playlistFilterFiles, scoringWeights, history],
   );
@@ -158,22 +158,22 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   const handleGenerate = useCallback(() => {
     const lockedFiles = new Set(generatedSet.filter(t => t.locked).map(t => t.file));
-    const fresh = generateSet(library, prefs, curve, { excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights, history });
+    const fresh = generateSet(library, prefs, curve, { excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights, history, mlWeights });
     setGeneratedSet(mergeWithLocked(fresh));
-  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights, history]);
+  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights, history, mlWeights]);
 
   const handleRegenerate = useCallback(() => {
     if (library.length === 0) return;
     const lockedFiles = new Set(generatedSet.filter(t => t.locked).map(t => t.file));
-    const fresh = generateSet(library, prefs, curve, { jitter: 0.4, excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights, history });
+    const fresh = generateSet(library, prefs, curve, { jitter: 0.4, excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights, history, mlWeights });
     setGeneratedSet(mergeWithLocked(fresh));
-  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights, history]);
+  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights, history, mlWeights]);
 
   const handleGenerateNew = useCallback(() => {
     if (library.length === 0) return;
     const excludeFiles = new Set(generatedSet.map(t => t.file));
-    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15, playlistFilterFiles, weights: scoringWeights, history }));
-  }, [library, prefs, curve, generatedSet, playlistFilterFiles, scoringWeights, history]);
+    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15, playlistFilterFiles, weights: scoringWeights, history, mlWeights }));
+  }, [library, prefs, curve, generatedSet, playlistFilterFiles, scoringWeights, history, mlWeights]);
 
   const selectGenre = useCallback((genre: string) => {
     if (genre === 'Any') {
@@ -379,6 +379,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
       maxDurationSeconds: remainingSeconds,
       weights: scoringWeights,
       history,
+      mlWeights,
     });
     if (appended.length === 0) return;
     setGeneratedSet(prev => {

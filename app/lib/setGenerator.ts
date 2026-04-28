@@ -3,6 +3,9 @@ import { camelotHarmonyScore, isHarmonicWarning, isCamelotClockwise } from './ca
 import { computePlayStats, familiarityScore } from './historyStats';
 import { sampleCurve } from './curveInterpolation';
 import { matchesGenrePrefs } from './genreUtils';
+import type { ModelWeights } from './mlModel';
+import { mlpForward } from './mlModel';
+import { transitionFeatures } from './mlFeatures';
 
 const GAP_SECONDS = 10;
 
@@ -107,6 +110,8 @@ export interface GenerateOptions {
   weights?: ScoringWeights;
   /** set history used to compute per-track familiarity scores */
   history?: HistoryEntry[];
+  /** trained ML model weights — when present, blends learned score with rule-based */
+  mlWeights?: ModelWeights | null;
 }
 
 export function generateSet(
@@ -245,7 +250,16 @@ export function generateSet(
       const wB = options?.weights?.bpmWeight        ?? 0.22;
       const wT = options?.weights?.transitionWeight ?? 0.08;
       const wE = options?.weights?.energyWeight     ?? 0.25;
-      const score = harmonicScore * wH + bpmScore * wB + transitionScore * wT + energyScore * wE + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + jitter;
+      const ruleScore = harmonicScore * wH + bpmScore * wB + transitionScore * wT + energyScore * wE;
+      // ML model blends with rule-based score (70/30 once model is loaded)
+      const mlScore = options?.mlWeights && prevTrack
+        ? mlpForward(transitionFeatures(
+            prevTrack, song, targetEnergy,
+            maxCount > 1 ? slot / (maxCount - 1) : 0.5,
+          ), options.mlWeights)
+        : null;
+      const baseScore = mlScore !== null ? ruleScore * 0.7 + mlScore * 0.3 : ruleScore;
+      const score = baseScore + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + jitter;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;

@@ -492,6 +492,19 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     }
   })
 
+  // Serve trained transition model weights
+  const ML_MODEL_PATH = path.join(os.homedir(), 'Music', 'djfriend-transition-model.json')
+  middlewares.use('/api/ml-model', (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    if (!fs.existsSync(ML_MODEL_PATH)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Model not trained yet' }))
+      return
+    }
+    res.setHeader('Content-Type', 'application/json')
+    fs.createReadStream(ML_MODEL_PATH).pipe(res)
+  })
+
   middlewares.use('/api/apple-library', (req, res, next) => {
     if (req.method !== 'GET') { next(); return }
     if (!fs.existsSync(APPLE_RESULTS_PATH)) {

@@ -1161,7 +1161,7 @@ function AppInner() {
                       <div className="relative flex-1 group">
                         <button
                           onClick={handleRegenerate}
-                          disabled={isInitializing || library.length === 0}
+                          disabled={isInitializing || generatedSet.length === 0}
                           className="w-full flex items-center justify-center gap-1.5 border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#64748b] hover:text-[#94a3b8] text-xs font-medium py-1.5 rounded-md transition-all duration-200 cursor-pointer"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

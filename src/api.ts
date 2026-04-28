@@ -18,8 +18,18 @@ import type { IncomingMessage, ServerResponse } from 'http'
 
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
+
+function semverGt(a: string, b: string): boolean {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0)
+  }
+  return false
+}
 const execFileAsync = promisify(execFile)
 export const APPLE_RESULTS_PATH = path.join(os.homedir(), 'Music', 'djfriend-results-v3.json')
+export const HISTORY_PATH = path.join(os.homedir(), 'Music', 'djfriend-history.json')
 
 export interface AppSong {
   filePath: string
@@ -461,6 +471,41 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     })
   }
 
+  middlewares.use('/api/check-update', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    // Read current version from package.json at runtime
+    const pkgPath = new URL('../../package.json', import.meta.url)
+    const currentVersion: string = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version
+    try {
+      const response = await fetch('https://api.github.com/repos/ai-projects-oo/djfriend/releases/latest', {
+        headers: { 'User-Agent': 'djfriend-app', Accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) throw new Error('GitHub API error')
+      const data = await response.json() as { tag_name: string; html_url: string; name: string }
+      const latestVersion = data.tag_name.replace(/^v/, '')
+      const hasUpdate = semverGt(latestVersion, currentVersion)
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ currentVersion, latestVersion, hasUpdate, downloadUrl: data.html_url }))
+    } catch {
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ currentVersion, latestVersion: null, hasUpdate: false, downloadUrl: null }))
+    }
+  })
+
+  // Serve trained transition model weights
+  const ML_MODEL_PATH = path.join(os.homedir(), 'Music', 'djfriend-transition-model.json')
+  middlewares.use('/api/ml-model', (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    if (!fs.existsSync(ML_MODEL_PATH)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Model not trained yet' }))
+      return
+    }
+    res.setHeader('Content-Type', 'application/json')
+    fs.createReadStream(ML_MODEL_PATH).pipe(res)
+  })
+
   middlewares.use('/api/apple-library', (req, res, next) => {
     if (req.method !== 'GET') { next(); return }
     if (!fs.existsSync(APPLE_RESULTS_PATH)) {
@@ -470,6 +515,32 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     }
     res.setHeader('Content-Type', 'application/json')
     fs.createReadStream(APPLE_RESULTS_PATH).pipe(res)
+  })
+
+  middlewares.use('/api/history', async (req, res, next) => {
+    res.setHeader('Content-Type', 'application/json')
+    if (req.method === 'GET') {
+      if (!fs.existsSync(HISTORY_PATH)) { res.end('[]'); return }
+      fs.createReadStream(HISTORY_PATH).pipe(res)
+      return
+    }
+    if (req.method === 'POST') {
+      const chunks: Buffer[] = []
+      req.on('data', (c: Buffer) => chunks.push(c))
+      req.on('end', () => {
+        try {
+          const body = Buffer.concat(chunks).toString('utf-8')
+          JSON.parse(body) // validate
+          fs.writeFileSync(HISTORY_PATH, body, 'utf-8')
+          res.end(JSON.stringify({ ok: true }))
+        } catch {
+          res.writeHead(400)
+          res.end(JSON.stringify({ error: 'Invalid JSON' }))
+        }
+      })
+      return
+    }
+    next()
   })
 
   middlewares.use('/api/settings', async (req, res, next) => {

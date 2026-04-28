@@ -141,6 +141,7 @@ function AppInner() {
       return [];
     }
   });
+  const [historyLoadedFromDisk, setHistoryLoadedFromDisk] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(
     null,
   );
@@ -148,6 +149,8 @@ function AppInner() {
     null,
   );
   const historyExportRef = useRef<HTMLDivElement | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string } | null>(null);
+  const [mlWeights, setMlWeights] = useState<import('./lib/mlModel').ModelWeights | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
@@ -173,10 +176,28 @@ function AppInner() {
   const uploadFolderInputRef = useRef<HTMLInputElement | null>(null);
   const sourceDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Persist history to localStorage
+  // Load history from disk on startup (supercedes localStorage)
+  useEffect(() => {
+    apiFetch('/api/history')
+      .then(r => r.json() as Promise<HistoryEntry[]>)
+      .then(entries => {
+        if (entries.length > 0) setHistory(entries);
+        setHistoryLoadedFromDisk(true);
+      })
+      .catch(() => setHistoryLoadedFromDisk(true));
+  }, []);
+
+  // Persist history to localStorage + disk on every change
   useEffect(() => {
     localStorage.setItem("djfriend-history", JSON.stringify(history));
-  }, [history]);
+    if (historyLoadedFromDisk) {
+      apiFetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(history),
+      }).catch(() => {});
+    }
+  }, [history, historyLoadedFromDisk]);
 
   // Click-outside for analyze menu
   useEffect(() => {
@@ -361,12 +382,21 @@ function AppInner() {
     handleUpdateTrack,
     handleLoadToSet,
     handleAppendTracks,
-  } = useSetGenerator(library, setLibrary, playlistFilterFiles, history);
+  } = useSetGenerator(library, setLibrary, playlistFilterFiles, history, mlWeights);
 
   const energyIssues = useMemo(
     () => generatedSet.filter(t => Math.abs(t.energy - t.targetEnergy) > energyCheckThreshold),
     [generatedSet, energyCheckThreshold],
   );
+  const libraryEnergyRange = useMemo(() => {
+    if (library.length === 0) return null;
+    let min = Infinity, max = -Infinity;
+    for (const s of library) {
+      if (s.energy > 0) { min = Math.min(min, s.energy); max = Math.max(max, s.energy); }
+    }
+    return min < max ? { min: Math.round(min * 100) / 100, max: Math.round(max * 100) / 100 } : null;
+  }, [library]);
+
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
 
   // Wire setGeneratedSet into the bridge ref so useLibrary can reset the set on new analysis
@@ -482,6 +512,22 @@ function AppInner() {
     loadSettings();
   }, [loadSettings]);
 
+  // Load ML transition model weights once on mount
+  useEffect(() => {
+    apiFetch('/api/ml-model')
+      .then(r => r.ok ? r.json() : null)
+      .then(w => { if (w) setMlWeights(w) })
+      .catch(() => {});
+  }, []);
+
+  // Check for app updates once on mount
+  useEffect(() => {
+    apiFetch('/api/check-update')
+      .then(r => r.json() as Promise<{ hasUpdate: boolean; latestVersion: string; downloadUrl: string }>)
+      .then(d => { if (d.hasUpdate) setUpdateInfo({ latestVersion: d.latestVersion, downloadUrl: d.downloadUrl }) })
+      .catch(() => {});
+  }, []);
+
   // Handle Spotify OAuth callback
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -545,6 +591,31 @@ function AppInner() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
+      {/* Update available banner */}
+      {updateInfo && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-[#1a1030] border-b border-[#7c3aed44] text-xs">
+          <span className="text-[#a78bfa]">
+            ✦ DJFriend <span className="font-semibold text-[#c4b5fd]">v{updateInfo.latestVersion}</span> is available
+          </span>
+          <div className="flex items-center gap-3">
+            <a
+              href={updateInfo.downloadUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1 rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] transition-colors font-medium"
+            >
+              Download
+            </a>
+            <button
+              onClick={() => setUpdateInfo(null)}
+              className="text-[#475569] hover:text-[#94a3b8] transition-colors"
+              aria-label="Dismiss update notification"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       {/* Startup initialization overlay */}
       {isInitializing && (
         <div className="fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col items-center justify-center gap-6">
@@ -1996,6 +2067,7 @@ function AppInner() {
                   onChange={handleCurveChange}
                   setTracks={generatedSet.length > 0 ? generatedSet : undefined}
                   setLength={generatedSet.length}
+                  libraryEnergyRange={libraryEnergyRange}
                 />
               </div>
               <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex flex-col flex-1">
@@ -3325,6 +3397,7 @@ function AppInner() {
           setPlaylistFilterId(null);
           setHistory([]);
           localStorage.removeItem("djfriend-history");
+          apiFetch('/api/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '[]' }).catch(() => {});
         }}
       />
 

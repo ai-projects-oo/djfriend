@@ -28,6 +28,7 @@ interface Props {
   onChange: (points: CurvePoint[]) => void;
   setTracks?: SetTrack[]; // overlay actual track energies as dots
   setLength?: number;     // number of tracks — used to cap max control points
+  libraryEnergyRange?: { min: number; max: number } | null; // real energy range of filtered library
 }
 
 /** Max control points recommended for a given set length */
@@ -47,7 +48,7 @@ function resampleCurve(points: CurvePoint[], newCount: number): CurvePoint[] {
   });
 }
 
-export default function EnergyCurveEditor({ points, onChange, setTracks, setLength = 0 }: Props) {
+export default function EnergyCurveEditor({ points, onChange, setTracks, setLength = 0, libraryEnergyRange }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgWidth, setSvgWidth] = useState(600);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
@@ -177,12 +178,18 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
       <div className="relative rounded-lg overflow-hidden border border-[#2a2a3a] bg-[#0d0d14]">
         {/* Y-axis labels */}
         <div
-          className="absolute left-0 top-0 flex flex-col justify-between text-[10px] text-[#475569] pointer-events-none"
+          className="absolute left-0 top-0 flex flex-col justify-between text-[10px] pointer-events-none"
           style={{ height: SVG_HEIGHT, paddingTop: PADDING.top, paddingBottom: PADDING.bottom }}
         >
-          <span className="pl-1">1.0</span>
-          <span className="pl-1">0.5</span>
-          <span className="pl-1">0.0</span>
+          <span className={`pl-1 ${libraryEnergyRange ? 'text-[#7c3aed]' : 'text-[#475569]'}`}>
+            {libraryEnergyRange ? libraryEnergyRange.max.toFixed(2) : '1.0'}
+          </span>
+          <span className="pl-1 text-[#475569]">
+            {libraryEnergyRange ? ((libraryEnergyRange.min + libraryEnergyRange.max) / 2).toFixed(2) : '0.5'}
+          </span>
+          <span className={`pl-1 ${libraryEnergyRange ? 'text-[#7c3aed]' : 'text-[#475569]'}`}>
+            {libraryEnergyRange ? libraryEnergyRange.min.toFixed(2) : '0.0'}
+          </span>
         </div>
 
         <svg
@@ -225,6 +232,22 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
               strokeWidth={1}
             />
           ))}
+
+          {/* Library energy range guide lines */}
+          {libraryEnergyRange && (
+            <>
+              <line
+                x1={PADDING.left} y1={toSvgY(libraryEnergyRange.max)}
+                x2={svgWidth - PADDING.right} y2={toSvgY(libraryEnergyRange.max)}
+                stroke="#7c3aed" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="4 3"
+              />
+              <line
+                x1={PADDING.left} y1={toSvgY(libraryEnergyRange.min)}
+                x2={svgWidth - PADDING.right} y2={toSvgY(libraryEnergyRange.min)}
+                stroke="#7c3aed" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="4 3"
+              />
+            </>
+          )}
 
           {/* Filled area under curve */}
           {fillPath && (

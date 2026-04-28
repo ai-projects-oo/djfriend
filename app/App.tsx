@@ -3305,6 +3305,8 @@ function AppInner() {
           setGeneratedSet([]);
           setImportHistory([]);
           setPlaylistFilterId(null);
+          setHistory([]);
+          localStorage.removeItem("djfriend-history");
         }}
       />
 

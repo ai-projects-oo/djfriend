@@ -1228,9 +1228,9 @@ function AppInner() {
                         }, 0);
                       }}
                       disabled={
-                        isInitializing || library.length === 0 || isGenerating
+                        isInitializing || library.length === 0 || isGenerating || prefs.genres.length === 0
                       }
-                      title="Generate a new set"
+                      title={prefs.genres.length === 0 ? "Select at least one genre to generate" : "Generate a new set"}
                       aria-label="Generate set"
                       className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
                       style={{
@@ -1286,6 +1286,11 @@ function AppInner() {
                         </>
                       )}
                     </button>
+                    {prefs.genres.length === 0 && (
+                      <p className="text-[10px] text-[#475569] text-center mt-1">
+                        ← Pick a genre to generate a set
+                      </p>
+                    )}
                     {/* Secondary actions — subordinate ghost buttons */}
                     <div className="flex gap-2">
                       <button
@@ -1604,16 +1609,7 @@ function AppInner() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setPrefs((p) => ({
-                                  ...p,
-                                  tagFilters: {
-                                    vibeTags: [],
-                                    moodTags: [],
-                                    vocalTypes: [],
-                                    venueTags: [],
-                                    timeOfNightTags: [],
-                                  },
-                                }));
+                                selectGenre("Any");
                               }}
                               className="ml-auto text-[#475569] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
                               title="Clear all filters"

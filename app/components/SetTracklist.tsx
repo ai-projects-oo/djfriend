@@ -106,6 +106,7 @@ interface Props {
   libraryLoaded: boolean;
   energyCheckThreshold?: number;
   showRekordboxExport?: boolean;
+  showHoverTips?: boolean;
   onSwapTrack: (index: number) => void;
   onToggleLock: (index: number) => void;
   onRemoveTrack: (index: number) => void;
@@ -122,7 +123,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, showHoverTips = true, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadVisibleColumns);
@@ -382,6 +383,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                     transition={transition}
                     visibleColumns={visibleColumns}
                     totalCols={totalCols}
+                    showHoverTips={showHoverTips}
                     onSwap={() => onSwapTrack(idx)}
                     onToggleLock={() => onToggleLock(idx)}
                     onRemove={() => onRemoveTrack(idx)}

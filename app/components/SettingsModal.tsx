@@ -79,6 +79,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [analysisMode, setAnalysisMode] = useState<'performance' | 'normal' | 'power-saving'>('normal')
   const [energyCheckThreshold, setEnergyCheckThreshold] = useState(12)
   const [shareTelemetry, setShareTelemetry] = useState(true)
+  const [showHoverTips, setShowHoverTips] = useState(true)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -105,7 +106,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; showHoverTips?: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
         setRekordboxFolder(d.rekordboxFolder ?? '')
         setMusicFolderStatus('idle')
@@ -114,6 +115,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         else setAnalysisMode('normal')
         setEnergyCheckThreshold(Math.round((d.energyCheckThreshold ?? 0.12) * 100))
         setShareTelemetry(d.shareTelemetry !== false)
+        setShowHoverTips(d.showHoverTips !== false)
         setHasSpotifySecret(d.hasSecret ?? false)
       })
       .catch(() => {})
@@ -126,7 +128,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), analysisMode, energyCheckThreshold: energyCheckThreshold / 100, shareTelemetry }),
+        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), analysisMode, energyCheckThreshold: energyCheckThreshold / 100, shareTelemetry, showHoverTips }),
       })
       if (!r.ok) throw new Error('Save failed')
       onSaved()
@@ -302,6 +304,28 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               ))}
             </div>
           </div>
+        </div>
+
+        {/* ── Display ──────────────────────────────────────────────── */}
+        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Display</h3>
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showHoverTips}
+              onChange={e => {
+                setShowHoverTips(e.target.checked)
+                apiFetch('/api/settings', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ showHoverTips: e.target.checked }),
+                }).catch(() => {})
+              }}
+              className="w-4 h-4 cursor-pointer accent-[#7c3aed]"
+              aria-label="Show hover tips"
+            />
+            <span className="text-sm text-[#e2e8f0]">Show hover tips</span>
+          </label>
         </div>
 
         {/* ── AI & Privacy ─────────────────────────────────────────── */}

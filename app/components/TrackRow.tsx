@@ -16,6 +16,7 @@ interface Props {
   onToggleLock: () => void;
   onRemove: () => void;
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => void;
+  showHoverTips?: boolean;
   // drag-to-reorder
   onDragStart?: () => void;
   onDragEnd?: () => void;
@@ -88,9 +89,12 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, showHoverTips = true, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showFitTooltip, setShowFitTooltip] = useState(false);
+  const [showBpmTooltip, setShowBpmTooltip] = useState(false);
+  const [showEnergyTooltip, setShowEnergyTooltip] = useState(false);
+  const [hoverHintIdx, setHoverHintIdx] = useState<number | null>(null);
   const [showTags, setShowTags] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -274,8 +278,8 @@ async function handleReanalyze() {
                 >
                   ●
                 </span>
-                {showFitTooltip && (
-                  <div className="absolute top-full left-0 mt-1 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none"
+                {showHoverTips && showFitTooltip && (
+                  <div className="absolute bottom-full left-0 mb-1 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none"
                     style={{ borderColor: fitInfo.level === 'bad' ? '#ef444466' : '#f59e0b66' }}
                   >
                     <p className="text-[10px] font-semibold mb-1.5"
@@ -313,7 +317,18 @@ async function handleReanalyze() {
 
         {/* BPM */}
         <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap text-right">
-          {track.bpm > 0 ? track.bpm.toFixed(0) : '—'}
+          <div
+            className="relative inline-block"
+            onMouseEnter={() => setShowBpmTooltip(true)}
+            onMouseLeave={() => setShowBpmTooltip(false)}
+          >
+            {track.bpm > 0 ? track.bpm.toFixed(0) : '—'}
+            {showHoverTips && showBpmTooltip && track.bpm > 0 && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap">
+                {track.bpm.toFixed(2)} BPM
+              </div>
+            )}
+          </div>
         </td>
 
         {/* Camelot key */}
@@ -337,8 +352,8 @@ async function handleReanalyze() {
                 ?
               </button>
             )}
-            {showKeyTooltip && track.camelot && (
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1.5 min-w-[160px]">
+            {showHoverTips && showKeyTooltip && track.camelot && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1.5 min-w-[160px]">
                 <div className="text-[9px] uppercase tracking-widest text-[#334155] mb-0.5">Next key options</div>
                 {compatibleKeys.length > 0 && (
                   <div className="flex items-center justify-between gap-4">
@@ -378,27 +393,38 @@ async function handleReanalyze() {
         {/* Energy bar */}
         <td className="py-3 px-2 pr-4">
           <div
-            className="relative rounded-full bg-[#1e1e2e]"
-            style={{ width: 56, height: 4 }}
-            title={`Energy: ${Math.round(track.energy * 100)}% · Target: ${Math.round(track.targetEnergy * 100)}%`}
+            className="relative"
+            onMouseEnter={() => setShowEnergyTooltip(true)}
+            onMouseLeave={() => setShowEnergyTooltip(false)}
           >
             <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${Math.min(track.energy * 100, 100).toFixed(1)}%`,
-                backgroundColor: barColor,
-              }}
-            />
-            <div
-              className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
-              style={{
-                left: `${Math.min(Math.max(track.targetEnergy * 100, 0), 100).toFixed(1)}%`,
-                width: 1,
-                height: 6,
-                backgroundColor: 'rgba(255,255,255,0.4)',
-                transform: 'translate(-50%, -50%)',
-              }}
-            />
+              className="relative rounded-full bg-[#1e1e2e]"
+              style={{ width: 56, height: 4 }}
+            >
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.min(track.energy * 100, 100).toFixed(1)}%`,
+                  backgroundColor: barColor,
+                }}
+              />
+              <div
+                className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{
+                  left: `${Math.min(Math.max(track.targetEnergy * 100, 0), 100).toFixed(1)}%`,
+                  width: 1,
+                  height: 6,
+                  backgroundColor: 'rgba(255,255,255,0.4)',
+                  transform: 'translate(-50%, -50%)',
+                }}
+              />
+            </div>
+            {showHoverTips && showEnergyTooltip && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-0.5">
+                <span>Energy <span style={{ color: barColor }}>{Math.round(track.energy * 100)}</span></span>
+                <span className="text-[#475569]">Target {Math.round(track.targetEnergy * 100)}</span>
+              </div>
+            )}
           </div>
         </td>
 
@@ -458,7 +484,9 @@ async function handleReanalyze() {
               {transition.hints.map((hint, hi) => (
                 <span
                   key={hi}
-                  title={hint.tip}
+                  className="relative"
+                  onMouseEnter={() => setHoverHintIdx(hi)}
+                  onMouseLeave={() => setHoverHintIdx(null)}
                   style={{
                     fontSize: '11px',
                     color: hint.color ?? '#475569',
@@ -469,6 +497,11 @@ async function handleReanalyze() {
                   }}
                 >
                   {hint.icon}
+                  {showHoverTips && hoverHintIdx === hi && hint.tip && (
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap">
+                      {hint.tip}
+                    </div>
+                  )}
                 </span>
               ))}
             </div>
@@ -495,7 +528,7 @@ async function handleReanalyze() {
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 z-30 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-xl overflow-hidden py-1">
+              <div className="absolute right-0 bottom-full mb-1 z-30 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-xl overflow-hidden py-1">
 
                 {/* ── Lock ── */}
                 <button

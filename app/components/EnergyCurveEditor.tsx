@@ -29,6 +29,7 @@ interface Props {
   setTracks?: SetTrack[]; // overlay actual track energies as dots
   setLength?: number;     // number of tracks — used to cap max control points
   libraryEnergyRange?: { min: number; max: number } | null; // real energy range of filtered library
+  showHoverTips?: boolean;
 }
 
 /** Max control points recommended for a given set length */
@@ -48,10 +49,11 @@ function resampleCurve(points: CurvePoint[], newCount: number): CurvePoint[] {
   });
 }
 
-export default function EnergyCurveEditor({ points, onChange, setTracks, setLength = 0, libraryEnergyRange }: Props) {
+export default function EnergyCurveEditor({ points, onChange, setTracks, setLength = 0, libraryEnergyRange, showHoverTips = true }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgWidth, setSvgWidth] = useState(600);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [activePreset, setActivePreset] = useState<ArcPreset | null>(null);
 
   // Measure SVG width via ResizeObserver
@@ -182,13 +184,13 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
           style={{ height: SVG_HEIGHT, paddingTop: PADDING.top, paddingBottom: PADDING.bottom }}
         >
           <span className={`pl-1 ${libraryEnergyRange ? 'text-[#7c3aed]' : 'text-[#475569]'}`}>
-            {libraryEnergyRange ? libraryEnergyRange.max.toFixed(2) : '1.0'}
+            {libraryEnergyRange ? Math.round(libraryEnergyRange.max * 100) : '100'}
           </span>
           <span className="pl-1 text-[#475569]">
-            {libraryEnergyRange ? ((libraryEnergyRange.min + libraryEnergyRange.max) / 2).toFixed(2) : '0.5'}
+            {libraryEnergyRange ? Math.round(((libraryEnergyRange.min + libraryEnergyRange.max) / 2) * 100) : '50'}
           </span>
           <span className={`pl-1 ${libraryEnergyRange ? 'text-[#7c3aed]' : 'text-[#475569]'}`}>
-            {libraryEnergyRange ? libraryEnergyRange.min.toFixed(2) : '0.0'}
+            {libraryEnergyRange ? Math.round(libraryEnergyRange.min * 100) : '0'}
           </span>
         </div>
 
@@ -289,17 +291,20 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
                 strokeWidth={2}
                 style={{ cursor: 'grab' }}
                 onPointerDown={(e) => handlePointerDown(e, idx)}
+                onMouseEnter={() => setHoverIdx(idx)}
+                onMouseLeave={() => setHoverIdx(null)}
               />
               {/* Energy value tooltip on hover/drag */}
-              {draggingIdx === idx && (
+              {showHoverTips && (draggingIdx === idx || (hoverIdx === idx && draggingIdx === null)) && (
                 <text
                   x={toSvgX(pt.x)}
                   y={toSvgY(pt.y) - HANDLE_RADIUS - 6}
                   textAnchor="middle"
                   fill="#e2e8f0"
                   fontSize={11}
+                  pointerEvents="none"
                 >
-                  {pt.y.toFixed(2)}
+                  {Math.round(pt.y * 100)}
                 </text>
               )}
             </g>

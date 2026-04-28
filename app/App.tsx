@@ -154,6 +154,7 @@ function AppInner() {
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string } | null>(null);
   const [mlWeights, setMlWeights] = useState<import('./lib/mlModel').ModelWeights | null>(null);
   const [shareTelemetry, setShareTelemetry] = useState(true);
+  const [showHoverTips, setShowHoverTips] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
@@ -508,6 +509,7 @@ function AppInner() {
         );
         if (d.energyCheckThreshold !== undefined) setEnergyCheckThreshold(d.energyCheckThreshold);
         if ((d as { shareTelemetry?: boolean }).shareTelemetry !== undefined) setShareTelemetry((d as { shareTelemetry?: boolean }).shareTelemetry !== false);
+        if ((d as { showHoverTips?: boolean }).showHoverTips !== undefined) setShowHoverTips((d as { showHoverTips?: boolean }).showHoverTips !== false);
       })
       .catch(() => {});
   }, [setFolderPath]);
@@ -1975,7 +1977,7 @@ function AppInner() {
                                   </button>
                                 )}
                               </div>
-                              <div className="flex flex-wrap gap-1.5">
+                              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
                                 {availableGenres.map((genre) => {
                                   const umbrellaActive = prefs.genres.some(
                                     g => g.startsWith("~") && genreMatchesUmbrella(genre, g)
@@ -2101,6 +2103,7 @@ function AppInner() {
                   setTracks={generatedSet.length > 0 ? generatedSet : undefined}
                   setLength={generatedSet.length}
                   libraryEnergyRange={libraryEnergyRange}
+                  showHoverTips={showHoverTips}
                 />
               </div>
               <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex flex-col flex-1">
@@ -2115,6 +2118,7 @@ function AppInner() {
                   libraryLoaded={library.length > 0}
                   energyCheckThreshold={energyCheckThreshold}
                   showRekordboxExport={hasRekordboxFolder}
+                  showHoverTips={showHoverTips}
                   onSwapTrack={handleSwapTrack}
                   onToggleLock={handleToggleLock}
                   onRemoveTrack={handleRemoveTrack}

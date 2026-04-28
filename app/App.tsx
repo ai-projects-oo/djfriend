@@ -3,7 +3,6 @@ import type { HistoryEntry, DJPreferences } from "./types";
 import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
 import SettingsModal from "./components/SettingsModal";
-import AIPlannerPanel from "./components/AIPlannerPanel";
 import CalendarPicker from "./components/CalendarPicker";
 import HistoryTab from "./components/HistoryTab";
 import { genreMatchesUmbrella, TAG_GROUPS } from "./lib/genreUtils";
@@ -150,10 +149,8 @@ function AppInner() {
   );
   const historyExportRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
-  const [hasAIKey, setHasAIKey] = useState(false);
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(
@@ -343,7 +340,6 @@ function AppInner() {
     setCurve,
     generatedSet,
     setGeneratedSet,
-    setScoringWeights,
     swapModal,
     setSwapModal,
     availableGenres,
@@ -389,23 +385,6 @@ function AppInner() {
       );
     }
   }, [minViablePill, setPrefs]);
-
-  const handleApplyPlan = useCallback(
-    (plan: import("./types").SetPlan) => {
-      setCurve(plan.curve);
-      setScoringWeights(plan.scoringWeights);
-      if (plan.venueType)
-        setPrefs((p) => ({
-          ...p,
-          venueType: plan.venueType as import("./types").VenueType,
-        }));
-      if (plan.genre) setPrefs((p) => ({ ...p, genres: [plan.genre!] }));
-      if (plan.setDuration)
-        setPrefs((p) => ({ ...p, setDuration: plan.setDuration! }));
-      setChatOpen(false);
-    },
-    [setCurve, setScoringWeights, setPrefs],
-  );
 
   const handleLoadHistoryEntry = useCallback(
     (entry: HistoryEntry) => {
@@ -483,13 +462,11 @@ function AppInner() {
           r.json() as Promise<{
             musicFolder?: string;
             rekordboxFolder?: string;
-            hasAIKey?: boolean;
             hasSecret?: boolean;
           }>,
       )
       .then((d) => {
         if (d.musicFolder) setFolderPath((prev) => prev || d.musicFolder!);
-        if (d.hasAIKey !== undefined) setHasAIKey(d.hasAIKey);
         if (d.hasSecret !== undefined) setHasSpotifyCredentials(d.hasSecret);
         setHasRekordboxFolder(
           !!(d.rekordboxFolder && d.rekordboxFolder.trim()),
@@ -777,28 +754,6 @@ function AppInner() {
               </div>
             )}
             <div className="relative">
-              {hasAIKey && (
-                <button
-                  onClick={() => setChatOpen((o) => !o)}
-                  title="AI Set Planner"
-                  aria-label="AI Set Planner"
-                  className={`p-1.5 transition-colors cursor-pointer ${chatOpen ? "text-[#7c3aed]" : "text-[#475569] hover:text-[#94a3b8]"}`}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                  </svg>
-                </button>
-              )}
               <button
                 onClick={() => {
                   setSettingsOpen(true);
@@ -1273,9 +1228,9 @@ function AppInner() {
                         }, 0);
                       }}
                       disabled={
-                        isInitializing || library.length === 0 || isGenerating
+                        isInitializing || library.length === 0 || isGenerating || prefs.genres.length === 0
                       }
-                      title="Generate a new set"
+                      title={prefs.genres.length === 0 ? "Select at least one genre to generate" : "Generate a new set"}
                       aria-label="Generate set"
                       className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
                       style={{
@@ -1331,6 +1286,11 @@ function AppInner() {
                         </>
                       )}
                     </button>
+                    {prefs.genres.length === 0 && (
+                      <p className="text-[10px] text-[#475569] text-center mt-1">
+                        ← Pick a genre to generate a set
+                      </p>
+                    )}
                     {/* Secondary actions — subordinate ghost buttons */}
                     <div className="flex gap-2">
                       <button
@@ -1649,16 +1609,7 @@ function AppInner() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setPrefs((p) => ({
-                                  ...p,
-                                  tagFilters: {
-                                    vibeTags: [],
-                                    moodTags: [],
-                                    vocalTypes: [],
-                                    venueTags: [],
-                                    timeOfNightTags: [],
-                                  },
-                                }));
+                                selectGenre("Any");
                               }}
                               className="ml-auto text-[#475569] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
                               title="Clear all filters"
@@ -3326,14 +3277,6 @@ function AppInner() {
           </div>
         </div>
       )}
-
-      <AIPlannerPanel
-        open={chatOpen}
-        onClose={() => setChatOpen(false)}
-        availableGenres={availableGenres}
-        librarySize={library.length}
-        onApplyPlan={handleApplyPlan}
-      />
 
       <SettingsModal
         open={settingsOpen}

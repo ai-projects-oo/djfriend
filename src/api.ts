@@ -11,22 +11,11 @@ import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
-import { enrichTracks, enrichTrackBatch, ENRICHMENT_BATCH_SIZE, analyzeTracksWithAI, planSet } from './ai.js'
-import type { SemanticTags, AIConfig } from './ai.js'
+import { deriveSemanticTags } from './ai.js'
+import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
 
-/** Build AIConfig from current settings, or null if no AI key is configured */
-function getAIConfig(): AIConfig | null {
-  const s = readSettings()
-  const apiKey = s.aiApiKey || s.groqApiKey
-  if (!apiKey) return null
-  return {
-    provider: s.aiProvider ?? 'groq',
-    apiKey,
-    baseUrl: s.aiBaseUrl,
-  }
-}
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
 const execFileAsync = promisify(execFile)
@@ -348,74 +337,18 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
     }
   }
 
-  const aiConfig = getAIConfig()
-
   const audioPromise = Promise.all(
     Array.from({ length: Math.min(AUDIO_CONCURRENCY, tracks.length) }, () => worker())
   ).then(() => { /* no return */ })
 
-  // AI drainer — runs concurrently with audio.
-  const enrichPromise = aiConfig ? (async () => {
-    writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
-    console.log(`[enrich] drainer started (provider=${aiConfig.provider}, batch=${ENRICHMENT_BATCH_SIZE})`)
-    const enrichedKeys = new Set<string>(Object.keys(resultsJson).filter(k => resultsJson[k].semanticTags))
-    let totalEnriched = 0
-    let batchNum = 0
-    let audioDone = false
-    audioPromise.then(() => { audioDone = true })
+  await audioPromise
 
-    const isAudioReady = (k: string): boolean => {
-      const s = resultsJson[k]
-      return !!s && !!s.camelot && typeof s.bpm === 'number'
+  // Tag any cached tracks that don't have semanticTags yet (instant, rule-based)
+  for (const song of Object.values(resultsJson)) {
+    if (!song.semanticTags) {
+      song.semanticTags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres })
     }
-
-    while (true) {
-      const pending = Object.keys(resultsJson).filter(k => !enrichedKeys.has(k) && !resultsJson[k].semanticTags && isAudioReady(k))
-      if (pending.length === 0) {
-        if (audioDone) break
-        await new Promise<void>(r => setTimeout(r, 300))
-        continue
-      }
-      if (pending.length < ENRICHMENT_BATCH_SIZE && !audioDone) {
-        await new Promise<void>(r => setTimeout(r, 400))
-        continue
-      }
-      const batchKeys = pending.slice(0, ENRICHMENT_BATCH_SIZE)
-      batchNum++
-      const batchT0 = Date.now()
-      console.log(`[enrich] batch ${batchNum} sending (${batchKeys.length} tracks, audioDone=${audioDone})`)
-      try {
-        const tags = await Promise.race([
-          enrichTrackBatch(
-            batchKeys.map(k => {
-              const s = resultsJson[k]
-              return { file: k, artist: s.artist, title: s.title, bpm: s.bpm, key: s.key, energy: s.energy, genres: s.genres }
-            }),
-            aiConfig
-          ),
-          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('enrichTrackBatch timed out after 30s')), 30000)),
-        ])
-        let tagged = 0
-        for (const k of batchKeys) {
-          const tg = tags.get(k)
-          if (tg) { resultsJson[k].semanticTags = tg; tagged++ }
-          enrichedKeys.add(k)
-          totalEnriched++
-        }
-        const remaining = Object.keys(resultsJson).filter(k => !enrichedKeys.has(k) && isAudioReady(k)).length
-        const total = totalEnriched + remaining + (audioDone ? 0 : Math.max(0, tracks.length - Object.keys(resultsJson).length))
-        console.log(`[enrich] batch ${batchNum}: ${tagged}/${batchKeys.length} tagged in ${Date.now() - batchT0}ms (total ${totalEnriched}/${Math.max(total, totalEnriched)})`)
-        writeEvent({ type: 'enrich_progress', completed: totalEnriched, total: Math.max(total, totalEnriched) })
-      } catch (err) {
-        console.error(`[enrich] batch ${batchNum} failed:`, err instanceof Error ? err.message : err)
-        for (const k of batchKeys) enrichedKeys.add(k)
-      }
-    }
-    console.log(`[enrich] drainer done — ${totalEnriched} tracks enriched across ${batchNum} batch(es)`)
-  })() : Promise.resolve()
-
-  await Promise.all([audioPromise, enrichPromise])
-  if (!aiConfig) console.warn('[analyzer] no AI config — skipping enrichment')
+  }
 
   normalizeLibraryEnergy(resultsJson)
   fs.mkdirSync(path.dirname(resultsPath), { recursive: true })
@@ -543,7 +476,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'GET') {
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', hasAIKey: !!(s.aiApiKey || s.groqApiKey), aiProvider: s.aiProvider ?? (s.groqApiKey ? 'groq' : ''), useAllCores: s.useAllCores === true }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', useAllCores: s.useAllCores === true }))
       return
     }
     if (req.method === 'POST') {
@@ -553,12 +486,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (typeof body.spotifyClientSecret === 'string' && body.spotifyClientSecret.trim()) updates.spotifyClientSecret = body.spotifyClientSecret.trim()
       if (typeof body.musicFolder === 'string') updates.musicFolder = body.musicFolder.trim()
       if (typeof body.rekordboxFolder === 'string') updates.rekordboxFolder = body.rekordboxFolder.trim()
-      if (typeof body.aiApiKey === 'string' && body.aiApiKey.trim()) updates.aiApiKey = body.aiApiKey.trim()
-      if (typeof body.aiProvider === 'string' && ['groq', 'openai', 'openrouter', 'custom'].includes(body.aiProvider)) updates.aiProvider = body.aiProvider as import('./settings.js').AIProvider
-      if (typeof body.aiBaseUrl === 'string') updates.aiBaseUrl = body.aiBaseUrl.trim()
       if (typeof body.useAllCores === 'boolean') updates.useAllCores = body.useAllCores
-      // Legacy support
-      if (typeof body.groqApiKey === 'string' && body.groqApiKey.trim()) { updates.aiApiKey = body.groqApiKey.trim(); updates.aiProvider = 'groq' }
       writeSettings(updates)
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))
@@ -701,10 +629,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         }
         resultsJson[track.path] = { filePath: track.path, file: path.basename(track.path), artist: track.artist || 'Unknown artist', title: track.title, duration: track.duration || undefined, bpm: track.bpm, key: finalKey.keyName, camelot: finalKey.camelot, energy: 0.5, genres, ...(localGenres.length === 0 && genres.length > 0 ? { genresFromSpotify: true } : {}) }
       }
-      const aiCfg = getAIConfig()
-      if (aiCfg) {
-        writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
-        try { await enrichTracks(resultsJson, aiCfg, (c, t) => { writeEvent({ type: 'enrich_progress', completed: c, total: t }) }) } catch { /* optional */ }
+      for (const song of Object.values(resultsJson)) {
+        if (!song.semanticTags) song.semanticTags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres })
       }
       fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
       const songs = Object.values(resultsJson)
@@ -792,35 +718,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           }
         } catch { /* skip unresolvable tracks */ }
       }
-      // AI pass: estimate BPM/key/energy for tracks missing MIK prefix, then semantic-tag all tracks
-      const aiCfg2 = getAIConfig()
-      if (aiCfg2) {
-        // Pass 1: fill in BPM/key/energy for tracks without MIK prefix
-        const needsAI = Object.entries(resultsJson).filter(([, s]) => s.bpm === 0 && s.camelot === '')
-        if (needsAI.length > 0) {
-          const aiInput = needsAI.map(([cacheKey, s]) => ({ file: cacheKey, artist: s.artist, title: s.title }))
-          try {
-            const aiResults = await analyzeTracksWithAI(aiInput, aiCfg2)
-            for (const [cacheKey] of needsAI) {
-              const est = aiResults.get(cacheKey)
-              if (!est) continue
-              const keyInfo = camelotToKey[est.camelot.toLowerCase()]
-              resultsJson[cacheKey] = {
-                ...resultsJson[cacheKey],
-                bpm: est.bpm,
-                camelot: keyInfo?.camelot ?? est.camelot,
-                key: keyInfo?.keyName ?? '',
-                energy: est.energy,
-              }
-            }
-          } catch { /* skip AI pass on error */ }
-        }
-        // Pass 2: semantic tagging (vibe/mood/venue/time) for all tracks — same as desktop pipeline
-        try {
-          await enrichTracks(resultsJson, aiCfg2, (completed, total) => {
-            writeEvent({ type: 'progress', completed: tracks.length + completed, total: tracks.length + total })
-          })
-        } catch { /* skip enrichment on error */ }
+      // Derive semantic tags locally for all tracks
+      for (const song of Object.values(resultsJson)) {
+        if (!song.semanticTags) song.semanticTags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres })
       }
 
       fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
@@ -885,13 +785,13 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           const keyInfo = toCamelot(finalFeatures.pitchClass, finalFeatures.mode)
           if (!keyInfo) continue
           const genres = localGenres.length > 0 ? localGenres : spotifyGenres
-          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizeBpm(finalFeatures.bpm, finalFeatures.energy, genres, finalFeatures.tagBpm), key: keyInfo.keyName, camelot: keyInfo.camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(finalFeatures.year != null ? { year: finalFeatures.year } : {}), ...(finalFeatures.comment ? { comment: finalFeatures.comment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}) }
+          const normalizedBpm = normalizeBpm(finalFeatures.bpm, finalFeatures.energy, genres, finalFeatures.tagBpm)
+          const camelot = keyInfo.camelot
+          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizedBpm, key: keyInfo.keyName, camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(finalFeatures.year != null ? { year: finalFeatures.year } : {}), ...(finalFeatures.comment ? { comment: finalFeatures.comment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}), semanticTags: deriveSemanticTags({ bpm: normalizedBpm, camelot, energy: finalFeatures.energy, genres, ...finalFeatures.spectral }) }
         } catch { /* skip */ }
       }
-      const aiCfg = getAIConfig()
-      if (aiCfg) {
-        writeEvent({ type: 'enriching', message: 'Running AI semantic enrichment…' })
-        try { await enrichTracks(resultsJson, aiCfg, (c, t) => { writeEvent({ type: 'enrich_progress', completed: c, total: t }) }) } catch { /* optional */ }
+      for (const song of Object.values(resultsJson)) {
+        if (!song.semanticTags) song.semanticTags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres })
       }
       fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
       const songs = Object.values(resultsJson)
@@ -1189,51 +1089,4 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     }
   })
 
-  middlewares.use('/api/ai/enrich', async (req, res, next) => {
-    if (req.method !== 'POST') { next(); return }
-    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-cache')
-    const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
-    try {
-      const aiCfgEnrich = getAIConfig()
-      if (!aiCfgEnrich) { writeEvent({ type: 'error', message: 'AI features require an API key. Add it in Settings.' }); res.end(); return }
-      const body = await readJsonBody(req) as Record<string, unknown>
-      const resultsPath = typeof body.resultsPath === 'string' && body.resultsPath.trim()
-        ? body.resultsPath.trim()
-        : songsFolder ? path.join(songsFolder, 'results.json') : null
-      if (!resultsPath || !fs.existsSync(resultsPath)) { writeEvent({ type: 'error', message: 'results.json not found.' }); res.end(); return }
-      const resultsJson = readExistingResultsFile(resultsPath.replace(/\/results\.json$/, ''))
-      const toEnrich = Object.values(resultsJson).filter(s => !s.semanticTags).length
-      writeEvent({ type: 'start', total: toEnrich })
-      await enrichTracks(resultsJson, aiCfgEnrich, (completed, total) => {
-        writeEvent({ type: 'progress', completed, total })
-      })
-      fs.writeFileSync(resultsPath, JSON.stringify(resultsJson, null, 2), 'utf-8')
-      writeEvent({ type: 'done', enriched: toEnrich })
-      res.end()
-    } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Enrichment failed.' }); res.end() }
-  })
-
-  middlewares.use('/api/ai/plan-set', async (req, res, next) => {
-    if (req.method !== 'POST') { next(); return }
-    res.setHeader('Content-Type', 'application/json')
-    try {
-      const aiCfgPlan = getAIConfig()
-      if (!aiCfgPlan) {
-        res.statusCode = 400
-        res.end(JSON.stringify({ ok: false, error: 'AI features require an API key. Add it in Settings.' }))
-        return
-      }
-      const body = await readJsonBody(req) as Record<string, unknown>
-      const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
-      if (!prompt) { res.statusCode = 400; res.end(JSON.stringify({ ok: false, error: 'prompt is required' })); return }
-      const availableGenres = Array.isArray(body.availableGenres) ? body.availableGenres as string[] : []
-      const librarySize = typeof body.librarySize === 'number' ? body.librarySize : 0
-      const plan = await planSet(prompt, { availableGenres, librarySize }, aiCfgPlan)
-      res.end(JSON.stringify({ ok: true, plan }))
-    } catch (err) {
-      res.statusCode = 500
-      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Planning failed.' }))
-    }
-  })
 }

@@ -45,19 +45,32 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function getCompatibleKeys(camelot: string): { standard: string[]; boost: string[]; relax: string[] } {
+function camelotStep(num: number, delta: number): number {
+  return ((num - 1 + delta + 120) % 12) + 1;
+}
+
+function getCompatibleKeys(camelot: string): {
+  standard: string[];   // ±1 same letter + relative major/minor
+  boost: string[];      // MixedInKey diagonal: ±1 with letter switch
+  relax: string[];      // Major→Minor diagonal
+  surge: string[];      // MixedInKey +2 clockwise: energy surge
+  powerShift: string[]; // MixedInKey −5 (≡ +7 clockwise): dramatic lift
+} {
   const parsed = parseCamelot(camelot);
-  if (!parsed) return { standard: [], boost: [], relax: [] };
+  if (!parsed) return { standard: [], boost: [], relax: [], surge: [], powerShift: [] };
   const { num, letter } = parsed;
   const other = letter === 'A' ? 'B' : 'A';
-  const prev = num === 1 ? 12 : num - 1;
-  const next = num === 12 ? 1 : num + 1;
+  const prev = camelotStep(num, -1);
+  const next = camelotStep(num,  1);
+  const plus2 = camelotStep(num,  2);
+  const minus5 = camelotStep(num, 7); // −5 CCW = +7 CW on 12-position wheel
   const diagonals = [`${next}${other}`, `${prev}${other}`];
   return {
-    standard: [`${prev}${letter}`, `${next}${letter}`, `${num}${other}`],
-    // Minor→Major (A→B) = energy boost (brighter); Major→Minor (B→A) = relax (darker)
-    boost: letter === 'A' ? diagonals : [],
-    relax: letter === 'B' ? diagonals : [],
+    standard:   [`${prev}${letter}`, `${next}${letter}`, `${num}${other}`],
+    boost:      letter === 'A' ? diagonals : [],
+    relax:      letter === 'B' ? diagonals : [],
+    surge:      [`${plus2}${letter}`],   // same mode, +2 positions — intentional energy jump
+    powerShift: [`${minus5}${letter}`],  // same mode, −5 positions — dramatic but musical
   };
 }
 
@@ -118,7 +131,7 @@ export default function TrackRow({ track, index, fitInfo, transition, visibleCol
   const isMp3 = track.filePath?.toLowerCase().endsWith('.mp3') ?? false;
 
 
-  const { standard: compatibleKeys, boost: boostKeys, relax: relaxKeys } = getCompatibleKeys(track.camelot);
+  const { standard: compatibleKeys, boost: boostKeys, relax: relaxKeys, surge: surgeKeys, powerShift: powerShiftKeys } = getCompatibleKeys(track.camelot);
 
   function openEdit() {
     setEditTitle(track.title);
@@ -325,15 +338,37 @@ async function handleReanalyze() {
               </button>
             )}
             {showKeyTooltip && track.camelot && (
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1">
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1.5 min-w-[160px]">
+                <div className="text-[9px] uppercase tracking-widest text-[#334155] mb-0.5">Next key options</div>
                 {compatibleKeys.length > 0 && (
-                  <span><span className="text-[#64748b]">Compatible: </span>{compatibleKeys.join(', ')}</span>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[#64748b]">Compatible</span>
+                    <span className="font-mono text-[#94a3b8]">{compatibleKeys.join('  ')}</span>
+                  </div>
                 )}
                 {boostKeys.length > 0 && (
-                  <span><span className="text-[#f59e0b]">Energy boost: </span><span className="text-[#fbbf24]">{boostKeys.join(', ')}</span></span>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[#f59e0b]">Energy boost ↑</span>
+                    <span className="font-mono text-[#fbbf24]">{boostKeys.join('  ')}</span>
+                  </div>
                 )}
                 {relaxKeys.length > 0 && (
-                  <span><span className="text-[#60a5fa]">Relax: </span><span className="text-[#93c5fd]">{relaxKeys.join(', ')}</span></span>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[#60a5fa]">Relax ↓</span>
+                    <span className="font-mono text-[#93c5fd]">{relaxKeys.join('  ')}</span>
+                  </div>
+                )}
+                {surgeKeys.length > 0 && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[#a78bfa]">Energy surge +2</span>
+                    <span className="font-mono text-[#c4b5fd]">{surgeKeys.join('  ')}</span>
+                  </div>
+                )}
+                {powerShiftKeys.length > 0 && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[#f472b6]">Power shift −5</span>
+                    <span className="font-mono text-[#f9a8d4]">{powerShiftKeys.join('  ')}</span>
+                  </div>
                 )}
               </div>
             )}

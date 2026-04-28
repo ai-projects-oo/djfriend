@@ -211,5 +211,73 @@
   </ul>
 </div>
 
+
+<hr>
+
+<div class="sprint-card">
+  <div class="sprint-header">
+    <div class="sprint-badge" style="color:#f472b6;border-color:#f472b6;background:rgba(244,114,182,0.08);">SPRINT 9</div>
+    <strong>Local AI Improvements</strong>
+    <span class="dep">Depends on: sprint_8 merged</span>
+  </div>
+  <p style="font-size:0.85rem;margin-bottom:1rem;">Three self-contained AI upgrades — all local, no API keys, no cloud. Each ticket is independent and can ship separately.</p>
+
+  <h3>Background</h3>
+  <ul>
+    <li>Sprint 8 shipped: ML vocal detection (<code>voice_instrumental-msd-musicnn-1</code>, ~2 MB), semantic tagging, harmonic move suggestions (+2 / −5 in key tooltip)</li>
+    <li>Remaining gaps identified: missing genre on local files, transition reasoning not shown in UI, set curve drawn manually every time</li>
+  </ul>
+
+  <h3>Tickets</h3>
+
+  <div class="ticket">
+    <div class="ticket-label">ticket/9-1</div>
+    <h4>Genre inference from audio (ML)</h4>
+    <p>Use Essentia <code>genre_rosamerica-msd-musicnn-1</code> (~2 MB, same MusiCNN pipeline as vocal detection) to label local files that have no genre tag. Labels: electronic, jazz, hip-hop, classical, rock, pop, soul, country, reggae, blues. Written to <code>results.json</code> as <code>inferredGenre</code> — never overwrites an existing ID3 genre tag.</p>
+    <ul style="margin-top:0.5rem;">
+      <li>New file: <code>src/genre-detector.ts</code> — mirrors <code>vocal-detector.ts</code> structure</li>
+      <li>Called from <code>src/api.ts</code> after <code>analyzeAudio</code> when <code>genres.length === 0</code></li>
+      <li>Add <code>inferredGenre?: string</code> to <code>app/types/index.ts</code> <code>Song</code> interface</li>
+      <li>Show inferred genre in track row with a faint italic style (distinct from tag genres)</li>
+      <li>Feed into <code>deriveSemanticTags</code> so untagged library gets correct vibe/venue tags</li>
+    </ul>
+    <p class="dep">Model: <code>https://essentia.upf.edu/models/classifiers/genre_rosamerica/genre_rosamerica-msd-musicnn-1/</code> — same download-on-first-use pattern as vocal model</p>
+  </div>
+
+  <div class="ticket">
+    <div class="ticket-label">ticket/9-2</div>
+    <h4>Full transition reasoning in UI</h4>
+    <p><code>selectionReason</code> already exists on <code>SetTrack</code> and is partially populated by the set generator. Surface it fully.</p>
+    <ul style="margin-top:0.5rem;">
+      <li>Set generator: populate all reason fields — harmonic score label, BPM delta, energy delta vs target, semantic tag match</li>
+      <li><code>TrackRow.tsx</code>: expand the existing "AI tags" row toggle to also show <code>selectionReason</code> bullets when present</li>
+      <li>No new component needed — add a "Why chosen?" section inside the existing expandable row</li>
+    </ul>
+  </div>
+
+  <div class="ticket">
+    <div class="ticket-label">ticket/9-3</div>
+    <h4>Smart energy curve presets</h4>
+    <p>Auto-fill the energy curve from the library's actual BPM/energy distribution. No ML needed — pure statistics over the loaded song pool.</p>
+    <ul style="margin-top:0.5rem;">
+      <li>Compute percentile breakpoints (p25/p50/p75 energy) from the loaded library</li>
+      <li>Four presets: <strong>Warm-up</strong> (low → mid), <strong>Peak set</strong> (mid → high → sustain), <strong>Closing</strong> (high → low), <strong>Rollercoaster</strong> (alternating)</li>
+      <li>Preset picker: 4 small buttons above the curve editor, replacing the current blank default</li>
+      <li>Pure function in <code>app/lib/curvePresets.ts</code> — no side effects, easy to test</li>
+      <li>Tests: assert each preset produces a valid <code>CurvePoint[]</code> with monotonic x values and y in [0,1]</li>
+    </ul>
+  </div>
+
+  <h3>Pre-Merge Checklist</h3>
+  <ul class="checklist">
+    <li>build, lint, test clean</li>
+    <li>Genre model downloads cleanly on first scan of an untagged track</li>
+    <li>Inferred genre shown in UI with italic style, not confused with tag genres</li>
+    <li>selectionReason bullets visible when expanding a track row</li>
+    <li>Curve presets produce sensible curves on a test library</li>
+    <li>Manual QA approval before merge</li>
+  </ul>
+</div>
+
 </body>
 </html>

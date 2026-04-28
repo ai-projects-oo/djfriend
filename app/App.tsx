@@ -1152,7 +1152,7 @@ function AppInner() {
                     </button>
                     {prefs.genres.length === 0 && (
                       <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
-                        Pick a genre above to generate a set
+                        Select a genre first to generate a set
                       </div>
                     )}
                     </div>
@@ -1172,7 +1172,7 @@ function AppInner() {
                           Shuffle
                         </button>
                         <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-44 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
-                          Same tracks, different order — re-rolls harmonic and BPM choices
+                          Keep the same tracks, re-roll the harmonic and BPM ordering
                         </div>
                       </div>
                       <div className="relative flex-1 group">
@@ -1191,8 +1191,8 @@ function AppInner() {
                         </button>
                         <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
                           {canGenerateNew
-                            ? "Pick a completely fresh set from tracks not in the current one"
-                            : "Not enough tracks outside the current set"}
+                            ? "Generate a fresh set using tracks not already in the current one"
+                            : "Not enough unused tracks — try a broader genre or longer set"}
                         </div>
                       </div>
                     </div>
@@ -1210,7 +1210,7 @@ function AppInner() {
                           Append tracks
                         </button>
                         <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
-                          Extend the set with more tracks — keeps your locks and reorders intact
+                          Add more tracks to the end of the current set — your locks and reorders stay untouched
                         </div>
                       </div>
                     )}

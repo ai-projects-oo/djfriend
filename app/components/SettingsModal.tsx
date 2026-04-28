@@ -284,31 +284,23 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           </div>
 
           <div>
-            <p className="text-xs text-[#64748b] mb-2">Analysis Process — Concurrent Process Mode</p>
+            <p className="text-xs text-[#64748b] mb-2">Concurrent Process Mode</p>
             <div className="space-y-2">
-              {([
-                ['performance', 'Performance', 'Uses all CPU cores — fastest analysis, higher CPU usage'],
-                ['normal',      'Normal',      'Uses half your cores — balanced speed and system load'],
-                ['power-saving','Power saving', 'Single worker — slowest, minimal CPU usage'],
-              ] as const).map(([value, label, hint]) => (
-                <label key={value} className="flex items-start gap-3 cursor-pointer select-none">
+              {(['performance', 'normal', 'power-saving'] as const).map(value => (
+                <label key={value} className="flex items-center gap-3 cursor-pointer select-none">
                   <input
                     type="radio"
                     name="analysisMode"
                     value={value}
                     checked={analysisMode === value}
                     onChange={() => setAnalysisMode(value)}
-                    className="mt-0.5 w-4 h-4 cursor-pointer accent-[#7c3aed]"
-                    aria-label={label}
+                    className="w-4 h-4 cursor-pointer accent-[#7c3aed]"
+                    aria-label={value}
                   />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm text-[#e2e8f0]">{label}</span>
-                    <span className="text-[11px] text-[#64748b]">{hint}</span>
-                  </div>
+                  <span className="text-sm text-[#e2e8f0] capitalize">{value === 'power-saving' ? 'Power saving' : value.charAt(0).toUpperCase() + value.slice(1)}</span>
                 </label>
               ))}
             </div>
-            <p className="text-[11px] text-[#475569] mt-2">Requires app restart to take effect.</p>
           </div>
         </div>
 

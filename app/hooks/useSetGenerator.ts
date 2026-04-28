@@ -130,7 +130,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
       if (songs.length === 0) return;
       setGeneratedSet(generateSet(songs, p, c, { ...extraOpts, playlistFilterFiles, weights: scoringWeights, history, mlWeights }));
     },
-    [playlistFilterFiles, scoringWeights, history],
+    [playlistFilterFiles, scoringWeights, history, mlWeights],
   );
 
   /**
@@ -392,7 +392,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
         harmonicWarning: i > 0 ? isHarmonicWarning(combined[i - 1].camelot, track.camelot) : false,
       }));
     });
-  }, [library, prefs, curve, generatedSet, playlistFilterFiles, scoringWeights, history]);
+  }, [library, prefs, curve, generatedSet, playlistFilterFiles, scoringWeights, history, mlWeights]);
 
   const handleToggleLock = useCallback((index: number) => {
     setGeneratedSet(prev => prev.map((t, i) => i === index ? { ...t, locked: !t.locked } : t));

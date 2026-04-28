@@ -18,6 +18,15 @@ import type { IncomingMessage, ServerResponse } from 'http'
 
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
+
+function semverGt(a: string, b: string): boolean {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0)
+  }
+  return false
+}
 const execFileAsync = promisify(execFile)
 export const APPLE_RESULTS_PATH = path.join(os.homedir(), 'Music', 'djfriend-results-v3.json')
 
@@ -460,6 +469,28 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       fs.createReadStream(filePath).pipe(res)
     })
   }
+
+  middlewares.use('/api/check-update', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    // Read current version from package.json at runtime
+    const pkgPath = new URL('../../package.json', import.meta.url)
+    const currentVersion: string = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version
+    try {
+      const response = await fetch('https://api.github.com/repos/ai-projects-oo/djfriend/releases/latest', {
+        headers: { 'User-Agent': 'djfriend-app', Accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) throw new Error('GitHub API error')
+      const data = await response.json() as { tag_name: string; html_url: string; name: string }
+      const latestVersion = data.tag_name.replace(/^v/, '')
+      const hasUpdate = semverGt(latestVersion, currentVersion)
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ currentVersion, latestVersion, hasUpdate, downloadUrl: data.html_url }))
+    } catch {
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ currentVersion, latestVersion: null, hasUpdate: false, downloadUrl: null }))
+    }
+  })
 
   middlewares.use('/api/apple-library', (req, res, next) => {
     if (req.method !== 'GET') { next(); return }

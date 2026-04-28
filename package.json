@@ -1,7 +1,7 @@
 {
   "name": "djfriend",
   "private": true,
-  "version": "1.0.30",
+  "version": "1.0.31",
   "type": "module",
   "main": "electron-compiled/main.js",
   "scripts": {

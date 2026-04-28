@@ -17,6 +17,21 @@ export interface ModelWeights {
 const relu = (x: number) => (x > 0 ? x : 0)
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x))
 
+// Weighted average of two models: result = a*αA + b*αB
+export function blendModels(a: ModelWeights, b: ModelWeights, alphaA = 0.7): ModelWeights {
+  const aB = 1 - alphaA
+  const blendVec = (va: number[], vb: number[]) => va.map((v, i) => v * alphaA + vb[i] * aB)
+  const blendMat = (ma: number[][], mb: number[][]) => ma.map((row, i) => blendVec(row, mb[i]))
+  return {
+    w1: blendMat(a.w1, b.w1), b1: blendVec(a.b1, b.b1),
+    w2: blendMat(a.w2, b.w2), b2: blendVec(a.b2, b.b2),
+    w3: blendVec(a.w3, b.w3), b3: a.b3 * alphaA + b.b3 * aB,
+    version: Math.max(a.version, b.version),
+    trainedOn: a.trainedOn,
+    trainedSamples: a.trainedSamples + b.trainedSamples,
+  }
+}
+
 export function mlpForward(features: number[], w: ModelWeights): number {
   // Layer 1: input → hidden1
   const h1 = w.b1.map((b, j) =>

@@ -76,7 +76,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [rekordboxFolderStatus, setRekordboxFolderStatus] = useState<PathStatus>('idle')
   const [saving, setSaving] = useState(false)
 
-  const [useAllCores, setUseAllCores] = useState(false)
+  const [analysisMode, setAnalysisMode] = useState<'performance' | 'normal' | 'power-saving'>('normal')
   const [energyCheckThreshold, setEnergyCheckThreshold] = useState(12)
   const [shareTelemetry, setShareTelemetry] = useState(true)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
@@ -105,12 +105,13 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; useAllCores?: boolean; energyCheckThreshold?: number; shareTelemetry?: boolean }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
         setRekordboxFolder(d.rekordboxFolder ?? '')
         setMusicFolderStatus('idle')
         setRekordboxFolderStatus('idle')
-        setUseAllCores(d.useAllCores === true)
+        if (d.analysisMode === 'performance' || d.analysisMode === 'power-saving') setAnalysisMode(d.analysisMode)
+        else setAnalysisMode('normal')
         setEnergyCheckThreshold(Math.round((d.energyCheckThreshold ?? 0.12) * 100))
         setShareTelemetry(d.shareTelemetry !== false)
         setHasSpotifySecret(d.hasSecret ?? false)
@@ -125,7 +126,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), useAllCores, energyCheckThreshold: energyCheckThreshold / 100, shareTelemetry }),
+        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), analysisMode, energyCheckThreshold: energyCheckThreshold / 100, shareTelemetry }),
       })
       if (!r.ok) throw new Error('Save failed')
       onSaved()
@@ -282,20 +283,33 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             </p>
           </div>
 
-          <label className="flex items-start gap-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={useAllCores}
-              onChange={(e) => setUseAllCores(e.target.checked)}
-              className="mt-0.5 w-4 h-4 cursor-pointer accent-[#7c3aed]"
-            />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm text-[#e2e8f0]">Use all CPU cores for analysis</span>
-              <span className="text-[11px] text-[#64748b]">
-                Spawns one audio worker per core (like Rekordbox). Much faster on large libraries but uses more CPU. Requires app restart to take effect.
-              </span>
+          <div>
+            <p className="text-xs text-[#64748b] mb-2">Analysis Process — Concurrent Process Mode</p>
+            <div className="space-y-2">
+              {([
+                ['performance', 'Performance', 'Uses all CPU cores — fastest analysis, higher CPU usage'],
+                ['normal',      'Normal',      'Uses half your cores — balanced speed and system load'],
+                ['power-saving','Power saving', 'Single worker — slowest, minimal CPU usage'],
+              ] as const).map(([value, label, hint]) => (
+                <label key={value} className="flex items-start gap-3 cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name="analysisMode"
+                    value={value}
+                    checked={analysisMode === value}
+                    onChange={() => setAnalysisMode(value)}
+                    className="mt-0.5 w-4 h-4 cursor-pointer accent-[#7c3aed]"
+                    aria-label={label}
+                  />
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm text-[#e2e8f0]">{label}</span>
+                    <span className="text-[11px] text-[#64748b]">{hint}</span>
+                  </div>
+                </label>
+              ))}
             </div>
-          </label>
+            <p className="text-[11px] text-[#475569] mt-2">Requires app restart to take effect.</p>
+          </div>
         </div>
 
         {/* ── AI & Privacy ─────────────────────────────────────────── */}

@@ -19,7 +19,7 @@ export interface Settings {
   musicFolder: string
   playlistsFolder: string
   rekordboxFolder?: string
-  useAllCores?: boolean         // spawn one audio worker per core (default false = single worker)
+  analysisMode?: 'performance' | 'normal' | 'power-saving'  // worker pool size (default 'normal')
   energyCheckThreshold?: number // 0–1, minimum delta to flag an energy mismatch (default 0.12)
   shareTelemetry?: boolean      // opt-in: send anonymous transition vectors to community server
 }

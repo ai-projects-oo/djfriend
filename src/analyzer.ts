@@ -58,10 +58,11 @@ function getWorkers(): Worker[] | null {
   try {
     const workerPath = join(dirname(fileURLToPath(import.meta.url)), 'analyzer-worker.js');
     if (!fs.existsSync(workerPath)) return null;
-    const useAllCores = readSettings().useAllCores === true;
-    const poolSize = useAllCores ? Math.max(1, os.cpus().length) : 1;
+    const mode = readSettings().analysisMode ?? 'normal';
+    const cpus = Math.max(1, os.cpus().length);
+    const poolSize = mode === 'performance' ? cpus : mode === 'normal' ? Math.max(1, Math.ceil(cpus / 2)) : 1;
     _workers = Array.from({ length: poolSize }, () => spawnWorker(workerPath));
-    if (poolSize > 1) console.log(`[analyzer] spawned ${poolSize} audio workers (all-cores mode)`);
+    if (poolSize > 1) console.log(`[analyzer] spawned ${poolSize} audio workers (${mode} mode)`);
     return _workers;
   } catch {
     return null;

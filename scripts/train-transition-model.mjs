@@ -302,6 +302,30 @@ for (let rep = 0; rep < 2; rep++) {
   for (let i = 0; i < realX.length; i++) { X.push(realX[i]); Y.push(realY[i]); }
 }
 
+// ── Community telemetry from Render server ────────────────────────────────────
+
+const COMMUNITY_URL = 'https://djfriend.onrender.com/api/telemetry/transitions';
+let communityPairs = 0;
+try {
+  console.log('Fetching community telemetry from server…');
+  const res = await fetch(COMMUNITY_URL.replace('/transitions', '/data'), { signal: AbortSignal.timeout(8000) });
+  if (res.ok) {
+    const body = await res.json();
+    const vecs = Array.isArray(body) ? body : (body.vectors ?? []);
+    for (const v of vecs) {
+      if (Array.isArray(v) && v.length === 18) {
+        X.push(v); Y.push(1.0);  // community transitions are accepted DJ choices
+        communityPairs++;
+      }
+    }
+    console.log(`  ${communityPairs} community transition vectors added\n`);
+  } else {
+    console.log(`  Server returned ${res.status} — skipping community data\n`);
+  }
+} catch {
+  console.log('  Community server unreachable — training with local data only\n');
+}
+
 // ── Synthetic pairs from formula ──────────────────────────────────────────────
 
 console.log(`Generating ${SAMPLES.toLocaleString()} synthetic pairs…`);

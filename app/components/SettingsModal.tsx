@@ -78,6 +78,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
   const [useAllCores, setUseAllCores] = useState(false)
   const [energyCheckThreshold, setEnergyCheckThreshold] = useState(12)
+  const [shareTelemetry, setShareTelemetry] = useState(true)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -104,13 +105,14 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; useAllCores?: boolean; energyCheckThreshold?: number }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; useAllCores?: boolean; energyCheckThreshold?: number; shareTelemetry?: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
         setRekordboxFolder(d.rekordboxFolder ?? '')
         setMusicFolderStatus('idle')
         setRekordboxFolderStatus('idle')
         setUseAllCores(d.useAllCores === true)
         setEnergyCheckThreshold(Math.round((d.energyCheckThreshold ?? 0.12) * 100))
+        setShareTelemetry(d.shareTelemetry !== false)
         setHasSpotifySecret(d.hasSecret ?? false)
       })
       .catch(() => {})
@@ -123,7 +125,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), useAllCores, energyCheckThreshold: energyCheckThreshold / 100 }),
+        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), useAllCores, energyCheckThreshold: energyCheckThreshold / 100, shareTelemetry }),
       })
       if (!r.ok) throw new Error('Save failed')
       onSaved()
@@ -291,6 +293,34 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               <span className="text-sm text-[#e2e8f0]">Use all CPU cores for analysis</span>
               <span className="text-[11px] text-[#64748b]">
                 Spawns one audio worker per core (like Rekordbox). Much faster on large libraries but uses more CPU. Requires app restart to take effect.
+              </span>
+            </div>
+          </label>
+        </div>
+
+        {/* ── AI & Privacy ─────────────────────────────────────────── */}
+        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">AI & Privacy</h3>
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={shareTelemetry}
+              onChange={e => {
+                setShareTelemetry(e.target.checked)
+                // auto-save immediately (works on both platforms)
+                apiFetch('/api/settings', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ shareTelemetry: e.target.checked }),
+                }).catch(() => {})
+              }}
+              className="mt-0.5 w-4 h-4 cursor-pointer accent-[#7c3aed]"
+              aria-label="Share anonymous transition data to improve the community AI model"
+            />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm text-[#e2e8f0]">Help improve the AI for everyone</span>
+              <span className="text-[11px] text-[#64748b]">
+                Anonymously shares transition patterns (BPM, key, energy — no track names or metadata) after each set. Helps train a community model that benefits all DJFriend users.
               </span>
             </div>
           </label>

@@ -28,6 +28,7 @@ import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
 import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
 import { camelotColor } from "./lib/camelotColors";
+import { transitionFeatures } from "./lib/mlFeatures";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -151,6 +152,7 @@ function AppInner() {
   const historyExportRef = useRef<HTMLDivElement | null>(null);
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string } | null>(null);
   const [mlWeights, setMlWeights] = useState<import('./lib/mlModel').ModelWeights | null>(null);
+  const [shareTelemetry, setShareTelemetry] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
@@ -504,6 +506,7 @@ function AppInner() {
           !!(d.rekordboxFolder && d.rekordboxFolder.trim()),
         );
         if (d.energyCheckThreshold !== undefined) setEnergyCheckThreshold(d.energyCheckThreshold);
+        if ((d as { shareTelemetry?: boolean }).shareTelemetry !== undefined) setShareTelemetry((d as { shareTelemetry?: boolean }).shareTelemetry !== false);
       })
       .catch(() => {});
   }, [setFolderPath]);
@@ -519,6 +522,30 @@ function AppInner() {
       .then(w => { if (w) setMlWeights(w) })
       .catch(() => {});
   }, []);
+
+  // Fire-and-forget: send anonymous transition vectors when a set is generated (opt-in only)
+  const prevGeneratedSetRef = useRef<typeof generatedSet>([]);
+  useEffect(() => {
+    if (!shareTelemetry) return;
+    if (generatedSet.length < 2) return;
+    if (generatedSet === prevGeneratedSetRef.current) return;
+    prevGeneratedSetRef.current = generatedSet;
+    // Extract one 18-feature vector per consecutive pair (= each transition the DJ accepted)
+    const vectors: number[][] = [];
+    const n = generatedSet.length;
+    for (let i = 1; i < n; i++) {
+      const a = generatedSet[i - 1];
+      const b = generatedSet[i];
+      if (!a.bpm || !b.bpm || !a.camelot || !b.camelot) continue;
+      vectors.push(transitionFeatures(a, b, b.targetEnergy, i / (n - 1)));
+    }
+    if (vectors.length === 0) return;
+    fetch('https://djfriend.onrender.com/api/telemetry/transitions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vectors }),
+    }).catch(() => {});  // fire-and-forget — never blocks the UI
+  }, [generatedSet, shareTelemetry]);
 
   // Check for app updates once on mount
   useEffect(() => {

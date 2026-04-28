@@ -21,6 +21,7 @@ export interface Settings {
   rekordboxFolder?: string
   useAllCores?: boolean         // spawn one audio worker per core (default false = single worker)
   energyCheckThreshold?: number // 0–1, minimum delta to flag an energy mismatch (default 0.12)
+  shareTelemetry?: boolean      // opt-in: send anonymous transition vectors to community server
 }
 
 export function readSettings(): Partial<Settings> {

@@ -12,6 +12,8 @@ import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
 import { readSettings, writeSettings } from './settings.js'
 import { deriveSemanticTags } from './ai.js'
+import { initWeights, trainOnVectors } from './mlTrain.js'
+import type { ModelWeights } from './mlTrain.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -30,6 +32,23 @@ function semverGt(a: string, b: string): boolean {
 const execFileAsync = promisify(execFile)
 export const APPLE_RESULTS_PATH = path.join(os.homedir(), 'Music', 'djfriend-results-v3.json')
 export const HISTORY_PATH = path.join(os.homedir(), 'Music', 'djfriend-history.json')
+
+// Community telemetry — in-memory (ephemeral; resets on server restart)
+const communityVectors: number[][] = []
+let communityModel: ModelWeights | null = null
+let vectorsSinceLastTrain = 0
+const RETRAIN_EVERY = 50
+const MAX_VECTORS = 10_000  // cap memory usage
+
+function maybeTrain() {
+  if (vectorsSinceLastTrain < RETRAIN_EVERY) return
+  vectorsSinceLastTrain = 0
+  const sample = communityVectors.slice(-5000)  // train on latest 5k
+  setImmediate(() => {
+    communityModel = trainOnVectors(communityModel, sample, 2, 0.004)
+    console.log(`[telemetry] community model updated — ${communityModel.trainedSamples} total samples`)
+  })
+}
 
 export interface AppSong {
   filePath: string
@@ -506,6 +525,54 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     fs.createReadStream(ML_MODEL_PATH).pipe(res)
   })
 
+  // Receive anonymous transition feature vectors from opted-in desktop clients.
+  // Auto-retrains community model every RETRAIN_EVERY new vectors.
+  middlewares.use('/api/telemetry/transitions', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
+    if (req.method !== 'POST') { next(); return }
+    const chunks: Buffer[] = []
+    req.on('data', (c: Buffer) => chunks.push(c))
+    req.on('end', () => {
+      try {
+        const { vectors } = JSON.parse(Buffer.concat(chunks).toString('utf-8')) as { vectors: number[][] }
+        if (!Array.isArray(vectors) || vectors.length === 0) { res.writeHead(400); res.end('{"error":"no vectors"}'); return }
+        const valid = vectors.filter(v => Array.isArray(v) && v.length === 18 && v.every(n => typeof n === 'number' && isFinite(n)))
+        if (communityVectors.length + valid.length > MAX_VECTORS) communityVectors.splice(0, valid.length)
+        communityVectors.push(...valid)
+        vectorsSinceLastTrain += valid.length
+        maybeTrain()
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ ok: true, received: valid.length, total: communityVectors.length }))
+      } catch { res.writeHead(400); res.end('{"error":"invalid json"}') }
+    })
+  })
+
+  // Return raw accumulated vectors for offline training scripts.
+  middlewares.use('/api/telemetry/data', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    if (req.method !== 'GET') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ vectors: communityVectors, count: communityVectors.length }))
+  })
+
+  // Serve the current community model (auto-updated after each RETRAIN_EVERY batch).
+  // Also initializes with a blank model if called before any data arrives.
+  middlewares.use('/api/community-model', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    if (req.method !== 'GET') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    if (!communityModel) {
+      // Return a freshly initialized model so clients always get something useful
+      const blank = initWeights()
+      res.end(JSON.stringify(blank))
+      return
+    }
+    res.end(JSON.stringify(communityModel))
+  })
+
   middlewares.use('/api/apple-library', (req, res, next) => {
     if (req.method !== 'GET') { next(); return }
     if (!fs.existsSync(APPLE_RESULTS_PATH)) {
@@ -547,7 +614,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'GET') {
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', useAllCores: s.useAllCores === true, energyCheckThreshold: s.energyCheckThreshold ?? 0.12 }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', useAllCores: s.useAllCores === true, energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false }))
       return
     }
     if (req.method === 'POST') {
@@ -559,6 +626,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (typeof body.rekordboxFolder === 'string') updates.rekordboxFolder = body.rekordboxFolder.trim()
       if (typeof body.useAllCores === 'boolean') updates.useAllCores = body.useAllCores
       if (typeof body.energyCheckThreshold === 'number') updates.energyCheckThreshold = Math.max(0.12, Math.min(1, body.energyCheckThreshold))
+      if (typeof body.shareTelemetry === 'boolean') updates.shareTelemetry = body.shareTelemetry
       writeSettings(updates)
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))

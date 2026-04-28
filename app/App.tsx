@@ -1218,6 +1218,7 @@ function AppInner() {
                     </div>
 
                     {/* Primary CTA — Generate */}
+                    <div className="relative group">
                     <button
                       onClick={() => {
                         if (library.length === 0 || isGenerating) return;
@@ -1230,7 +1231,6 @@ function AppInner() {
                       disabled={
                         isInitializing || library.length === 0 || isGenerating || prefs.genres.length === 0
                       }
-                      title={prefs.genres.length === 0 ? "Select at least one genre to generate" : "Generate a new set"}
                       aria-label="Generate set"
                       className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
                       style={{
@@ -1287,10 +1287,11 @@ function AppInner() {
                       )}
                     </button>
                     {prefs.genres.length === 0 && (
-                      <p className="text-[10px] text-[#475569] text-center mt-1">
-                        ← Pick a genre to generate a set
-                      </p>
+                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
+                        Pick a genre above to generate a set
+                      </div>
                     )}
+                    </div>
                     {/* Secondary actions — subordinate ghost buttons */}
                     <div className="flex gap-2">
                       <div className="relative flex-1 group">

@@ -77,6 +77,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [saving, setSaving] = useState(false)
 
   const [useAllCores, setUseAllCores] = useState(false)
+  const [energyCheckThreshold, setEnergyCheckThreshold] = useState(12)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -103,12 +104,13 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; useAllCores?: boolean }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; useAllCores?: boolean; energyCheckThreshold?: number }) => {
         setMusicFolder(d.musicFolder ?? '')
         setRekordboxFolder(d.rekordboxFolder ?? '')
         setMusicFolderStatus('idle')
         setRekordboxFolderStatus('idle')
         setUseAllCores(d.useAllCores === true)
+        setEnergyCheckThreshold(Math.round((d.energyCheckThreshold ?? 0.12) * 100))
         setHasSpotifySecret(d.hasSecret ?? false)
       })
       .catch(() => {})
@@ -121,7 +123,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), useAllCores }),
+        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), useAllCores, energyCheckThreshold: energyCheckThreshold / 100 }),
       })
       if (!r.ok) throw new Error('Save failed')
       onSaved()
@@ -257,6 +259,27 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         {/* ── Performance ───────────────────────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Performance</h3>
+
+          {/* Energy Check threshold */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm text-[#e2e8f0]">Energy check sensitivity</label>
+              <span className="text-sm font-semibold text-[#a78bfa] tabular-nums">{energyCheckThreshold}%</span>
+            </div>
+            <input
+              type="range"
+              min={12}
+              max={50}
+              step={1}
+              value={energyCheckThreshold}
+              onChange={e => setEnergyCheckThreshold(Number(e.target.value))}
+              className="w-full accent-[#7c3aed] cursor-pointer"
+            />
+            <p className="text-[11px] text-[#64748b] mt-1">
+              Flag tracks whose actual energy differs from the curve target by more than this amount. Lower = stricter. Minimum 12%.
+            </p>
+          </div>
+
           <label className="flex items-start gap-3 cursor-pointer select-none">
             <input
               type="checkbox"

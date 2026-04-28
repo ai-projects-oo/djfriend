@@ -153,6 +153,7 @@ function AppInner() {
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
+  const [energyCheckThreshold, setEnergyCheckThreshold] = useState(0.12);
   const [onboardingDismissed, setOnboardingDismissed] = useState(
     () => localStorage.getItem("djfriend-onboarding-dismissed") === "true",
   );
@@ -363,8 +364,8 @@ function AppInner() {
   } = useSetGenerator(library, setLibrary, playlistFilterFiles, history);
 
   const energyIssues = useMemo(
-    () => generatedSet.filter(t => Math.abs(t.energy - t.targetEnergy) > 0.12),
-    [generatedSet],
+    () => generatedSet.filter(t => Math.abs(t.energy - t.targetEnergy) > energyCheckThreshold),
+    [generatedSet, energyCheckThreshold],
   );
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
 
@@ -463,6 +464,7 @@ function AppInner() {
             musicFolder?: string;
             rekordboxFolder?: string;
             hasSecret?: boolean;
+            energyCheckThreshold?: number;
           }>,
       )
       .then((d) => {
@@ -471,6 +473,7 @@ function AppInner() {
         setHasRekordboxFolder(
           !!(d.rekordboxFolder && d.rekordboxFolder.trim()),
         );
+        if (d.energyCheckThreshold !== undefined) setEnergyCheckThreshold(d.energyCheckThreshold);
       })
       .catch(() => {});
   }, [setFolderPath]);

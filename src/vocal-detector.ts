@@ -17,8 +17,8 @@ import { isMainThread } from 'worker_threads';
 
 const require = createRequire(import.meta.url);
 
-const MODEL_BASE =
-  'https://essentia.upf.edu/models/classifiers/voice_instrumental/voice_instrumental-msd-musicnn-1/';
+const MODEL_ZIP_URL =
+  'https://essentia.upf.edu/models/classifiers/voice_instrumental/voice_instrumental-musicnn-msd-2-tfjs.zip';
 
 const PATCH_SIZE = 187;  // MusiCNN temporal context (frames)
 const MEL_BANDS  = 96;   // MusiCNN mel-band count
@@ -41,34 +41,31 @@ function modelDir(): string {
   return dir;
 }
 
-async function downloadFile(url: string, dest: string): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- axios dynamic import
-  const { default: axios } = await import('axios') as any;
-  const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 30_000 });
-  fs.writeFileSync(dest, Buffer.from(res.data as ArrayBuffer));
-}
-
 async function ensureModel(dir: string): Promise<{ modelJson: Record<string, unknown>; shardPaths: string[] }> {
   const jsonPath = path.join(dir, 'model.json');
+
   if (!fs.existsSync(jsonPath)) {
-    console.log('[vocal-ml] Downloading voice_instrumental model (~2 MB, one-time)…');
-    await downloadFile(MODEL_BASE + 'model.json', jsonPath);
+    console.log('[vocal-ml] Downloading voice_instrumental model (~3 MB, one-time)…');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- axios dynamic import
+    const { default: axios } = await import('axios') as any;
+    const res = await axios.get(MODEL_ZIP_URL, { responseType: 'arraybuffer', timeout: 60_000 });
+    const { default: JSZip } = await import('jszip');
+    const zip = await JSZip.loadAsync(res.data as ArrayBuffer);
+
+    for (const [zipPath, zipEntry] of Object.entries(zip.files)) {
+      const basename = path.basename(zipPath);
+      if (!basename || (zipEntry as import('jszip').JSZipObject).dir) continue;
+      if (basename === 'model.json' || basename.endsWith('.bin')) {
+        const buf = await (zipEntry as import('jszip').JSZipObject).async('nodebuffer');
+        fs.writeFileSync(path.join(dir, basename), buf);
+        console.log(`[vocal-ml]   Extracted ${basename}`);
+      }
+    }
   }
 
   const modelJson = JSON.parse(fs.readFileSync(jsonPath, 'utf-8')) as Record<string, unknown>;
   const manifest = modelJson.weightsManifest as Array<{ paths: string[] }> | undefined ?? [];
-  const shardPaths: string[] = [];
-
-  for (const group of manifest) {
-    for (const p of group.paths) {
-      shardPaths.push(p);
-      const dest = path.join(dir, p);
-      if (!fs.existsSync(dest)) {
-        console.log(`[vocal-ml]   Downloading ${p}…`);
-        await downloadFile(MODEL_BASE + p, dest);
-      }
-    }
-  }
+  const shardPaths: string[] = manifest.flatMap(g => g.paths);
 
   return { modelJson, shardPaths };
 }

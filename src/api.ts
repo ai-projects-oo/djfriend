@@ -1,6 +1,7 @@
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
+import crypto from 'crypto'
 import { promisify } from 'util'
 import { execFile } from 'child_process'
 import Busboy from 'busboy'
@@ -89,16 +90,29 @@ function collectAudioDirs(rootPath: string): string[] {
   return folders
 }
 
+const MAX_BODY_BYTES = 10 * 1024 * 1024  // 10 MB hard cap on all JSON bodies
+
 export function readJsonBody(req: NodeJS.ReadableStream): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on('data', (chunk: Buffer) => chunks.push(chunk))
+    let total = 0
+    req.on('data', (chunk: Buffer) => {
+      total += chunk.length
+      if (total > MAX_BODY_BYTES) { reject(Object.assign(new Error('Payload too large'), { code: 413 })); return }
+      chunks.push(chunk)
+    })
     req.on('end', () => {
       try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8'))) }
       catch (err) { reject(err) }
     })
     req.on('error', reject)
   })
+}
+
+// Returns true only if p is inside at least one of the allowed root directories
+function isPathAllowed(p: string, ...roots: (string | null | undefined)[]): boolean {
+  const resolved = path.resolve(p)
+  return roots.some(r => r && (resolved === path.resolve(r) || resolved.startsWith(path.resolve(r) + path.sep)))
 }
 
 function toSafeRelative(input: string): string | null {
@@ -472,8 +486,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (url.startsWith('/api/auth/check')) { next(); return }
     const appPwd = process.env.APP_PASSWORD
     if (!appPwd) { next(); return }
-    const provided = req.headers['x-app-password']
-    if (provided !== appPwd) {
+    const provided = typeof req.headers['x-app-password'] === 'string' ? req.headers['x-app-password'] : ''
+    const aB = Buffer.from(provided.padEnd(appPwd.length)), bB = Buffer.from(appPwd)
+    if (provided.length !== appPwd.length || !crypto.timingSafeEqual(aB, bB)) {
       res.writeHead(401, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'Unauthorized' }))
       return
@@ -534,13 +549,17 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
     if (req.method !== 'POST') { next(); return }
     const chunks: Buffer[] = []
-    req.on('data', (c: Buffer) => chunks.push(c))
+    let telBytes = 0
+    req.on('data', (c: Buffer) => { telBytes += c.length; if (telBytes <= 1024 * 1024) chunks.push(c) })
     req.on('end', () => {
+      if (telBytes > 1024 * 1024) { res.writeHead(413); res.end('{"error":"payload too large"}'); return }
       try {
         const { vectors } = JSON.parse(Buffer.concat(chunks).toString('utf-8')) as { vectors: number[][] }
         if (!Array.isArray(vectors) || vectors.length === 0) { res.writeHead(400); res.end('{"error":"no vectors"}'); return }
+        if (vectors.length > 200) { res.writeHead(400); res.end('{"error":"too many vectors per request"}'); return }
         const valid = vectors.filter(v => Array.isArray(v) && v.length === 18 && v.every(n => typeof n === 'number' && isFinite(n)))
-        if (communityVectors.length + valid.length > MAX_VECTORS) communityVectors.splice(0, valid.length)
+        const overflow = communityVectors.length + valid.length - MAX_VECTORS
+        if (overflow > 0) communityVectors.splice(0, overflow)
         communityVectors.push(...valid)
         vectorsSinceLastTrain += valid.length
         maybeTrain()
@@ -597,7 +616,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       req.on('end', () => {
         try {
           const body = Buffer.concat(chunks).toString('utf-8')
-          JSON.parse(body) // validate
+          const parsed = JSON.parse(body)
+          if (!Array.isArray(parsed)) throw new Error('Expected array')
           fs.writeFileSync(HISTORY_PATH, body, 'utf-8')
           res.end(JSON.stringify({ ok: true }))
         } catch {
@@ -750,6 +770,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       for (const track of rbTracks) {
         completed++
         writeEvent({ type: 'progress', completed, total: rbTracks.length, folder: 'Rekordbox', file: path.basename(track.path) })
+        if (!AUDIO_EXTENSIONS.has(path.extname(track.path).toLowerCase()) || !fs.existsSync(track.path)) continue
         const cached = existing[track.path]
         if (cached) { resultsJson[track.path] = cached; continue }
         const tonality = (track.tonality || '').trim()
@@ -945,7 +966,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const body = await readJsonBody(req) as { content?: string; filename?: string }
     const { playlistsFolder } = readSettings()
     if (!playlistsFolder) { res.statusCode = 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'playlistsFolder not set in settings.' })); return }
-    const filename = (body.filename ?? 'djfriend-set.m3u').replace(/[/\\?%*:|"<>]/g, '-')
+    const filename = (body.filename ?? 'djfriend-set.m3u').replace(/[/\\?%*:|"<>]/g, '-').replace(/\r|\n/g, '').split('\0').join('')
     const outPath = path.join(playlistsFolder, filename)
     fs.mkdirSync(playlistsFolder, { recursive: true })
     fs.writeFileSync(outPath, body.content ?? '', 'utf-8')
@@ -958,7 +979,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const body = await readJsonBody(req) as { content?: string; filename?: string }
     const { rekordboxFolder } = readSettings()
     if (!rekordboxFolder) { res.statusCode = 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Set a Rekordbox XML folder in Settings first.' })); return }
-    const filename = (body.filename ?? 'djfriend-set.xml').replace(/[/\\?%*:|"<>]/g, '-')
+    const filename = (body.filename ?? 'djfriend-set.xml').replace(/[/\\?%*:|"<>]/g, '-').replace(/\r|\n/g, '').split('\0').join('')
     const outPath = path.join(rekordboxFolder, filename)
     fs.mkdirSync(rekordboxFolder, { recursive: true })
     fs.writeFileSync(outPath, body.content ?? '', 'utf-8')
@@ -986,12 +1007,13 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method !== 'POST') { next(); return }
     if (process.platform !== 'darwin') { res.statusCode = 501; res.end(JSON.stringify({ error: 'Apple Music is only available on macOS.' })); return }
     const body = await readJsonBody(req) as Record<string, unknown>
+    const sanitizeAs = (s: string) => s.replace(/[\r\n\0]/g, ' ').replace(/\\/g, '\\\\').replace(/"/g, '\\"')
     const filePath = typeof body.filePath === 'string' ? body.filePath : null
     const artist = typeof body.artist === 'string' ? body.artist : ''
     const title = typeof body.title === 'string' ? body.title : ''
     const script = filePath
-      ? `tell application "Music"\nactivate\nopen POSIX file "${filePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"\nend tell`
-      : `tell application "Music"\nactivate\nset r to (search library playlist 1 for "${`${artist} ${title}`.replace(/"/g, '\\"')}")\nif length of r > 0 then\nplay item 1 of r\nend if\nend tell`
+      ? `tell application "Music"\nactivate\nopen POSIX file "${sanitizeAs(filePath)}"\nend tell`
+      : `tell application "Music"\nactivate\nset r to (search library playlist 1 for "${sanitizeAs(`${artist} ${title}`)}")\nif length of r > 0 then\nplay item 1 of r\nend if\nend tell`
     try {
       await execFileAsync('osascript', ['-e', script])
       res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ ok: true }))
@@ -1057,6 +1079,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (!filePath || !tags) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing filePath or tags' })); return }
       let absolutePath = filePath
       if (!path.isAbsolute(filePath) && songsFolder) absolutePath = path.join(songsFolder, filePath)
+      if (!isPathAllowed(absolutePath, songsFolder, path.dirname(APPLE_RESULTS_PATH))) { res.statusCode = 403; res.end(JSON.stringify({ error: 'Path not allowed' })); return }
       if (!fs.existsSync(absolutePath)) { res.statusCode = 404; res.end(JSON.stringify({ error: 'File not found' })); return }
       if (!AUDIO_EXTENSIONS.has(path.extname(absolutePath).toLowerCase())) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Not an audio file' })); return }
       const id3Tags: NodeID3.Tags = {}
@@ -1130,6 +1153,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (!filePath) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing filePath' })); return }
       let absolutePath = filePath
       if (!path.isAbsolute(filePath) && songsFolder) absolutePath = path.join(songsFolder, filePath)
+      if (!isPathAllowed(absolutePath, songsFolder, path.dirname(APPLE_RESULTS_PATH))) { res.statusCode = 403; res.end(JSON.stringify({ error: 'Path not allowed' })); return }
       if (!fs.existsSync(absolutePath)) { res.statusCode = 404; res.end(JSON.stringify({ error: 'File not found' })); return }
       if (!AUDIO_EXTENSIONS.has(path.extname(absolutePath).toLowerCase())) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Not an audio file' })); return }
 

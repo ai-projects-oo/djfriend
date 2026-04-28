@@ -1614,6 +1614,22 @@ function AppInner() {
                               {activeFilterCount}
                             </span>
                           )}
+                          {activeFilterCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPrefs(p => ({
+                                  ...p,
+                                  tagFilters: { vibeTags: [], moodTags: [], vocalTypes: [], venueTags: [], timeOfNightTags: [] },
+                                  dateFilter: { field: 'dateAdded', preset: 'all' },
+                                }));
+                              }}
+                              className="text-[10px] text-[#475569] hover:text-[#94a3b8] transition-colors"
+                            >
+                              clear all
+                            </button>
+                          )}
                         </div>
                         <svg
                           width="12"
@@ -1666,6 +1682,17 @@ function AppInner() {
                               <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
                                 Date
                               </span>
+                              {prefs.dateFilter && prefs.dateFilter.preset !== "all" && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPrefs(p => ({ ...p, dateFilter: { field: 'dateAdded', preset: 'all' } }))}
+                                  className="w-3.5 h-3.5 rounded-full border border-[#475569] text-[#475569] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                  title="Clear date filter"
+                                  style={{ fontSize: 9, lineHeight: 1 }}
+                                >
+                                  ×
+                                </button>
+                              )}
                               <div className="ml-2 flex rounded overflow-hidden border border-[#4c1d95]">
                                 {(["dateAdded", "releaseYear"] as const).map(
                                   (f) => {
@@ -1854,18 +1881,22 @@ function AppInner() {
                           </div>
                           {availableGenres.length > 0 && (
                             <div>
-                              <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">
-                                User Genre
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                                  User Genre
+                                </span>
                                 {prefs.genres.length > 0 && (
                                   <button
                                     type="button"
                                     onClick={() => selectGenre("Any")}
-                                    className="ml-2 text-[#6b7280] hover:text-[#9ca3af] transition-colors"
+                                    className="w-3.5 h-3.5 rounded-full border border-[#475569] text-[#475569] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                    title="Clear genre filter"
+                                    style={{ fontSize: 9, lineHeight: 1 }}
                                   >
-                                    clear
+                                    ×
                                   </button>
                                 )}
-                              </span>
+                              </div>
                               <div className="flex flex-wrap gap-1.5">
                                 {availableGenres.map((genre) => {
                                   const umbrellaActive = prefs.genres.some(
@@ -1911,9 +1942,22 @@ function AppInner() {
                             ] as string[];
                             return (
                               <div key={key}>
-                                <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] block mb-2">
-                                  {label}
-                                </span>
+                                <div className="flex items-center gap-1.5 mb-2">
+                                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                                    {label}
+                                  </span>
+                                  {selectedTags.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPrefs(p => ({ ...p, tagFilters: { ...p.tagFilters, [key]: [] } }))}
+                                      className="w-3.5 h-3.5 rounded-full border border-[#475569] text-[#475569] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                      title={`Clear ${label.toLowerCase()} filter`}
+                                      style={{ fontSize: 9, lineHeight: 1 }}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
                                 <div className="flex flex-wrap gap-1.5">
                                   {tags.map((tag) => {
                                     const active = selectedTags.includes(tag);

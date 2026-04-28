@@ -383,6 +383,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                     transition={transition}
                     visibleColumns={visibleColumns}
                     totalCols={totalCols}
+                    totalTracks={tracks.length}
                     showHoverTips={showHoverTips}
                     onSwap={() => onSwapTrack(idx)}
                     onToggleLock={() => onToggleLock(idx)}

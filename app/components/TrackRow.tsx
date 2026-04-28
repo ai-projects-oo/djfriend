@@ -12,6 +12,7 @@ interface Props {
   transition?: TransitionInfo;
   visibleColumns: Set<ColumnKey>;
   totalCols: number;
+  totalTracks?: number;
   onSwap: () => void;
   onToggleLock: () => void;
   onRemove: () => void;
@@ -89,10 +90,11 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, showHoverTips = true, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, totalTracks = 20, showHoverTips = true, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+  // Open popups downward for top-half rows, upward for bottom-half rows
+  const openDown = index < totalTracks / 2;
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showFitTooltip, setShowFitTooltip] = useState(false);
-  const [showBpmTooltip, setShowBpmTooltip] = useState(false);
   const [showEnergyTooltip, setShowEnergyTooltip] = useState(false);
   const [hoverHintIdx, setHoverHintIdx] = useState<number | null>(null);
   const [showTags, setShowTags] = useState(false);
@@ -279,7 +281,7 @@ async function handleReanalyze() {
                   ●
                 </span>
                 {showHoverTips && showFitTooltip && (
-                  <div className="absolute bottom-full left-0 mb-1 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none"
+                  <div className={`absolute ${openDown ? 'top-full mt-1' : 'bottom-full mb-1'} left-0 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none`}
                     style={{ borderColor: fitInfo.level === 'bad' ? '#ef444466' : '#f59e0b66' }}
                   >
                     <p className="text-[10px] font-semibold mb-1.5"
@@ -317,18 +319,7 @@ async function handleReanalyze() {
 
         {/* BPM */}
         <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap text-right">
-          <div
-            className="relative inline-block"
-            onMouseEnter={() => setShowBpmTooltip(true)}
-            onMouseLeave={() => setShowBpmTooltip(false)}
-          >
-            {track.bpm > 0 ? track.bpm.toFixed(0) : '—'}
-            {showHoverTips && showBpmTooltip && track.bpm > 0 && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap">
-                {track.bpm.toFixed(2)} BPM
-              </div>
-            )}
-          </div>
+          {track.bpm > 0 ? track.bpm.toFixed(0) : '—'}
         </td>
 
         {/* Camelot key */}
@@ -353,7 +344,7 @@ async function handleReanalyze() {
               </button>
             )}
             {showHoverTips && showKeyTooltip && track.camelot && (
-              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1.5 min-w-[160px]">
+              <div className={`absolute left-full ${openDown ? 'top-0' : 'bottom-0'} ml-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1.5 min-w-[160px]`}>
                 <div className="text-[9px] uppercase tracking-widest text-[#334155] mb-0.5">Next key options</div>
                 {compatibleKeys.length > 0 && (
                   <div className="flex items-center justify-between gap-4">
@@ -420,7 +411,7 @@ async function handleReanalyze() {
               />
             </div>
             {showHoverTips && showEnergyTooltip && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-0.5">
+              <div className={`absolute ${openDown ? 'top-full mt-1' : 'bottom-full mb-2'} left-1/2 -translate-x-1/2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-0.5`}>
                 <span>Energy <span style={{ color: barColor }}>{Math.round(track.energy * 100)}</span></span>
                 <span className="text-[#475569]">Target {Math.round(track.targetEnergy * 100)}</span>
               </div>
@@ -484,7 +475,7 @@ async function handleReanalyze() {
               {transition.hints.map((hint, hi) => (
                 <span
                   key={hi}
-                  className="relative"
+                  className="relative inline-block"
                   onMouseEnter={() => setHoverHintIdx(hi)}
                   onMouseLeave={() => setHoverHintIdx(null)}
                   style={{
@@ -498,7 +489,7 @@ async function handleReanalyze() {
                 >
                   {hint.icon}
                   {showHoverTips && hoverHintIdx === hi && hint.tip && (
-                    <div className="absolute bottom-full right-0 mb-2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none w-max max-w-[220px] leading-snug">
+                    <div className={`absolute ${openDown ? 'top-full mt-1' : 'bottom-full mb-2'} right-0 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none w-max max-w-[220px] leading-snug`}>
                       {hint.tip}
                     </div>
                   )}
@@ -528,7 +519,7 @@ async function handleReanalyze() {
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 bottom-full mb-1 z-30 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-xl overflow-hidden py-1">
+              <div className={`absolute right-0 ${openDown ? 'top-full mt-1' : 'bottom-full mb-1'} z-30 min-w-[175px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-xl overflow-hidden py-1`}>
 
                 {/* ── Lock ── */}
                 <button

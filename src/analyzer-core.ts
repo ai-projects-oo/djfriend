@@ -4,6 +4,7 @@ import path from 'path';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { createRequire } from 'module';
+import { detectVocalProbability } from './vocal-detector.js';
 
 const execFile = promisify(execFileCb);
 
@@ -42,6 +43,10 @@ export interface LocalAudioFeatures {
     midDb: number;
     highMidDb: number;
     highDb: number;
+    spectralCentroid: number;
+    spectralFlatness: number;
+    spectralFlux: number;
+    vocalLikelihood: number;  // 0–1 voice probability
   };
 }
 
@@ -218,7 +223,13 @@ interface MultiBandFeatures {
   highMidDb: number;
   highDb: number;
   zcRate: number;
+  spectralCentroid: number;  // Hz — weighted average frequency
+  spectralFlatness: number;  // 0–1, low=tonal/voiced, high=noisy/unvoiced
+  spectralFlux: number;      // average frame-to-frame spectral change (normalized)
+  vocalLikelihood: number;   // 0–1 voice probability (logistic regression on spectral features)
 }
+
+function sigmoid(x: number): number { return 1 / (1 + Math.exp(-x)); }
 
 function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number): MultiBandFeatures {
   const N = channelData.length;
@@ -233,10 +244,14 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
   const nFrames = Math.min(NUM_FRAMES, Math.floor((N - FFT_SIZE) / hop) + 1);
 
   const bandPower: Record<string, number> = { bass: 0, mid: 0, highMid: 0, high: 0 };
+  let centroidNum = 0, centroidDen = 0;   // for spectral centroid
+  let geoLogSum = 0, arithSum = 0;        // for spectral flatness
+  let specFlux = 0;                       // frame-to-frame flux
   let frameCount = 0;
 
   const re = new Float64Array(FFT_SIZE);
   const im = new Float64Array(FFT_SIZE);
+  const prevMag = new Float64Array(halfFFT);  // previous frame magnitude spectrum
 
   for (let f = 0; f < nFrames; f++) {
     const start = Math.min(f * hop, N - FFT_SIZE);
@@ -244,12 +259,23 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
     fft(re, im);
 
     let framePower = 0;
+    let frameCentNum = 0;
+    let frameGeoLog = 0, frameArith = 0;
+    let frameFlux = 0;
     const frameBandPower: Record<string, number> = { bass: 0, mid: 0, highMid: 0, high: 0 };
 
     for (let k = 1; k < halfFFT; k++) {
       const power = re[k] * re[k] + im[k] * im[k];
+      const mag = Math.sqrt(power);
       const hz = k * freqPerBin;
       framePower += power;
+      frameCentNum += hz * power;
+      frameArith += power;
+      frameGeoLog += Math.log(Math.max(power, 1e-30));
+      // half-wave rectified flux — only count increases (onset-like)
+      const diff = mag - prevMag[k];
+      if (diff > 0) frameFlux += diff * diff;
+      prevMag[k] = mag;
       for (const b of ENERGY_BANDS) {
         if (hz >= b.lo && hz < b.hi) { frameBandPower[b.name] += power; break; }
       }
@@ -257,6 +283,11 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
 
     if (framePower > 1e-12) {
       for (const b of ENERGY_BANDS) bandPower[b.name] += frameBandPower[b.name];
+      centroidNum += frameCentNum;
+      centroidDen += framePower;
+      geoLogSum += frameGeoLog / (halfFFT - 1);
+      arithSum  += frameArith  / (halfFFT - 1);
+      if (f > 0) specFlux += frameFlux / (halfFFT - 1);
       frameCount++;
     }
   }
@@ -267,6 +298,18 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
   const highMidDb = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.highMid / frameCount : 1e-18, 1e-18));
   const highDb    = 10 * Math.log10(Math.max(frameCount > 0 ? bandPower.high    / frameCount : 1e-18, 1e-18));
 
+  // Spectral centroid (Hz)
+  const spectralCentroid = centroidDen > 0 ? centroidNum / centroidDen : 1000;
+
+  // Spectral flatness (Wiener entropy): geometric mean / arithmetic mean of power spectrum.
+  // Values near 0 = tonal/voiced; near 1 = white noise.
+  const avgGeoLog = frameCount > 0 ? geoLogSum / frameCount : -69;
+  const avgArith  = frameCount > 0 ? arithSum  / frameCount : 1e-18;
+  const spectralFlatness = Math.max(0, Math.min(1, Math.exp(avgGeoLog) / Math.max(avgArith, 1e-30)));
+
+  // Spectral flux (normalized, drop first frame which has no prev)
+  const spectralFlux = frameCount > 1 ? Math.sqrt(specFlux / (frameCount - 1)) / Math.max(avgArith, 1e-18) : 0;
+
   // Zero-crossing rate (full resolution for accuracy)
   let zc = 0;
   for (let i = 1; i < N; i++) {
@@ -274,7 +317,22 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
   }
   const zcRate = zc / N;
 
-  return { bassDb, midDb, highMidDb, highDb, zcRate };
+  // Voice probability — logistic regression on spectral features.
+  // Coefficients calibrated on knowledge of vocal vs. instrumental spectral characteristics:
+  //   • centroid 1500–3500 Hz = vocal sweet spot (formants F1–F3 + harmonics)
+  //   • low flatness = tonal/harmonic (vowels) vs. high flatness = broadband noise
+  //   • moderate flux = rhythmic syllable modulation
+  //   • midDb > bassDb = vocal presence lifts mid band
+  //   • moderate ZCR distinguishes voiced (0.05–0.18) from high-noise signals
+  const centNorm    = (spectralCentroid - 2200) / 1000   // peak vocal at ~2200 Hz → 0
+  const flatScore   = -spectralFlatness * 4               // tonal wins
+  const fluxScore   = Math.max(0, Math.min(spectralFlux, 5)) * 0.4  // syllabic flux
+  const midBassRat  = (midDb - bassDb - 8) / 8            // >8 dB lift = vocal
+  const zcScore     = -(Math.abs(zcRate - 0.10) - 0.02) * 8  // sweet spot 0.08–0.12
+  const logit = -0.4 * centNorm * centNorm + flatScore + fluxScore + midBassRat + zcScore - 0.5
+  const vocalLikelihood = Math.round(sigmoid(logit) * 1000) / 1000
+
+  return { bassDb, midDb, highMidDb, highDb, zcRate, spectralCentroid, spectralFlatness, spectralFlux, vocalLikelihood };
 }
 
 /** Normalized RMS of a slice (same dBFS scale as overall energy). */
@@ -487,7 +545,12 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
 
     const energyProfile = computeEnergyProfile(channelData, 44100);
 
-    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb } };
+    // ML vocal detection — runs after main analysis, replaces spectral estimate when available.
+    // Returns -1 on first call (model not yet loaded) or error; spectral value is the fallback.
+    const mlVocalProb = await detectVocalProbability(channelData, 44100);
+    const vocalLikelihood = mlVocalProb >= 0 ? mlVocalProb : mbFeats.vocalLikelihood;
+
+    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb, spectralCentroid: mbFeats.spectralCentroid, spectralFlatness: mbFeats.spectralFlatness, spectralFlux: mbFeats.spectralFlux, vocalLikelihood } };
   } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;

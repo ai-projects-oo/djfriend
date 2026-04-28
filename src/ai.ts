@@ -14,12 +14,13 @@ export interface AudioProfile {
   camelot: string     // e.g. "8A", "5B"
   energy: number      // 0–1
   genres: string[]
-  // Optional spectral features from analyzer-core — enables richer vocal heuristic
+  // Optional spectral features from analyzer-core — enables richer vocal detection
   zcRate?: number
   bassDb?: number
   midDb?: number
   highMidDb?: number
   highDb?: number
+  vocalLikelihood?: number  // 0–1 voice probability from multi-feature spectral analysis
 }
 
 export function deriveSemanticTags(p: AudioProfile): SemanticTags {
@@ -73,7 +74,6 @@ export function deriveSemanticTags(p: AudioProfile): SemanticTags {
   if (p.bpm > 135 && isMinor && p.energy > 0.75) venueTags.push('warehouse')
 
   // ── Vocal type ────────────────────────────────────────────────────────────
-  // Genre hints are the most reliable signal we have without ML
   const genreStr = (p.genres ?? []).join(' ').toLowerCase()
   const hasVocalGenre = /\b(vocal|r&b|soul|pop|indie|rock|reggae|funk|disco|jazz|gospel|country|blues|hip.?hop|rap|singer)\b/.test(genreStr)
   const hasInstGenre = /\b(techno|minimal|ambient|drone|instrumental|deep house|progressive house)\b/.test(genreStr)
@@ -81,17 +81,18 @@ export function deriveSemanticTags(p: AudioProfile): SemanticTags {
   let vocalType: 'vocal' | 'instrumental' | 'mostly-vocal' = 'instrumental'
   if (hasVocalGenre) {
     vocalType = 'vocal'
-  } else if (!hasInstGenre && p.midDb !== undefined && p.bassDb !== undefined && p.zcRate !== undefined) {
-    // Spectral heuristic: vocals elevate mid-band energy relative to bass and produce
-    // moderate zero-crossing rates (higher than a sine wave, lower than pure noise).
+  } else if (hasInstGenre) {
+    vocalType = 'instrumental'
+  } else if (p.vocalLikelihood !== undefined) {
+    // Multi-feature spectral voice probability: spectral centroid, flatness, flux, mid/bass ratio, ZCR
+    if (p.vocalLikelihood >= 0.62) vocalType = 'vocal'
+    else if (p.vocalLikelihood >= 0.42) vocalType = 'mostly-vocal'
+  } else if (p.midDb !== undefined && p.bassDb !== undefined && p.zcRate !== undefined) {
     const midOverBass = p.midDb - p.bassDb
     if (midOverBass > 12 && p.zcRate > 0.08 && p.zcRate < 0.20) vocalType = 'vocal'
     else if (midOverBass > 7 && p.zcRate > 0.06 && p.zcRate < 0.22) vocalType = 'mostly-vocal'
-  } else if (!hasInstGenre) {
-    // No spectral data, no genre hint: house/pop BPMs + moderate energy often have vocals
-    if (p.bpm >= 115 && p.bpm <= 130 && p.energy >= 0.45 && p.energy <= 0.80 && !isMinor) {
-      vocalType = 'mostly-vocal'
-    }
+  } else if (!isMinor && p.bpm >= 115 && p.bpm <= 130 && p.energy >= 0.45 && p.energy <= 0.80) {
+    vocalType = 'mostly-vocal'
   }
 
   const unique = (arr: string[]) => [...new Set(arr)]

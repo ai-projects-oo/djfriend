@@ -239,10 +239,13 @@ export function generateSet(
       const playCount = options?.history ? computePlayStats(options.history, song.file).playCount : 0;
       const famBonus = options?.history ? (familiarityScore(playCount) - 0.5) * 0.06 : 0;
       const jitter = options?.jitter ? Math.random() * options.jitter : 0;
-      const wH = options?.weights?.harmonicWeight   ?? 0.55;
-      const wB = options?.weights?.bpmWeight        ?? 0.25;
-      const wT = options?.weights?.transitionWeight ?? 0.10;
-      const score = harmonicScore * wH + bpmScore * wB + transitionScore * wT + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + jitter;
+      // Energy proximity to the curve target — rewards staying close to the arc.
+      const energyScore = Math.max(0, 1 - Math.abs(song.energy - targetEnergy) / 0.4);
+      const wH = options?.weights?.harmonicWeight   ?? 0.45;
+      const wB = options?.weights?.bpmWeight        ?? 0.22;
+      const wT = options?.weights?.transitionWeight ?? 0.08;
+      const wE = options?.weights?.energyWeight     ?? 0.25;
+      const score = harmonicScore * wH + bpmScore * wB + transitionScore * wT + energyScore * wE + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + jitter;
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;
@@ -252,7 +255,9 @@ export function generateSet(
           const label = harmonicScore >= 1.0 ? '✓ perfect' : harmonicScore >= 0.75 ? '✓ compatible' : harmonicScore >= 0.5 ? '~ energy boost' : '✗ jump';
           reasons.push(`key ${prevCamelot}→${song.camelot} ${label}`);
         }
-        reasons.push(`energy ${song.energy.toFixed(2)} → target ${targetEnergy.toFixed(2)}`);
+        const eDelta = Math.abs(song.energy - targetEnergy);
+        const eLabel = eDelta <= 0.05 ? '✓' : eDelta <= 0.15 ? '~' : '✗';
+        reasons.push(`energy ${song.energy.toFixed(2)} → target ${targetEnergy.toFixed(2)} ${eLabel}`);
         if (prevBpm !== null) {
           const delta = song.bpm - prevBpm;
           reasons.push(`BPM ${song.bpm} (${delta >= 0 ? '+' : ''}${delta} from prev)`);

@@ -107,9 +107,10 @@ export interface PlayStats {
 }
 
 export interface ScoringWeights {
-  harmonicWeight:   number; // default 0.55
-  bpmWeight:        number; // default 0.25
-  transitionWeight: number; // default 0.10
+  harmonicWeight:   number; // default 0.45
+  bpmWeight:        number; // default 0.22
+  transitionWeight: number; // default 0.08
+  energyWeight:     number; // default 0.25
 }
 
 export interface SetPlan {

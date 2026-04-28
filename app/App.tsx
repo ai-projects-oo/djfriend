@@ -1194,7 +1194,7 @@ function AppInner() {
                         }, 0);
                       }}
                       disabled={
-                        isInitializing || library.length === 0 || isGenerating || prefs.genres.length === 0
+                        isInitializing || library.length === 0 || isGenerating
                       }
                       aria-label="Generate set"
                       className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
@@ -1251,11 +1251,6 @@ function AppInner() {
                         </>
                       )}
                     </button>
-                    {prefs.genres.length === 0 && (
-                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
-                        Select a genre first to generate a set
-                      </div>
-                    )}
                     </div>
                     {/* Secondary actions */}
                     <div className="flex gap-2">

@@ -672,7 +672,7 @@ function AppInner() {
                 }}
                 disabled={reanalyzingLibrary}
                 className="hidden sm:inline text-xs text-[#64748b] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Re-run audio analysis on all tracks with the latest algorithm. Updates BPM, key, and energy values."
+                title="Re-run full analysis on every track — updates BPM, key, energy, and AI tags (vibe, mood, vocal type)."
               >
                 {reanalyzingLibrary
                   ? `⟳ ${reanalyzeProgress}`

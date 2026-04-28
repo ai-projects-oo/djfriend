@@ -493,7 +493,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
   middlewares.use('/api/check-update', async (req, res, next) => {
     if (req.method !== 'GET') { next(); return }
     // Read current version from package.json at runtime
-    const pkgPath = new URL('../../package.json', import.meta.url)
+    const pkgPath = new URL('../package.json', import.meta.url)
     const currentVersion: string = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version
     try {
       const response = await fetch('https://api.github.com/repos/ai-projects-oo/djfriend/releases/latest', {

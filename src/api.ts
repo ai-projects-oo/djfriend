@@ -1024,7 +1024,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       })()
 
       const bpm = normalizeBpm(features.bpm, features.energy, cachedGenres, features.tagBpm)
-      const patch: Partial<AppSong> = { bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy }
+      const semanticTags = deriveSemanticTags({ bpm, camelot: keyInfo.camelot, energy: features.energy, genres: cachedGenres, ...features.spectral })
+      const patch: Partial<AppSong> = { bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, semanticTags }
 
       if (songsFolder) patchResultsFile(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'), patch)
       patchResultsFile(APPLE_RESULTS_PATH, absolutePath, patch)
@@ -1073,6 +1074,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           song.camelot = keyInfo.camelot
           song.energy = features.energy
           if (features.energyProfile) (song as unknown as Record<string, unknown>).energyProfile = features.energyProfile
+          song.semanticTags = deriveSemanticTags({ bpm, camelot: keyInfo.camelot, energy: features.energy, genres: song.genres ?? [], ...features.spectral })
           updated++
         } catch { /* skip failed tracks */ }
       }

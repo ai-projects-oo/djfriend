@@ -2,8 +2,8 @@
  * DJFriend Transition Model — Training Script
  *
  * Trains a 3-layer MLP to score track-to-track transitions.
- * Labels are generated from the current deterministic scoring formula,
- * giving the model a head start; it then generalises beyond the rules.
+ * Primary labels: real transitions from djfriend-history.json (score = 1.0)
+ * Secondary labels: synthetic pairs from the deterministic formula
  *
  * Architecture: 18 inputs → ReLU(32) → ReLU(32) → Sigmoid(1)
  *
@@ -16,6 +16,7 @@ import path from 'path';
 import os from 'os';
 
 const RESULTS_PATH   = path.join(os.homedir(), 'Music', 'djfriend-results-v3.json');
+const HISTORY_PATH   = path.join(os.homedir(), 'Music', 'djfriend-history.json');
 const MODEL_OUT_PATH = path.join(os.homedir(), 'Music', 'djfriend-transition-model.json');
 
 const H1 = 32, H2 = 32, INPUT = 18;
@@ -197,11 +198,63 @@ const tracks = Object.values(raw).filter(s =>
 );
 console.log(`  ${tracks.length} usable tracks\n`);
 
-console.log(`Generating ${SAMPLES.toLocaleString()} training pairs…`);
+// ── Real transitions from history (score = 1.0) ───────────────────────────────
+
 const X = [];
 const Y = [];
 const n = tracks.length;
 
+// Build a lookup map: filePath/file → track
+const trackByPath = new Map();
+for (const t of tracks) {
+  if (t.filePath) trackByPath.set(t.filePath, t);
+  if (t.file)     trackByPath.set(t.file, t);
+}
+
+let realPairs = 0;
+if (fs.existsSync(HISTORY_PATH)) {
+  const history = JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8'));
+  console.log(`Found ${history.length} history entries`);
+  for (const entry of history) {
+    const set = entry.tracks ?? [];
+    for (let i = 1; i < set.length; i++) {
+      const a = trackByPath.get(set[i - 1].filePath) ?? trackByPath.get(set[i - 1].file);
+      const b = trackByPath.get(set[i].filePath)     ?? trackByPath.get(set[i].file);
+      if (!a || !b) continue;
+      const pos = i / Math.max(1, set.length - 1);
+      const targetEnergy = set[i].targetEnergy ?? b.energy;
+      // Real transition: score = 1.0 (DJ kept this)
+      X.push(transitionFeatures(a, b, targetEnergy, pos));
+      Y.push(1.0);
+      // Hard negative: same A, random incompatible B (score = 0.0)
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const neg = tracks[Math.floor(Math.random() * n)];
+        if (neg === b) continue;
+        const negScore = scoreTransition(a, neg, targetEnergy);
+        if (negScore < 0.35) {
+          X.push(transitionFeatures(a, neg, targetEnergy, pos));
+          Y.push(0.0);
+          break;
+        }
+      }
+      realPairs++;
+    }
+  }
+  console.log(`  Extracted ${realPairs} real transitions → weighted 3× in training\n`);
+} else {
+  console.log('No history file found — training on synthetic data only\n');
+}
+
+// Oversample real pairs 3× so they outweigh synthetic
+const realX = X.slice();
+const realY = Y.slice();
+for (let rep = 0; rep < 2; rep++) {
+  for (let i = 0; i < realX.length; i++) { X.push(realX[i]); Y.push(realY[i]); }
+}
+
+// ── Synthetic pairs from formula ──────────────────────────────────────────────
+
+console.log(`Generating ${SAMPLES.toLocaleString()} synthetic pairs…`);
 for (let i = 0; i < SAMPLES; i++) {
   const a = tracks[Math.floor(Math.random() * n)];
   const b = tracks[Math.floor(Math.random() * n)];
@@ -211,7 +264,7 @@ for (let i = 0; i < SAMPLES; i++) {
   X.push(transitionFeatures(a, b, targetEnergy, pos));
   Y.push(scoreTransition(a, b, targetEnergy));
 }
-console.log(`  Done.\n`);
+console.log(`  Done. Total samples: ${X.length.toLocaleString()}\n`);
 
 // Shuffle
 for (let i = X.length - 1; i > 0; i--) {
@@ -271,7 +324,8 @@ const model = {
   b3: w.b3,
   version: 1,
   trainedOn: new Date().toISOString(),
-  trainedSamples: SAMPLES,
+  trainedSamples: X.length,
+  realTransitions: realPairs,
 };
 
 fs.writeFileSync(MODEL_OUT_PATH, JSON.stringify(model), 'utf8');

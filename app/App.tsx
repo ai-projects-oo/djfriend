@@ -141,6 +141,7 @@ function AppInner() {
       return [];
     }
   });
+  const [historyLoadedFromDisk, setHistoryLoadedFromDisk] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(
     null,
   );
@@ -175,10 +176,28 @@ function AppInner() {
   const uploadFolderInputRef = useRef<HTMLInputElement | null>(null);
   const sourceDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Persist history to localStorage
+  // Load history from disk on startup (supercedes localStorage)
+  useEffect(() => {
+    apiFetch('/api/history')
+      .then(r => r.json() as Promise<HistoryEntry[]>)
+      .then(entries => {
+        if (entries.length > 0) setHistory(entries);
+        setHistoryLoadedFromDisk(true);
+      })
+      .catch(() => setHistoryLoadedFromDisk(true));
+  }, []);
+
+  // Persist history to localStorage + disk on every change
   useEffect(() => {
     localStorage.setItem("djfriend-history", JSON.stringify(history));
-  }, [history]);
+    if (historyLoadedFromDisk) {
+      apiFetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(history),
+      }).catch(() => {});
+    }
+  }, [history, historyLoadedFromDisk]);
 
   // Click-outside for analyze menu
   useEffect(() => {
@@ -3378,6 +3397,7 @@ function AppInner() {
           setPlaylistFilterId(null);
           setHistory([]);
           localStorage.removeItem("djfriend-history");
+          apiFetch('/api/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '[]' }).catch(() => {});
         }}
       />
 

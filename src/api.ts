@@ -29,6 +29,7 @@ function semverGt(a: string, b: string): boolean {
 }
 const execFileAsync = promisify(execFile)
 export const APPLE_RESULTS_PATH = path.join(os.homedir(), 'Music', 'djfriend-results-v3.json')
+export const HISTORY_PATH = path.join(os.homedir(), 'Music', 'djfriend-history.json')
 
 export interface AppSong {
   filePath: string
@@ -514,6 +515,32 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     }
     res.setHeader('Content-Type', 'application/json')
     fs.createReadStream(APPLE_RESULTS_PATH).pipe(res)
+  })
+
+  middlewares.use('/api/history', async (req, res, next) => {
+    res.setHeader('Content-Type', 'application/json')
+    if (req.method === 'GET') {
+      if (!fs.existsSync(HISTORY_PATH)) { res.end('[]'); return }
+      fs.createReadStream(HISTORY_PATH).pipe(res)
+      return
+    }
+    if (req.method === 'POST') {
+      const chunks: Buffer[] = []
+      req.on('data', (c: Buffer) => chunks.push(c))
+      req.on('end', () => {
+        try {
+          const body = Buffer.concat(chunks).toString('utf-8')
+          JSON.parse(body) // validate
+          fs.writeFileSync(HISTORY_PATH, body, 'utf-8')
+          res.end(JSON.stringify({ ok: true }))
+        } catch {
+          res.writeHead(400)
+          res.end(JSON.stringify({ error: 'Invalid JSON' }))
+        }
+      })
+      return
+    }
+    next()
   })
 
   middlewares.use('/api/settings', async (req, res, next) => {

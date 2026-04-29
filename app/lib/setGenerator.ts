@@ -117,9 +117,18 @@ export interface GenerateOptions {
   history?: HistoryEntry[];
   /** trained ML model weights — when present, blends learned score with rule-based */
   mlWeights?: ModelWeights | null;
+  /**
+   * Number of independent generation passes. Each pass uses variation-based sampling
+   * to explore different valid orderings; the highest-scoring set wins.
+   * Default 1 (single pass). Use 8–12 for best quality.
+   */
+  passes?: number;
 }
 
-export function generateSet(
+import { computeSetScore } from './setScore';
+
+/** Single greedy pass — called N times by generateSet for tournament selection. */
+function generateSetOnce(
   songs: Song[],
   prefs: DJPreferences,
   curve: CurvePoint[],
@@ -330,4 +339,39 @@ export function generateSet(
   }
 
   return result;
+}
+
+/**
+ * Generate a DJ set by running multiple greedy passes and returning the highest-scoring result.
+ * `options.passes` (default 1) controls how many alternatives are explored.
+ * With passes > 1, each pass uses variation-based sampling so they diverge;
+ * the winner is the set with the highest computeSetScore total.
+ */
+export function generateSet(
+  songs: Song[],
+  prefs: DJPreferences,
+  curve: CurvePoint[],
+  options?: GenerateOptions,
+): SetTrack[] {
+  const passes = options?.passes ?? 1;
+
+  if (passes <= 1) return generateSetOnce(songs, prefs, curve, options);
+
+  // First pass: deterministic best (no variation) — always included as baseline
+  const baselineOpts = { ...options, variation: 0 };
+  let best = generateSetOnce(songs, prefs, curve, baselineOpts);
+  let bestScore = computeSetScore(best)?.total ?? 0;
+
+  // Remaining passes: use variation so each explores a different ordering
+  const variationOpts = { ...options, variation: options?.variation ?? 0.5 };
+  for (let i = 1; i < passes; i++) {
+    const candidate = generateSetOnce(songs, prefs, curve, variationOpts);
+    const score = computeSetScore(candidate)?.total ?? 0;
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return best;
 }

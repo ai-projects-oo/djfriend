@@ -390,6 +390,7 @@ function AppInner() {
     handleUpdateTrack,
     handleLoadToSet,
     handleAppendTracks,
+    scoringWeights,
     setScoringWeights,
   } = useSetGenerator(library, setLibrary, playlistFilterFiles, history, mlWeights);
 
@@ -1501,6 +1502,56 @@ function AppInner() {
                           className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
                         />
                       </div>
+                    </div>
+
+                    {/* Scoring weights */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                          Scoring weights
+                        </span>
+                        {scoringWeights && (
+                          <button
+                            type="button"
+                            onClick={() => setScoringWeights(undefined)}
+                            className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
+                          >
+                            reset
+                          </button>
+                        )}
+                      </div>
+                      {(() => {
+                        const w = scoringWeights ?? { harmonicWeight: 0.45, bpmWeight: 0.22, transitionWeight: 0.08, energyWeight: 0.25 };
+                        const sliders: { key: keyof typeof w; label: string }[] = [
+                          { key: 'harmonicWeight',   label: 'Harmonic' },
+                          { key: 'energyWeight',     label: 'Energy' },
+                          { key: 'bpmWeight',        label: 'BPM' },
+                          { key: 'transitionWeight', label: 'Transition' },
+                        ];
+                        return (
+                          <div className="flex flex-col gap-2">
+                            {sliders.map(({ key, label }) => (
+                              <div key={key} className="flex items-center gap-2">
+                                <span className="text-[10px] text-[#475569] w-16 flex-shrink-0">{label}</span>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={100}
+                                  value={Math.round(w[key] * 100)}
+                                  onChange={e => {
+                                    const val = Number(e.target.value) / 100;
+                                    setScoringWeights({ ...w, [key]: val });
+                                  }}
+                                  className="flex-1 accent-[#7c3aed] cursor-pointer"
+                                />
+                                <span className="text-[10px] text-[#64748b] w-6 text-right tabular-nums">
+                                  {Math.round(w[key] * 100)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                   </div>

@@ -137,11 +137,6 @@ export interface SetPlan {
   reasoning:      string;
 }
 
-export interface ChatMessage {
-  role:    'user' | 'assistant';
-  content: string;
-  plan?:   SetPlan;
-}
 
 export interface HistoryEntry {
   id: string;

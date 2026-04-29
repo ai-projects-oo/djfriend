@@ -1380,10 +1380,15 @@ function AppInner() {
                       </div>
                     )}
 
-                    <div className="border-t border-[#1e1e2e] pt-3 flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
-                        Duration
-                      </span>
+                    <div className="border-t border-[#1e1e2e] pt-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
+                          Duration
+                        </span>
+                        {filteredTrackCount > 0 && (
+                          <span className="text-[10px] text-[#475569]">≈ {filteredTrackCount} tracks</span>
+                        )}
+                      </div>
                       <div className="flex gap-1.5 flex-wrap">
                         {/* "Any" pill — unlimited mode */}
                         <button
@@ -1455,11 +1460,6 @@ function AppInner() {
                           );
                         })}
                       </div>
-                      {filteredTrackCount > 0 && (
-                        <span className="text-[10px] text-[#475569]">
-                          ≈ {filteredTrackCount} tracks
-                        </span>
-                      )}
                     </div>
                     {generatedSet.length >= 2 && (
                       <div className="flex items-center gap-3 text-[10px] text-[#475569] border-t border-[#1e1e2e] pt-2">

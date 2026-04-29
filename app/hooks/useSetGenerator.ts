@@ -158,10 +158,18 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   }, [generatedSet]);
 
   const handleGenerate = useCallback(() => {
-    const lockedFiles = new Set(generatedSet.filter(t => t.locked).map(t => t.file));
-    // 10 passes: first is deterministic best, remaining 9 use variation=0.5 sampling;
-    // the highest-scoring set (by computeSetScore) is returned.
-    const fresh = generateSet(library, prefs, curve, { passes: 10, variation: 0.5, excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights, history, mlWeights });
+    // Exclude all currently unlocked tracks so each Generate picks fresh tracks.
+    // Falls back to full library automatically if not enough alternatives exist.
+    const currentUnlocked = new Set(generatedSet.filter(t => !t.locked).map(t => t.file));
+    const fresh = generateSet(library, prefs, curve, {
+      passes: 10,
+      variation: 0.5,
+      excludeFiles: currentUnlocked,
+      playlistFilterFiles,
+      weights: scoringWeights,
+      history,
+      mlWeights,
+    });
     setGeneratedSet(mergeWithLocked(fresh));
   }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights, history, mlWeights]);
 

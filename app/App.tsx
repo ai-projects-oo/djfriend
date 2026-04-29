@@ -379,9 +379,7 @@ function AppInner() {
     genreGroups,
     availableTags,
     filteredTrackCount,
-    canGenerateNew,
     handleGenerate,
-    handleGenerateNew,
     selectGenre,
     handleCurveChange,
     handleSwapTrack,
@@ -1316,29 +1314,6 @@ function AppInner() {
                         Pick a genre first to generate a set
                       </div>
                     )}
-                    </div>
-                    {/* Secondary actions */}
-                    <div className="flex gap-2">
-                      <div className="relative flex-1 group">
-                        <button
-                          onClick={handleGenerateNew}
-                          disabled={!canGenerateNew}
-                          className="w-full flex items-center justify-center gap-1.5 border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#64748b] hover:text-[#94a3b8] text-xs font-medium py-1.5 rounded-md transition-all duration-200 cursor-pointer"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="16 3 21 3 21 8" />
-                            <line x1="4" y1="20" x2="21" y2="3" />
-                            <polyline points="21 16 21 21 16 21" />
-                            <line x1="15" y1="15" x2="21" y2="21" />
-                          </svg>
-                          New tracks
-                        </button>
-                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
-                          {canGenerateNew
-                            ? "Generate a fresh set using tracks not already in the current one"
-                            : "Not enough unused tracks — try a broader genre or longer set"}
-                        </div>
-                      </div>
                     </div>
                     {generatedSet.length > 0 && (
                       <div className="relative group">

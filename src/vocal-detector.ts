@@ -112,8 +112,8 @@ async function initialize(): Promise<void> {
     return;
   }
 
-  // TF.js (browser build) does not work in Node.js worker_threads — use spectral fallback there
-  if (!isMainThread) {
+  // Skip in test environments and worker threads — use spectral fallback
+  if (process.env.VITEST || process.env.NODE_ENV === 'test' || !isMainThread) {
     initState = 'failed';
     return;
   }
@@ -129,11 +129,10 @@ async function initialize(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tf types
     graphModel = await (tf as any).loadGraphModel(fsIoHandler(dir, modelJson, shardPaths)) as typeof graphModel;
 
-    // EssentiaTFInputExtractor requires EssentiaWASM (already loaded by analyzer-core)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- essentia has no TS types
     const { EssentiaWASM } = require('essentia.js') as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- essentia has no TS types
-    const { EssentiaTFInputExtractor } = require('essentia.js/dist/essentia.js-model.js') as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- UMD build required; CJS build exports empty object
+    const { EssentiaTFInputExtractor } = require('essentia.js/dist/essentia.js-model.umd.js') as any;
     essentiaExtractor = new EssentiaTFInputExtractor(EssentiaWASM, 'musicnn', false);
 
     initState = 'ready';

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "kill": "pkill -f 'electron-compiled/main.js' 2>/dev/null; pkill -f 'Electron.app' 2>/dev/null; pkill -f 'vite preview' 2>/dev/null; lsof -ti:8888 | xargs kill -9 2>/dev/null; echo 'Killed previous instances'",
-    "restart": "npm run kill && npm run electron:dev",
+    "restart": "bash scripts/restart.sh",
     "build": "tsc -b && vite build",
     "analyze": "tsx src/analyze.ts",
     "bench": "tsx src/bench.ts",

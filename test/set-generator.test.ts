@@ -175,7 +175,7 @@ describe('selectionReason', () => {
     const songs = [makeSong({ file: 'a.mp3', energy: 0.5 })]
     const set = generateSet(songs, { ...defaultPrefs, setDuration: 10 }, flatCurve)
     const reasons = set[0].selectionReason ?? []
-    expect(reasons.some(r => r.includes('energy'))).toBe(true)
+    expect(reasons.some(r => r.text.toLowerCase().includes('energy'))).toBe(true)
   })
 
   it('includes harmonic info when a previous track exists', () => {
@@ -186,7 +186,7 @@ describe('selectionReason', () => {
     const set = generateSet(songs, { ...defaultPrefs, setDuration: 15 }, flatCurve)
     if (set.length >= 2) {
       const reasons = set[1].selectionReason ?? []
-      expect(reasons.some(r => r.includes('key'))).toBe(true)
+      expect(reasons.some(r => r.text.toLowerCase().includes('key'))).toBe(true)
     }
   })
 
@@ -194,7 +194,7 @@ describe('selectionReason', () => {
     const songs = [makeSong({ file: 'first.mp3', camelot: '8B', energy: 0.5 })]
     const set = generateSet(songs, { ...defaultPrefs, setDuration: 10 }, flatCurve)
     const reasons = set[0].selectionReason ?? []
-    expect(reasons.some(r => r.includes('key'))).toBe(false)
+    expect(reasons.some(r => r.text.toLowerCase().includes('key'))).toBe(false)
   })
 })
 

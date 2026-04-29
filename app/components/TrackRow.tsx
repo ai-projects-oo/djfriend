@@ -17,7 +17,7 @@ interface Props {
   onToggleLock: () => void;
   onRemove: () => void;
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => void;
-  showHoverTips?: boolean;
+  tipConfig?: import('../types').TipConfig;
   isPreviewPlaying?: boolean;
   onPreview?: (filePath: string) => void;
   // drag-to-reorder
@@ -92,12 +92,14 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, totalTracks = 20, showHoverTips = true, isPreviewPlaying = false, onPreview, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, totalTracks = 20, tipConfig, isPreviewPlaying = false, onPreview, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+  const tc = tipConfig ?? { help: true, info: true, ai: true };
   // Open popups downward for top-half rows, upward for bottom-half rows
   const openDown = index < totalTracks / 2;
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
   const [showFitTooltip, setShowFitTooltip] = useState(false);
   const [showEnergyTooltip, setShowEnergyTooltip] = useState(false);
+  const [showReasonTooltip, setShowReasonTooltip] = useState(false);
   const [hoverHintIdx, setHoverHintIdx] = useState<number | null>(null);
   const [showTags, setShowTags] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -294,7 +296,7 @@ async function handleReanalyze() {
                 >
                   ●
                 </span>
-                {showHoverTips && showFitTooltip && (
+                {tc.ai && showFitTooltip && (
                   <div className={`absolute ${openDown ? 'top-full mt-1' : 'bottom-full mb-1'} left-0 z-50 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2 shadow-lg pointer-events-none`}
                     style={{ borderColor: fitInfo.level === 'bad' ? '#ef444466' : '#f59e0b66' }}
                   >
@@ -317,9 +319,30 @@ async function handleReanalyze() {
                 )}
               </div>
             )}
-            <div className="min-w-0">
+            <div
+              className="min-w-0 relative"
+              onMouseEnter={() => setShowReasonTooltip(true)}
+              onMouseLeave={() => setShowReasonTooltip(false)}
+            >
               <div className="text-sm font-medium text-[#e2e8f0] truncate">{track.title}</div>
               <div className="text-xs text-[#64748b] truncate">{track.artist}</div>
+              {tc.ai && showReasonTooltip && track.selectionReason && track.selectionReason.length > 0 && (
+                <div className={`absolute left-0 ${openDown ? 'top-full mt-1' : 'bottom-full mb-1'} z-50 min-w-[220px] max-w-[300px] rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 shadow-xl pointer-events-none`}>
+                  <div className="text-[9px] uppercase tracking-widest text-[#334155] mb-2">Why this track</div>
+                  <ul className="flex flex-col gap-1.5">
+                    {track.selectionReason.map((r, i) => {
+                      const dot = r.quality === 'good' ? '#22c55e' : r.quality === 'ok' ? '#f59e0b' : r.quality === 'bad' ? '#ef4444' : r.quality === 'bonus' ? '#a78bfa' : '#475569';
+                      const text = r.quality === 'good' ? '#86efac' : r.quality === 'ok' ? '#fcd34d' : r.quality === 'bad' ? '#fca5a5' : r.quality === 'bonus' ? '#c4b5fd' : '#94a3b8';
+                      return (
+                        <li key={i} className="flex items-center gap-2 text-[11px]">
+                          <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dot }} />
+                          <span style={{ color: text }}>{r.text}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         </td>
@@ -357,7 +380,7 @@ async function handleReanalyze() {
                 ?
               </button>
             )}
-            {showHoverTips && showKeyTooltip && track.camelot && (
+            {tc.info && showKeyTooltip && track.camelot && (
               <div className={`absolute left-full ${openDown ? 'top-0' : 'bottom-0'} ml-2 z-50 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1.5 min-w-[160px]`}>
                 <div className="text-[9px] uppercase tracking-widest text-[#334155] mb-0.5">Next key options</div>
                 {compatibleKeys.length > 0 && (
@@ -424,7 +447,7 @@ async function handleReanalyze() {
                 }}
               />
             </div>
-            {showHoverTips && showEnergyTooltip && (
+            {tc.info && showEnergyTooltip && (
               <div className={`absolute ${openDown ? 'top-full mt-1' : 'bottom-full mb-2'} left-1/2 -translate-x-1/2 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-0.5`}>
                 <span>Energy <span style={{ color: barColor }}>{Math.round(track.energy * 100)}</span></span>
                 <span className="text-[#475569]">Target {Math.round(track.targetEnergy * 100)}</span>
@@ -502,7 +525,7 @@ async function handleReanalyze() {
                   }}
                 >
                   {hint.icon}
-                  {showHoverTips && hoverHintIdx === hi && hint.tip && (
+                  {tc.ai && hoverHintIdx === hi && hint.tip && (
                     <div className={`absolute ${openDown ? 'top-full mt-1' : 'bottom-full mb-2'} right-0 z-50 rounded bg-[#1e1e2e] border border-[#2a2a3a] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none w-max max-w-[220px] leading-snug`}>
                       {hint.tip}
                     </div>

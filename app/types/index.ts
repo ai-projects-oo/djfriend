@@ -1,3 +1,15 @@
+export interface TipConfig {
+  help: boolean // basic UI tips: button labels, drag hints
+  info: boolean // musical data: energy values, key compatibility
+  ai: boolean   // AI hints: fit warnings, transition hints, why this track
+}
+
+export const DEFAULT_TIP_CONFIG: TipConfig = {
+  help: true,
+  info: true,
+  ai: true,
+}
+
 export interface EnergyProfile {
   intro:        number  // 0–1, avg normalized RMS of first ~15% of track
   body:         number  // 0–1, avg normalized RMS of middle section
@@ -42,7 +54,7 @@ export interface SetTrack extends Song {
   targetEnergy: number;
   harmonicWarning: boolean;    // true if camelot transition is incompatible
   locked?: boolean;            // true = preserved on regenerate
-  selectionReason?: string[];  // human-readable breakdown of why this track was chosen
+  selectionReason?: { text: string; quality: 'good' | 'ok' | 'bad' | 'bonus' | 'info' }[];
 }
 
 export interface SetScore {

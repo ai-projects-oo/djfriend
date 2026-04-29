@@ -123,6 +123,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   const canGenerateNew = library.length > 0 &&
     generatedSet.length > 0 &&
+    prefs.genres.length > 0 &&
     library.filter(s => matchesGenrePrefs(s, prefs.genres)).length > filteredTrackCount;
 
   const runGenerate = useCallback(

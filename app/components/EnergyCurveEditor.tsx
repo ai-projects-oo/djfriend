@@ -29,7 +29,7 @@ interface Props {
   setTracks?: SetTrack[]; // overlay actual track energies as dots
   setLength?: number;     // number of tracks — used to cap max control points
   libraryEnergyRange?: { min: number; max: number } | null; // real energy range of filtered library
-  showHoverTips?: boolean;
+  tipConfig?: import('../types').TipConfig;
 }
 
 /** Max control points recommended for a given set length */
@@ -49,7 +49,8 @@ function resampleCurve(points: CurvePoint[], newCount: number): CurvePoint[] {
   });
 }
 
-export default function EnergyCurveEditor({ points, onChange, setTracks, setLength = 0, libraryEnergyRange, showHoverTips = true }: Props) {
+export default function EnergyCurveEditor({ points, onChange, setTracks, setLength = 0, libraryEnergyRange, tipConfig }: Props) {
+  const showInfoTips = tipConfig?.info !== false;
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgWidth, setSvgWidth] = useState(600);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
@@ -295,7 +296,7 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
                 onMouseLeave={() => setHoverIdx(null)}
               />
               {/* Energy value tooltip on hover/drag */}
-              {showHoverTips && (draggingIdx === idx || (hoverIdx === idx && draggingIdx === null)) && (
+              {showInfoTips && (draggingIdx === idx || (hoverIdx === idx && draggingIdx === null)) && (
                 <text
                   x={toSvgX(pt.x)}
                   y={toSvgY(pt.y) - HANDLE_RADIUS - 6}

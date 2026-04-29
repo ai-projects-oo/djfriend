@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { apiFetch } from '../lib/apiFetch'
 import { redirectToSpotifyLogin } from '../lib/spotifyExport'
 import { SpotifyIcon, RekordboxIcon } from './Icons'
@@ -59,8 +59,8 @@ function FolderInput({ label, labelIcon, value, status, placeholder, hint, onCha
 interface Props {
   open: boolean
   onClose: () => void
-  /** called after settings are saved successfully */
-  onSaved: () => void
+  /** called after settings are saved successfully; folderChanged = true when musicFolder was different */
+  onSaved: (folderChanged: boolean) => void
   /** called after the database is cleared */
   onDatabaseCleared?: () => void
 }
@@ -71,6 +71,7 @@ const isElectron = navigator.userAgent.toLowerCase().includes('electron')
 export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleared }: Props) {
   // Desktop-only state
   const [musicFolder, setMusicFolder] = useState('')
+  const loadedMusicFolder = useRef('')
   const [musicFolderStatus, setMusicFolderStatus] = useState<PathStatus>('idle')
   const [rekordboxFolder, setRekordboxFolder] = useState('')
   const [rekordboxFolderStatus, setRekordboxFolderStatus] = useState<PathStatus>('idle')
@@ -79,7 +80,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [analysisMode, setAnalysisMode] = useState<'performance' | 'normal' | 'power-saving'>('normal')
   const [energyCheckThreshold, setEnergyCheckThreshold] = useState(12)
   const [shareTelemetry, setShareTelemetry] = useState(true)
-  const [showHoverTips, setShowHoverTips] = useState(true)
+  const [tipConfig, setTipConfig] = useState<{ help: boolean; info: boolean; ai: boolean }>({ help: true, info: true, ai: true })
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -106,8 +107,9 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; showHoverTips?: boolean }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; tipConfig?: { help: boolean; info: boolean; ai: boolean } }) => {
         setMusicFolder(d.musicFolder ?? '')
+        loadedMusicFolder.current = d.musicFolder ?? ''
         setRekordboxFolder(d.rekordboxFolder ?? '')
         setMusicFolderStatus('idle')
         setRekordboxFolderStatus('idle')
@@ -115,7 +117,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         else setAnalysisMode('normal')
         setEnergyCheckThreshold(Math.round((d.energyCheckThreshold ?? 0.12) * 100))
         setShareTelemetry(d.shareTelemetry !== false)
-        setShowHoverTips(d.showHoverTips !== false)
+        if (d.tipConfig) setTipConfig(Object.assign({ help: true, info: true, ai: true }, d.tipConfig))
         setHasSpotifySecret(d.hasSecret ?? false)
       })
       .catch(() => {})
@@ -128,10 +130,11 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), analysisMode, energyCheckThreshold: energyCheckThreshold / 100, shareTelemetry, showHoverTips }),
+        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), analysisMode, energyCheckThreshold: energyCheckThreshold / 100, shareTelemetry, tipConfig }),
       })
       if (!r.ok) throw new Error('Save failed')
-      onSaved()
+      const folderChanged = musicFolder.trim() !== loadedMusicFolder.current
+      onSaved(folderChanged)
       onClose()
     } catch {
       setError('Failed to save settings.')
@@ -159,7 +162,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       if (!r.ok) throw new Error('Clear failed')
       setClearConfirm(false)
       onDatabaseCleared?.()
-      onSaved()
+      onSaved(true)
       onClose()
     } catch {
       setError('Failed to clear database.')
@@ -276,12 +279,16 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               min={12}
               max={50}
               step={1}
-              value={energyCheckThreshold}
-              onChange={e => setEnergyCheckThreshold(Number(e.target.value))}
+              value={62 - energyCheckThreshold}
+              onChange={e => setEnergyCheckThreshold(62 - Number(e.target.value))}
               className="w-full accent-[#7c3aed] cursor-pointer"
             />
+            <div className="flex justify-between text-[10px] text-[#334155] mt-0.5">
+              <span>Low</span>
+              <span>High</span>
+            </div>
             <p className="text-[11px] text-[#64748b] mt-1">
-              Flag tracks whose actual energy differs from the curve target by more than this amount. Lower = stricter. Minimum 12%.
+              Higher = more warnings. Flags tracks whose energy deviates from the curve target by more than {energyCheckThreshold}%.
             </p>
           </div>
 
@@ -308,24 +315,37 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
         {/* ── Display ──────────────────────────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Display</h3>
-          <label className="flex items-center gap-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showHoverTips}
-              onChange={e => {
-                setShowHoverTips(e.target.checked)
-                apiFetch('/api/settings', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ showHoverTips: e.target.checked }),
-                }).catch(() => {})
-              }}
-              className="w-4 h-4 cursor-pointer accent-[#7c3aed]"
-              aria-label="Show hover tips"
-            />
-            <span className="text-sm text-[#e2e8f0]">Show hover tips</span>
-          </label>
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-1">Hover Tips</h3>
+          <p className="text-[11px] text-[#334155] mb-3">Control which tooltips appear when hovering over tracks.</p>
+          <div className="flex flex-col gap-2.5">
+            {([
+              { key: 'help', label: 'Help tips', desc: 'Button labels, drag hints' },
+              { key: 'info', label: 'Info tips', desc: 'Energy values, key compatibility' },
+              { key: 'ai',   label: 'AI hints',  desc: 'Fit warnings, transition hints, why this track' },
+            ] as { key: 'help' | 'info' | 'ai'; label: string; desc: string }[]).map(({ key, label, desc }) => (
+              <label key={key} className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={tipConfig[key]}
+                  onChange={e => {
+                    const next = { ...tipConfig, [key]: e.target.checked }
+                    setTipConfig(next)
+                    apiFetch('/api/settings', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ tipConfig: next }),
+                    }).catch(() => {})
+                  }}
+                  className="w-4 h-4 cursor-pointer accent-[#7c3aed] flex-shrink-0"
+                  aria-label={label}
+                />
+                <span className="flex flex-col">
+                  <span className="text-sm text-[#e2e8f0]">{label}</span>
+                  <span className="text-[11px] text-[#475569]">{desc}</span>
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* ── AI & Privacy ─────────────────────────────────────────── */}

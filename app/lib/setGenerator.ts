@@ -38,7 +38,7 @@ export function genreAffinityBonus(song: Song, affinityKey: AffinityKey | null):
   const hasMatch = song.genres.some((g) =>
     preferred.some((p) => g.toLowerCase().includes(p)),
   );
-  return hasMatch ? 0.15 : 0;
+  return hasMatch ? 0.06 : 0;
 }
 
 const VENUE_TAG_MAP: Partial<Record<VenueType, string[]>> = {
@@ -219,7 +219,7 @@ export function generateSet(
     // 4. Within the energy neighbourhood, score by harmonic + BPM + affinity
     let bestSong = energyNeighbours[0];
     let bestScore = -Infinity;
-    let bestReasons: string[] = [];
+    let bestReasons: { text: string; quality: 'good' | 'ok' | 'bad' | 'bonus' | 'info' }[] = [];
 
     for (const song of energyNeighbours) {
       const harmonicScore =
@@ -236,16 +236,17 @@ export function generateSet(
       const affinityBonus = genreAffinityBonus(song, affinityKey);
       const semBonus = semanticAffinityBonus(song, prefs.venueType, prefs.setPhase);
       const tagBonus = tagFilterBonus(song, prefs.tagFilters);
-      // Clockwise Camelot move bonus: on rising curve slopes, prefer tracks that
-      // step forward on the wheel (energy boost direction per MixedInKey).
-      const boostBonus = slopeRising && prevCamelot !== null && isCamelotClockwise(prevCamelot, song.camelot) ? 0.08 : 0;
+      // Clockwise Camelot move bonus: only fires when the track's energy is actually
+      // higher than the previous track — ensures the "energy boost" label is honest.
+      const boostBonus = slopeRising && prevCamelot !== null && isCamelotClockwise(prevCamelot, song.camelot)
+        && (prevTrack === null || song.energy >= prevTrack.energy - 0.05) ? 0.05 : 0;
       // Familiarity: small bonus for tracks the DJ knows well; slight penalty for overplayed ones.
       // Max contribution: (1.0 - 0.5) * 0.06 = +0.03; min: (0.3 - 0.5) * 0.06 = -0.012
       const playCount = options?.history ? computePlayStats(options.history, song.file).playCount : 0;
       const famBonus = options?.history ? (familiarityScore(playCount) - 0.5) * 0.06 : 0;
       const jitter = options?.jitter ? Math.random() * options.jitter : 0;
-      // Energy proximity to the curve target — rewards staying close to the arc.
-      const energyScore = Math.max(0, 1 - Math.abs(song.energy - targetEnergy) / 0.4);
+      // Energy proximity to the curve target — steeper penalty keeps energy on-curve.
+      const energyScore = Math.max(0, 1 - Math.abs(song.energy - targetEnergy) / 0.28);
       const wH = options?.weights?.harmonicWeight   ?? 0.45;
       const wB = options?.weights?.bpmWeight        ?? 0.22;
       const wT = options?.weights?.transitionWeight ?? 0.08;
@@ -263,27 +264,30 @@ export function generateSet(
       if (score > bestScore) {
         bestScore = score;
         bestSong = song;
-        // Build human-readable breakdown for this winning candidate
-        const reasons: string[] = [];
+        // Build structured breakdown for this winning candidate
+        type R = { text: string; quality: 'good' | 'ok' | 'bad' | 'bonus' | 'info' };
+        const reasons: R[] = [];
         if (prevCamelot !== null) {
-          const label = harmonicScore >= 1.0 ? '✓ perfect' : harmonicScore >= 0.75 ? '✓ compatible' : harmonicScore >= 0.5 ? '~ energy boost' : '✗ jump';
-          reasons.push(`key ${prevCamelot}→${song.camelot} ${label}`);
+          if (harmonicScore >= 1.0)       reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — perfect match`, quality: 'good' });
+          else if (harmonicScore >= 0.75) reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — compatible`, quality: 'ok' });
+          else if (harmonicScore >= 0.5)  reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — energy boost`, quality: 'bonus' });
+          else                            reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — key jump`, quality: 'bad' });
         }
         const eDelta = Math.abs(song.energy - targetEnergy);
-        const eLabel = eDelta <= 0.05 ? '✓' : eDelta <= 0.15 ? '~' : '✗';
-        reasons.push(`energy ${song.energy.toFixed(2)} → target ${targetEnergy.toFixed(2)} ${eLabel}`);
+        const eQuality: R['quality'] = eDelta <= 0.05 ? 'good' : eDelta <= 0.15 ? 'ok' : 'bad';
+        reasons.push({ text: `Energy ${Math.round(song.energy * 100)} → target ${Math.round(targetEnergy * 100)}`, quality: eQuality });
         if (prevBpm !== null) {
-          const delta = song.bpm - prevBpm;
-          reasons.push(`BPM ${song.bpm} (${delta >= 0 ? '+' : ''}${delta} from prev)`);
+          const delta = Math.round(song.bpm - prevBpm);
+          reasons.push({ text: `BPM ${Math.round(song.bpm)}  ${delta >= 0 ? '+' : ''}${delta} from prev`, quality: 'info' });
         }
-        if (boostBonus > 0) reasons.push('↑ clockwise energy boost');
-        if (affinityBonus > 0) reasons.push('genre affinity ✓');
-        if (semBonus > 0) reasons.push('vibe match ✓');
-        if (tagBonus > 0) reasons.push('tag filter match ✓');
+        if (boostBonus > 0) reasons.push({ text: 'Clockwise energy boost', quality: 'bonus' });
+        if (affinityBonus > 0) reasons.push({ text: 'Genre affinity', quality: 'bonus' });
+        if (semBonus > 0) reasons.push({ text: 'Vibe match', quality: 'bonus' });
+        if (tagBonus > 0) reasons.push({ text: 'Tag filter match', quality: 'bonus' });
         if (options?.history) {
-          if (playCount === 0) reasons.push('never played before');
-          else if (playCount >= 10) reasons.push(`played ${playCount}× (cooling down)`);
-          else reasons.push(`played ${playCount}× (familiar)`);
+          if (playCount === 0) reasons.push({ text: 'First time in a set', quality: 'info' });
+          else if (playCount >= 10) reasons.push({ text: `Played ${playCount}× — cooling down`, quality: 'ok' });
+          else reasons.push({ text: `Played ${playCount}× — familiar`, quality: 'good' });
         }
         bestReasons = reasons;
       }

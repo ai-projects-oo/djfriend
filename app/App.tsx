@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import type { HistoryEntry, DJPreferences } from "./types";
+import type { HistoryEntry, DJPreferences, TipConfig } from "./types";
+import { DEFAULT_TIP_CONFIG } from "./types";
 import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
 import SettingsModal from "./components/SettingsModal";
@@ -154,7 +155,7 @@ function AppInner() {
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string } | null>(null);
   const [mlWeights, setMlWeights] = useState<import('./lib/mlModel').ModelWeights | null>(null);
   const [shareTelemetry, setShareTelemetry] = useState(true);
-  const [showHoverTips, setShowHoverTips] = useState(true);
+  const [tipConfig, setTipConfig] = useState<TipConfig>(DEFAULT_TIP_CONFIG);
   const [previewFile, setPreviewFile] = useState<string | null>(null);
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -512,7 +513,7 @@ function AppInner() {
         );
         if (d.energyCheckThreshold !== undefined) setEnergyCheckThreshold(d.energyCheckThreshold);
         if ((d as { shareTelemetry?: boolean }).shareTelemetry !== undefined) setShareTelemetry((d as { shareTelemetry?: boolean }).shareTelemetry !== false);
-        if ((d as { showHoverTips?: boolean }).showHoverTips !== undefined) setShowHoverTips((d as { showHoverTips?: boolean }).showHoverTips !== false);
+        if ((d as { tipConfig?: TipConfig }).tipConfig) setTipConfig({ ...DEFAULT_TIP_CONFIG, ...(d as { tipConfig: TipConfig }).tipConfig });
       })
       .catch(() => {});
   }, [setFolderPath]);
@@ -1217,7 +1218,7 @@ function AppInner() {
                         }, 0);
                       }}
                       disabled={
-                        isInitializing || library.length === 0 || isGenerating
+                        isInitializing || library.length === 0 || isGenerating || prefs.genres.length === 0
                       }
                       aria-label="Generate set"
                       className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
@@ -1275,6 +1276,11 @@ function AppInner() {
                       )}
                     </button>
                     </div>
+                    {prefs.genres.length === 0 && (
+                      <p className="text-[10px] text-[#475569] text-center -mt-1">
+                        ← Pick a genre to generate a set
+                      </p>
+                    )}
                     {/* Secondary actions */}
                     <div className="flex gap-2">
                       <div className="relative flex-1 group">
@@ -1319,7 +1325,7 @@ function AppInner() {
                       <div className="relative group">
                         <button
                           onClick={handleAppendTracks}
-                          disabled={isInitializing || library.length === 0}
+                          disabled={isInitializing || library.length === 0 || prefs.genres.length === 0}
                           className="w-full flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#a78bfa] text-sm font-medium py-2 rounded-md transition-colors cursor-pointer"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -2113,7 +2119,7 @@ function AppInner() {
                   setTracks={generatedSet.length > 0 ? generatedSet : undefined}
                   setLength={generatedSet.length}
                   libraryEnergyRange={libraryEnergyRange}
-                  showHoverTips={showHoverTips}
+                  tipConfig={tipConfig}
                 />
               </div>
               <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex flex-col flex-1">
@@ -2128,7 +2134,7 @@ function AppInner() {
                   libraryLoaded={library.length > 0}
                   energyCheckThreshold={energyCheckThreshold}
                   showRekordboxExport={hasRekordboxFolder}
-                  showHoverTips={showHoverTips}
+                  tipConfig={tipConfig}
                   previewFile={previewFile}
                   previewPlaying={previewPlaying}
                   onPreview={(filePath) => {
@@ -3448,10 +3454,12 @@ function AppInner() {
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onSaved={() => {
+        onSaved={(folderChanged) => {
           loadSettings();
-          setLibrary([]);
-          setGeneratedSet([]);
+          if (folderChanged) {
+            setLibrary([]);
+            setGeneratedSet([]);
+          }
         }}
         onDatabaseCleared={() => {
           setAnalyzedApplePlaylists(new Set());

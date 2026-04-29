@@ -634,7 +634,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method === 'GET') {
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, showHoverTips: s.showHoverTips !== false }))
+      const defaultTip = { help: true, info: true, ai: true }
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip }))
       return
     }
     if (req.method === 'POST') {
@@ -647,7 +648,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (body.analysisMode === 'performance' || body.analysisMode === 'normal' || body.analysisMode === 'power-saving') updates.analysisMode = body.analysisMode as 'performance' | 'normal' | 'power-saving'
       if (typeof body.energyCheckThreshold === 'number') updates.energyCheckThreshold = Math.max(0.12, Math.min(1, body.energyCheckThreshold))
       if (typeof body.shareTelemetry === 'boolean') updates.shareTelemetry = body.shareTelemetry
-      if (typeof body.showHoverTips === 'boolean') updates.showHoverTips = body.showHoverTips
+      if (body.tipConfig && typeof body.tipConfig === 'object') updates.tipConfig = body.tipConfig as { help: boolean; info: boolean; ai: boolean }
       writeSettings(updates)
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))

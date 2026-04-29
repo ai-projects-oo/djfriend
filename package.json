@@ -110,6 +110,7 @@
     "lucide-react": "^0.575.0",
     "music-metadata": "^11.12.3",
     "node-id3": "^0.2.9",
+    "openai": "^6.35.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "serve-static": "^2.2.1",

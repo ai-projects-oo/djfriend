@@ -33,4 +33,9 @@ echo "✅  All checks passed — launching app…"
 echo ""
 
 npm run kill 2>/dev/null || true
-npm run electron:dev
+
+# Skip redundant `npm run build` — already done above in the gate
+npm run build:electron
+npm run build:preload
+npm run build:analyzer-worker
+npx electron .

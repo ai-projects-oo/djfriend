@@ -31,6 +31,8 @@ import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
 import { camelotColor } from "./lib/camelotColors";
 import { transitionFeatures } from "./lib/mlFeatures";
 import { blendModels, isValidModelWeights } from "./lib/mlModel";
+import VenuePlannerPanel from "./components/VenuePlannerPanel";
+import type { SetPlan } from "./types";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -160,6 +162,7 @@ function AppInner() {
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [plannerOpen, setPlannerOpen] = useState(false);
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
@@ -390,6 +393,7 @@ function AppInner() {
     handleUpdateTrack,
     handleLoadToSet,
     handleAppendTracks,
+    setScoringWeights,
   } = useSetGenerator(library, setLibrary, playlistFilterFiles, history, mlWeights);
 
   const energyIssues = useMemo(
@@ -452,6 +456,17 @@ function AppInner() {
       setActiveTab("Generator");
     },
     [setPrefs, setCurve, setGeneratedSet],
+  );
+
+  const handleApplyPlan = useCallback(
+    (plan: SetPlan) => {
+      if (plan.bpmMin != null) setPrefs(p => ({ ...p, bpmMin: plan.bpmMin, bpmMax: plan.bpmMax }));
+      if (plan.venueType)      setPrefs(p => ({ ...p, venueType: plan.venueType! }));
+      setCurve(plan.curve);
+      setScoringWeights(plan.scoringWeights);
+      setPlannerOpen(false);
+    },
+    [setPrefs, setCurve, setScoringWeights],
   );
 
   const {
@@ -878,6 +893,20 @@ function AppInner() {
                 })}
               </div>
             )}
+            {/* Venue Planner toggle */}
+            <button
+              onClick={() => setPlannerOpen(o => !o)}
+              title="Venue Planner"
+              className="p-1.5 transition-colors cursor-pointer"
+              style={{ color: plannerOpen ? '#7c3aed' : '#475569' }}
+            >
+              {/* location-pin icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+            </button>
+
             <div className="relative">
               <button
                 onClick={() => {
@@ -1190,6 +1219,15 @@ function AppInner() {
           <div className="flex flex-col lg:flex-row lg:items-stretch gap-4">
             {/* ── LEFT SIDEBAR ── */}
             <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4">
+
+              {/* Venue Planner panel — shown when toolbar toggle is active */}
+              {plannerOpen && (
+                <VenuePlannerPanel
+                  onApply={handleApplyPlan}
+                  onClose={() => setPlannerOpen(false)}
+                />
+              )}
+
               {/* Card 3: Duration + Actions */}
               {(() => {
                 const FALLBACK_DURATION = 210;

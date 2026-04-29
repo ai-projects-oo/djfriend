@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCcw, Trash2, Pencil, Check, X, MoreVertical, RotateCcw, FolderOpen, Play, ExternalLink } from 'lucide-react';
+import { RefreshCcw, Trash2, Pencil, Check, X, MoreVertical, RotateCcw, FolderOpen, Play, Pause, ExternalLink } from 'lucide-react';
 import type { SetTrack } from '../types';
 import { parseCamelot } from '../lib/camelot';
 import { camelotColor } from '../lib/camelotColors';
@@ -18,6 +18,8 @@ interface Props {
   onRemove: () => void;
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => void;
   showHoverTips?: boolean;
+  isPreviewPlaying?: boolean;
+  onPreview?: (filePath: string) => void;
   // drag-to-reorder
   onDragStart?: () => void;
   onDragEnd?: () => void;
@@ -90,7 +92,7 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, totalTracks = 20, showHoverTips = true, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, totalTracks = 20, showHoverTips = true, isPreviewPlaying = false, onPreview, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
   // Open popups downward for top-half rows, upward for bottom-half rows
   const openDown = index < totalTracks / 2;
   const [showKeyTooltip, setShowKeyTooltip] = useState(false);
@@ -247,13 +249,25 @@ async function handleReanalyze() {
               {index + 1}
             </span>
             <div className="hidden group-hover:flex items-center gap-1">
-              <button
-                onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
-                className="flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-                title="Play in Apple Music"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              </button>
+              {track.filePath && onPreview ? (
+                <button
+                  onClick={() => onPreview(track.filePath!)}
+                  className={`flex items-center justify-center cursor-pointer transition-colors ${isPreviewPlaying ? 'text-white' : 'text-[#7c3aed] hover:text-white'}`}
+                  title={isPreviewPlaying ? 'Pause preview' : 'Preview'}
+                >
+                  {isPreviewPlaying
+                    ? <Pause size={13} fill="currentColor" />
+                    : <Play size={13} fill="currentColor" />}
+                </button>
+              ) : (
+                <button
+                  onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
+                  className="flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+                  title="Play in Apple Music"
+                >
+                  <Play size={13} fill="currentColor" />
+                </button>
+              )}
               {track.filePath && (
                 <button
                   onClick={() => void fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath }) })}

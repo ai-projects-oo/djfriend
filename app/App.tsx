@@ -155,6 +155,9 @@ function AppInner() {
   const [mlWeights, setMlWeights] = useState<import('./lib/mlModel').ModelWeights | null>(null);
   const [shareTelemetry, setShareTelemetry] = useState(true);
   const [showHoverTips, setShowHoverTips] = useState(true);
+  const [previewFile, setPreviewFile] = useState<string | null>(null);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
@@ -631,6 +634,13 @@ function AppInner() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
+      {/* Hidden audio element for in-app preview */}
+      <audio
+        ref={audioRef}
+        onEnded={() => { setPreviewPlaying(false); setPreviewFile(null); }}
+        onPause={() => setPreviewPlaying(false)}
+        onPlay={() => setPreviewPlaying(true)}
+      />
       {/* Update available banner */}
       {updateInfo && (
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-[#1a1030] border-b border-[#7c3aed44] text-xs">
@@ -2119,6 +2129,23 @@ function AppInner() {
                   energyCheckThreshold={energyCheckThreshold}
                   showRekordboxExport={hasRekordboxFolder}
                   showHoverTips={showHoverTips}
+                  previewFile={previewFile}
+                  previewPlaying={previewPlaying}
+                  onPreview={(filePath) => {
+                    const audio = audioRef.current;
+                    if (!audio) return;
+                    const url = `/api/audio-stream?path=${encodeURIComponent(filePath)}`;
+                    if (previewFile === filePath) {
+                      if (audio.paused) { void audio.play(); setPreviewPlaying(true); }
+                      else { audio.pause(); setPreviewPlaying(false); }
+                    } else {
+                      audio.src = url;
+                      audio.currentTime = 0;
+                      setPreviewFile(filePath);
+                      setPreviewPlaying(true);
+                      void audio.play();
+                    }
+                  }}
                   onSwapTrack={handleSwapTrack}
                   onToggleLock={handleToggleLock}
                   onRemoveTrack={handleRemoveTrack}

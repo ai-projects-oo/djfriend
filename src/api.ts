@@ -1038,6 +1038,42 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed' })) }
   })
 
+  middlewares.use('/api/audio-stream', (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    const url = new URL(req.url ?? '', 'http://localhost')
+    const filePath = url.searchParams.get('path')
+    if (!filePath) { res.statusCode = 400; res.end('Missing path'); return }
+    const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(songsFolder ?? '', filePath)
+    if (!isPathAllowed(absolutePath, songsFolder, path.dirname(APPLE_RESULTS_PATH))) { res.statusCode = 403; res.end('Forbidden'); return }
+    if (!fs.existsSync(absolutePath)) { res.statusCode = 404; res.end('Not found'); return }
+    if (!AUDIO_EXTENSIONS.has(path.extname(absolutePath).toLowerCase())) { res.statusCode = 400; res.end('Not an audio file'); return }
+
+    const ext = path.extname(absolutePath).toLowerCase()
+    const mimeTypes: Record<string, string> = { '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.wav': 'audio/wav', '.aiff': 'audio/aiff', '.aif': 'audio/aiff', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg' }
+    const contentType = mimeTypes[ext] ?? 'audio/mpeg'
+    const stat = fs.statSync(absolutePath)
+    const total = stat.size
+    const rangeHeader = req.headers['range']
+
+    if (rangeHeader) {
+      const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-')
+      const start = parseInt(startStr, 10)
+      const end = endStr ? parseInt(endStr, 10) : Math.min(start + 1024 * 1024, total - 1)
+      const chunkSize = end - start + 1
+      res.statusCode = 206
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`)
+      res.setHeader('Accept-Ranges', 'bytes')
+      res.setHeader('Content-Length', chunkSize)
+      res.setHeader('Content-Type', contentType)
+      fs.createReadStream(absolutePath, { start, end }).pipe(res)
+    } else {
+      res.setHeader('Content-Length', total)
+      res.setHeader('Content-Type', contentType)
+      res.setHeader('Accept-Ranges', 'bytes')
+      fs.createReadStream(absolutePath).pipe(res)
+    }
+  })
+
   middlewares.use('/api/apple-music-playlists', async (req, res, next) => {
     if (req.method !== 'GET') { next(); return }
     if (process.platform !== 'darwin') { res.end(JSON.stringify([])); return }

@@ -179,11 +179,6 @@ export default function HistoryTab({
                   role="status"
                   aria-label={`Set quality score ${score.total} out of 100. ${scoreTooltip}`}
                 >
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#64748b]">Score</span>
-                    <span className={`text-lg font-bold tabular-nums leading-none ${scoreColor.split(' ')[0]}`}>{score.total}</span>
-                  </div>
-                  <div className="w-px h-9 bg-[#1e1e2e]" />
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-[10px] text-[#64748b]">Harmonic</span>
@@ -197,6 +192,11 @@ export default function HistoryTab({
                       <span className="text-[10px] text-[#64748b]">BPM flow</span>
                       <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round(score.bpmSmoothness * 100)}%</span>
                     </div>
+                  </div>
+                  <div className="w-px h-9 bg-[#1e1e2e]" />
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#64748b]">Score</span>
+                    <span className={`text-lg font-bold tabular-nums leading-none ${scoreColor.split(' ')[0]}`}>{score.total}</span>
                   </div>
                 </div>
               )}

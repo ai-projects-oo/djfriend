@@ -1275,12 +1275,12 @@ function AppInner() {
                         </>
                       )}
                     </button>
-                    </div>
-                    {prefs.genres.length === 0 && (
-                      <p className="text-[10px] text-[#475569] text-center -mt-1">
-                        ← Pick a genre to generate a set
-                      </p>
+                    {prefs.genres.length === 0 && tipConfig.help && (
+                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
+                        Pick a genre first to generate a set
+                      </div>
                     )}
+                    </div>
                     {/* Secondary actions */}
                     <div className="flex gap-2">
                       <div className="relative flex-1 group">

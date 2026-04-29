@@ -158,41 +158,56 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     }));
   }, [generatedSet]);
 
-  const handleGenerate = useCallback(() => {
-    const MAX_PASSES = 6;
-    const hasCurrentSet = generatedSet.length > 0;
-    const currentFiles = new Set(generatedSet.map(t => t.file));
-    const baseOpts = { playlistFilterFiles, weights: scoringWeights, history, mlWeights };
+  // Ranked candidate cache — rebuilt when library/prefs/curve change
+  const candidateCacheRef = useRef<{ key: string; list: SetTrack[][]; idx: number }>({
+    key: '', list: [], idx: 0,
+  });
 
-    // Generate up to MAX_PASSES candidates from the full library.
-    // Pass 0 is deterministic (best possible); passes 1–5 use softmax variation
-    // so they naturally diverge without hard-excluding any tracks.
-    type Candidate = { set: SetTrack[]; quality: number; novelty: number };
-    const candidates: Candidate[] = [];
-    for (let i = 0; i < MAX_PASSES; i++) {
-      const c = generateSet(library, prefs, curve, { ...baseOpts, variation: i === 0 ? 0 : 0.5 });
-      if (c.length === 0) continue;
-      const quality = computeSetScore(c)?.total ?? 0;
-      const novelty = hasCurrentSet
-        ? c.filter(t => !currentFiles.has(t.file)).length / c.length
-        : 1;
-      candidates.push({ set: c, quality, novelty });
+  const handleGenerate = useCallback(() => {
+    const MAX_PASSES = 10;
+    const baseOpts = { playlistFilterFiles, weights: scoringWeights, history, mlWeights };
+    const cache = candidateCacheRef.current;
+
+    // Cache key — rebuild when anything that affects generation changes
+    const key = `${library.length}|${JSON.stringify(prefs)}|${JSON.stringify(curve)}|${scoringWeights ? JSON.stringify(scoringWeights) : ''}`;
+
+    if (key !== cache.key || cache.idx >= cache.list.length) {
+      // Use escalating variation so passes naturally diverge:
+      // pass 0 = deterministic best, passes 1-9 = progressively more exploratory
+      const variationLevels = [0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.0];
+      const ranked: { set: SetTrack[]; score: number }[] = [];
+
+      for (let i = 0; i < MAX_PASSES; i++) {
+        const c = generateSet(library, prefs, curve, { ...baseOpts, variation: variationLevels[i] ?? 1.0 });
+        if (c.length === 0) continue;
+        ranked.push({ set: c, score: computeSetScore(c)?.total ?? 0 });
+      }
+
+      // Sort best → worst
+      ranked.sort((a, b) => b.score - a.score);
+
+      // Deduplicate: drop sets whose track list is identical to an already-kept set
+      const seen = new Set<string>();
+      const deduped = ranked.filter(({ set }) => {
+        const fp = set.map(t => t.file).join('|');
+        if (seen.has(fp)) return false;
+        seen.add(fp);
+        return true;
+      });
+
+      cache.key = key;
+      cache.list = deduped.map(d => d.set);
+      cache.idx = 0;
     }
 
-    if (candidates.length === 0) return;
+    if (cache.list.length === 0) return;
 
-    // Pick the candidate that balances quality and novelty.
-    // When a current set exists, novelty (different tracks) counts for 50% of the decision.
-    // When no current set, pure quality wins.
-    const winner = candidates.reduce((best, c) => {
-      const score = (v: Candidate) => hasCurrentSet
-        ? v.quality * 0.5 + v.novelty * 100 * 0.5
-        : v.quality;
-      return score(c) > score(best) ? c : best;
-    });
+    // Cycle through ranked list (wrap around when exhausted)
+    const pick = cache.list[cache.idx % cache.list.length];
+    cache.idx++;
 
-    setGeneratedSet(mergeWithLocked(winner.set));
-  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights, history, mlWeights]);
+    setGeneratedSet(mergeWithLocked(pick));
+  }, [library, prefs, curve, mergeWithLocked, playlistFilterFiles, scoringWeights, history, mlWeights]);
 
   const handleGenerateNew = useCallback(() => {
     if (library.length === 0) return;

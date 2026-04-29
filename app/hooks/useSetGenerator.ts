@@ -5,6 +5,7 @@ import { suggestBpmRange } from "../lib/bpmRanges";
 import { clamp } from "../lib/genreUtils";
 import { DEFAULT_CURVE } from "../components/EnergyCurveEditor";
 import { generateSet, getAffinityKey, genreAffinityBonus, semanticAffinityBonus } from "../lib/setGenerator";
+import { computeSetScore } from "../lib/setScore";
 import { isHarmonicWarning, camelotHarmonyScore } from "../lib/camelot";
 import { sampleCurve } from "../lib/curveInterpolation";
 
@@ -158,19 +159,39 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   }, [generatedSet]);
 
   const handleGenerate = useCallback(() => {
-    // Exclude all currently unlocked tracks so each Generate picks fresh tracks.
-    // Falls back to full library automatically if not enough alternatives exist.
-    const currentUnlocked = new Set(generatedSet.filter(t => !t.locked).map(t => t.file));
-    const fresh = generateSet(library, prefs, curve, {
-      passes: 10,
-      variation: 0.5,
-      excludeFiles: currentUnlocked,
-      playlistFilterFiles,
-      weights: scoringWeights,
-      history,
-      mlWeights,
+    const MAX_PASSES = 6;
+    const hasCurrentSet = generatedSet.length > 0;
+    const currentFiles = new Set(generatedSet.map(t => t.file));
+    const baseOpts = { playlistFilterFiles, weights: scoringWeights, history, mlWeights };
+
+    // Generate up to MAX_PASSES candidates from the full library.
+    // Pass 0 is deterministic (best possible); passes 1–5 use softmax variation
+    // so they naturally diverge without hard-excluding any tracks.
+    type Candidate = { set: SetTrack[]; quality: number; novelty: number };
+    const candidates: Candidate[] = [];
+    for (let i = 0; i < MAX_PASSES; i++) {
+      const c = generateSet(library, prefs, curve, { ...baseOpts, variation: i === 0 ? 0 : 0.5 });
+      if (c.length === 0) continue;
+      const quality = computeSetScore(c)?.total ?? 0;
+      const novelty = hasCurrentSet
+        ? c.filter(t => !currentFiles.has(t.file)).length / c.length
+        : 1;
+      candidates.push({ set: c, quality, novelty });
+    }
+
+    if (candidates.length === 0) return;
+
+    // Pick the candidate that balances quality and novelty.
+    // When a current set exists, novelty (different tracks) counts for 50% of the decision.
+    // When no current set, pure quality wins.
+    const winner = candidates.reduce((best, c) => {
+      const score = (v: Candidate) => hasCurrentSet
+        ? v.quality * 0.5 + v.novelty * 100 * 0.5
+        : v.quality;
+      return score(c) > score(best) ? c : best;
     });
-    setGeneratedSet(mergeWithLocked(fresh));
+
+    setGeneratedSet(mergeWithLocked(winner.set));
   }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights, history, mlWeights]);
 
   const handleGenerateNew = useCallback(() => {

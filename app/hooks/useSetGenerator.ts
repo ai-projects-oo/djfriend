@@ -159,14 +159,8 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   const handleGenerate = useCallback(() => {
     const lockedFiles = new Set(generatedSet.filter(t => t.locked).map(t => t.file));
-    const fresh = generateSet(library, prefs, curve, { excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights, history, mlWeights });
-    setGeneratedSet(mergeWithLocked(fresh));
-  }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights, history, mlWeights]);
-
-  const handleRegenerate = useCallback(() => {
-    if (library.length === 0) return;
-    const lockedFiles = new Set(generatedSet.filter(t => t.locked).map(t => t.file));
-    const fresh = generateSet(library, prefs, curve, { jitter: 0.4, excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights, history, mlWeights });
+    // variation: 0.5 gives good diversity while keeping quality — softmax samples from top-3 per slot
+    const fresh = generateSet(library, prefs, curve, { variation: 0.5, excludeFiles: lockedFiles, playlistFilterFiles, weights: scoringWeights, history, mlWeights });
     setGeneratedSet(mergeWithLocked(fresh));
   }, [library, prefs, curve, generatedSet, mergeWithLocked, playlistFilterFiles, scoringWeights, history, mlWeights]);
 
@@ -474,7 +468,6 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     canGenerateNew,
     runGenerate,
     handleGenerate,
-    handleRegenerate,
     handleGenerateNew,
     selectGenre,
     handleCurveChange,

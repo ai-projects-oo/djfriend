@@ -381,7 +381,6 @@ function AppInner() {
     filteredTrackCount,
     canGenerateNew,
     handleGenerate,
-    handleRegenerate,
     handleGenerateNew,
     selectGenre,
     handleCurveChange,
@@ -1320,23 +1319,6 @@ function AppInner() {
                     </div>
                     {/* Secondary actions */}
                     <div className="flex gap-2">
-                      <div className="relative flex-1 group">
-                        <button
-                          onClick={handleRegenerate}
-                          disabled={isInitializing || generatedSet.length === 0}
-                          className="w-full flex items-center justify-center gap-1.5 border border-[#2a2a3a] hover:border-[#475569] disabled:opacity-40 disabled:cursor-not-allowed text-[#64748b] hover:text-[#94a3b8] text-xs font-medium py-1.5 rounded-md transition-all duration-200 cursor-pointer"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="23 4 23 10 17 10" />
-                            <polyline points="1 20 1 14 7 14" />
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                          </svg>
-                          Shuffle
-                        </button>
-                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-44 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
-                          Keep the same tracks, re-roll the harmonic and BPM ordering
-                        </div>
-                      </div>
                       <div className="relative flex-1 group">
                         <button
                           onClick={handleGenerateNew}

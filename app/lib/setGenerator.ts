@@ -98,7 +98,12 @@ function clamp(val: number, min: number, max: number): number {
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export interface GenerateOptions {
-  /** 0–1 random bonus added to each song's score — produces a different result each call */
+  /**
+   * Softmax temperature for top-k candidate sampling (0 = always pick best, 1 = broad variation).
+   * Default 0 (deterministic). Use ~0.25 for varied-but-good generation.
+   */
+  variation?: number;
+  /** @deprecated use variation instead */
   jitter?: number;
   /** songs to exclude from the candidate pool (for "generate new" from remaining tracks) */
   excludeFiles?: Set<string>;
@@ -216,18 +221,21 @@ export function generateSet(
     const K = Math.max(5, Math.ceil(available.length * 0.15));
     const energyNeighbours = available.slice(0, K);
 
-    // 4. Within the energy neighbourhood, score by harmonic + BPM + affinity
-    let bestSong = energyNeighbours[0];
-    let bestScore = -Infinity;
-    let bestReasons: { text: string; quality: 'good' | 'ok' | 'bad' | 'bonus' | 'info' }[] = [];
+    // 4. Score every candidate in the energy neighbourhood
+    type R = { text: string; quality: 'good' | 'ok' | 'bad' | 'bonus' | 'info' };
+    type Scored = { song: Song; score: number; reasons: R[] };
+    const scored: Scored[] = [];
+
+    const wH = options?.weights?.harmonicWeight   ?? 0.45;
+    const wB = options?.weights?.bpmWeight        ?? 0.22;
+    const wT = options?.weights?.transitionWeight ?? 0.08;
+    const wE = options?.weights?.energyWeight     ?? 0.25;
 
     for (const song of energyNeighbours) {
       const harmonicScore =
         prevCamelot !== null ? camelotHarmonyScore(prevCamelot, song.camelot) : 1.0;
       const bpmScore =
         prevBpm !== null ? 1 - clamp(Math.abs(song.bpm - prevBpm) / 20, 0, 1) : 1.0;
-      // Transition smoothness: match end of previous track to start of this track.
-      // Falls back to overall energy delta when energyProfile is absent (old scans).
       const transitionScore = prevTrack !== null
         ? (prevTrack.energyProfile && song.energyProfile
             ? 1 - Math.abs(prevTrack.energyProfile.outro - song.energyProfile.intro)
@@ -236,23 +244,12 @@ export function generateSet(
       const affinityBonus = genreAffinityBonus(song, affinityKey);
       const semBonus = semanticAffinityBonus(song, prefs.venueType, prefs.setPhase);
       const tagBonus = tagFilterBonus(song, prefs.tagFilters);
-      // Clockwise Camelot move bonus: only fires when the track's energy is actually
-      // higher than the previous track — ensures the "energy boost" label is honest.
       const boostBonus = slopeRising && prevCamelot !== null && isCamelotClockwise(prevCamelot, song.camelot)
         && (prevTrack === null || song.energy >= prevTrack.energy - 0.05) ? 0.05 : 0;
-      // Familiarity: small bonus for tracks the DJ knows well; slight penalty for overplayed ones.
-      // Max contribution: (1.0 - 0.5) * 0.06 = +0.03; min: (0.3 - 0.5) * 0.06 = -0.012
       const playCount = options?.history ? computePlayStats(options.history, song.file).playCount : 0;
       const famBonus = options?.history ? (familiarityScore(playCount) - 0.5) * 0.06 : 0;
-      const jitter = options?.jitter ? Math.random() * options.jitter : 0;
-      // Energy proximity to the curve target — steeper penalty keeps energy on-curve.
       const energyScore = Math.max(0, 1 - Math.abs(song.energy - targetEnergy) / 0.28);
-      const wH = options?.weights?.harmonicWeight   ?? 0.45;
-      const wB = options?.weights?.bpmWeight        ?? 0.22;
-      const wT = options?.weights?.transitionWeight ?? 0.08;
-      const wE = options?.weights?.energyWeight     ?? 0.25;
       const ruleScore = harmonicScore * wH + bpmScore * wB + transitionScore * wT + energyScore * wE;
-      // ML model blends with rule-based score (70/30 once model is loaded)
       const mlScore = options?.mlWeights && prevTrack
         ? mlpForward(transitionFeatures(
             prevTrack, song, targetEnergy,
@@ -260,38 +257,60 @@ export function generateSet(
           ), options.mlWeights)
         : null;
       const baseScore = mlScore !== null ? ruleScore * 0.7 + mlScore * 0.3 : ruleScore;
+      // legacy jitter support
+      const jitter = options?.jitter ? Math.random() * options.jitter : 0;
       const score = baseScore + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + jitter;
-      if (score > bestScore) {
-        bestScore = score;
-        bestSong = song;
-        // Build structured breakdown for this winning candidate
-        type R = { text: string; quality: 'good' | 'ok' | 'bad' | 'bonus' | 'info' };
-        const reasons: R[] = [];
-        if (prevCamelot !== null) {
-          if (harmonicScore >= 1.0)       reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — perfect match`, quality: 'good' });
-          else if (harmonicScore >= 0.75) reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — compatible`, quality: 'ok' });
-          else if (harmonicScore >= 0.5)  reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — energy boost`, quality: 'bonus' });
-          else                            reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — key jump`, quality: 'bad' });
-        }
-        const eDelta = Math.abs(song.energy - targetEnergy);
-        const eQuality: R['quality'] = eDelta <= 0.05 ? 'good' : eDelta <= 0.15 ? 'ok' : 'bad';
-        reasons.push({ text: `Energy ${Math.round(song.energy * 100)} → target ${Math.round(targetEnergy * 100)}`, quality: eQuality });
-        if (prevBpm !== null) {
-          const delta = Math.round(song.bpm - prevBpm);
-          reasons.push({ text: `BPM ${Math.round(song.bpm)}  ${delta >= 0 ? '+' : ''}${delta} from prev`, quality: 'info' });
-        }
-        if (boostBonus > 0) reasons.push({ text: 'Clockwise energy boost', quality: 'bonus' });
-        if (affinityBonus > 0) reasons.push({ text: 'Genre affinity', quality: 'bonus' });
-        if (semBonus > 0) reasons.push({ text: 'Vibe match', quality: 'bonus' });
-        if (tagBonus > 0) reasons.push({ text: 'Tag filter match', quality: 'bonus' });
-        if (options?.history) {
-          if (playCount === 0) reasons.push({ text: 'First time in a set', quality: 'info' });
-          else if (playCount >= 10) reasons.push({ text: `Played ${playCount}× — cooling down`, quality: 'ok' });
-          else reasons.push({ text: `Played ${playCount}× — familiar`, quality: 'good' });
-        }
-        bestReasons = reasons;
+
+      const reasons: R[] = [];
+      if (prevCamelot !== null) {
+        if (harmonicScore >= 1.0)       reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — perfect match`, quality: 'good' });
+        else if (harmonicScore >= 0.75) reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — compatible`, quality: 'ok' });
+        else if (harmonicScore >= 0.5)  reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — energy boost`, quality: 'bonus' });
+        else                            reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — key jump`, quality: 'bad' });
       }
+      const eDelta = Math.abs(song.energy - targetEnergy);
+      const eQuality: R['quality'] = eDelta <= 0.05 ? 'good' : eDelta <= 0.15 ? 'ok' : 'bad';
+      reasons.push({ text: `Energy ${Math.round(song.energy * 100)} → target ${Math.round(targetEnergy * 100)}`, quality: eQuality });
+      if (prevBpm !== null) {
+        const delta = Math.round(song.bpm - prevBpm);
+        reasons.push({ text: `BPM ${Math.round(song.bpm)}  ${delta >= 0 ? '+' : ''}${delta} from prev`, quality: 'info' });
+      }
+      if (boostBonus > 0)  reasons.push({ text: 'Clockwise energy boost', quality: 'bonus' });
+      if (affinityBonus > 0) reasons.push({ text: 'Genre affinity', quality: 'bonus' });
+      if (semBonus > 0)    reasons.push({ text: 'Vibe match', quality: 'bonus' });
+      if (tagBonus > 0)    reasons.push({ text: 'Tag filter match', quality: 'bonus' });
+      if (options?.history) {
+        if (playCount === 0)       reasons.push({ text: 'First time in a set', quality: 'info' });
+        else if (playCount >= 10)  reasons.push({ text: `Played ${playCount}× — cooling down`, quality: 'ok' });
+        else                       reasons.push({ text: `Played ${playCount}× — familiar`, quality: 'good' });
+      }
+
+      scored.push({ song, score, reasons });
     }
+
+    // 5. Pick the winner — deterministic (best score) or softmax-sampled top-k for variation
+    scored.sort((a, b) => b.score - a.score);
+    let winner: Scored;
+    const variation = options?.variation ?? 0;
+    if (variation > 0 && scored.length > 1) {
+      // Sample from top-3 using softmax-weighted probability
+      const topK = scored.slice(0, Math.min(3, scored.length));
+      const temp = Math.max(0.01, variation * 0.5); // scale: variation=0.5 → temp=0.25
+      const exps = topK.map(c => Math.exp(c.score / temp));
+      const total = exps.reduce((s, e) => s + e, 0);
+      const r = Math.random() * total;
+      let cumulative = 0;
+      winner = topK[topK.length - 1]; // fallback to last if loop doesn't break
+      for (let i = 0; i < topK.length; i++) {
+        cumulative += exps[i];
+        if (r <= cumulative) { winner = topK[i]; break; }
+      }
+    } else {
+      winner = scored[0];
+    }
+
+    const bestSong = winner.song;
+    const bestReasons = winner.reasons;
 
     // 5. Hard duration cap — stop before exceeding the budget
     const trackDur = (bestSong.duration ?? FALLBACK_DURATION) + GAP_SECONDS;

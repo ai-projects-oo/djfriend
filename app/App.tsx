@@ -1237,7 +1237,6 @@ function AppInner() {
                 );
                 const transitions = Math.max(0, generatedSet.length - 1);
                 const estSetSec = rawPlaylistSec - MIX_OVERLAP_SEC * transitions;
-                const setTotalMinutes = estSetSec / 60;
                 const fmtMin = (s: number) => {
                   const m = Math.round(s / 60);
                   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
@@ -1458,22 +1457,15 @@ function AppInner() {
                         </button>
                         {SET_DURATIONS.map((min) => {
                           const active = prefs.setDuration === min;
-                          const tooShort =
-                            minViablePill === null &&
-                            generatedSet.length > 0 &&
-                            prefs.setDuration !== null &&
-                            min < setTotalMinutes;
                           // In playlist mode: only the min viable pill is enabled
                           const lockedByPlaylist =
                             minViablePill !== null && min !== minViablePill;
-                          const disabled = tooShort || lockedByPlaylist;
-                          const title = tooShort
-                            ? `Current set is ~${Math.ceil(setTotalMinutes)}m — select a longer duration`
-                            : lockedByPlaylist
-                              ? min < (minViablePill ?? 0)
-                                ? `Playlist is ~${Math.ceil(playlistTotalMinutes)}m — too short`
-                                : `Use ${minViablePill}m to match the playlist length`
-                              : undefined;
+                          const disabled = lockedByPlaylist;
+                          const title = lockedByPlaylist
+                            ? min < (minViablePill ?? 0)
+                              ? `Playlist is ~${Math.ceil(playlistTotalMinutes)}m — too short`
+                              : `Use ${minViablePill}m to match the playlist length`
+                            : undefined;
                           return (
                             <button
                               key={min}

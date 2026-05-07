@@ -93,6 +93,78 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     localStorage.setItem("djfriend-apple-playlist-files", JSON.stringify(applePlaylistFiles));
   }, [applePlaylistFiles]);
 
+  // After library loads, stream missing comment/year from ID3 tags and merge into state
+  const runBackfill = useCallback((loaded: Song[]) => {
+    if (loaded.length === 0) return;
+    const hasMissing = loaded.some(s => !s.comment || s.year == null);
+    if (!hasMissing) return;
+    apiFetch("/api/backfill-meta")
+      .then(r => {
+        if (!r.ok || !r.body) return;
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        const pump = (): Promise<void> => reader.read().then(({ done, value }) => {
+          if (done) return;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          const patches: Array<{ filePath: string; comment?: string; year?: number; duration?: number }> = [];
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try { patches.push(JSON.parse(line) as { filePath: string; comment?: string; year?: number; duration?: number }); } catch { /* skip */ }
+          }
+          if (patches.length > 0) {
+            setLibrary(prev => {
+              const map = new Map(patches.map(p => [p.filePath, p]));
+              return prev.map(s => {
+                const p = map.get(s.filePath ?? s.file);
+                if (!p) return s;
+                return { ...s, ...(p.comment ? { comment: p.comment } : {}), ...(p.year != null ? { year: p.year } : {}), ...(p.duration != null ? { duration: p.duration } : {}) };
+              });
+            });
+          }
+          return pump();
+        });
+        return pump();
+      })
+      .catch(() => {});
+  }, []);
+
+  // Re-derive semantic tags using current rule set — streams patches for in-memory update
+  const runRederive = useCallback(() => {
+    apiFetch("/api/rederive-tags", { method: "POST" })
+      .then(r => {
+        if (!r.ok || !r.body) return;
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        const pump = (): Promise<void> => reader.read().then(({ done, value }) => {
+          if (done) return;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          const patches: Array<{ filePath: string; semanticTags: Song["semanticTags"] }> = [];
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try { patches.push(JSON.parse(line) as { filePath: string; semanticTags: Song["semanticTags"] }); } catch { /* skip */ }
+          }
+          if (patches.length > 0) {
+            setLibrary(prev => {
+              const map = new Map(patches.map(p => [p.filePath, p.semanticTags]));
+              return prev.map(s => {
+                const tags = map.get(s.filePath ?? s.file);
+                return tags !== undefined ? { ...s, semanticTags: tags } : s;
+              });
+            });
+          }
+          return pump();
+        });
+        return pump();
+      })
+      .catch(() => {});
+  }, []);
+
   // Auto-load saved library on mount
   useEffect(() => {
     apiFetch("/results.json")
@@ -107,6 +179,8 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
           setLibraryName("results.json (auto-loaded)");
           setError(null);
           setIsInitializing(false);
+          runBackfill(songs);
+          runRederive();
           return;
         }
         throw new Error("empty");
@@ -124,12 +198,14 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
               setLibrary(songs);
               setLibraryName("Apple Music library (auto-loaded)");
               setError(null);
+              runBackfill(songs);
+              runRederive();
             }
           })
           .catch(() => {})
           .finally(() => setIsInitializing(false));
       });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openPlaylistPicker = useCallback(async () => {
     setLoadingPlaylists(true);

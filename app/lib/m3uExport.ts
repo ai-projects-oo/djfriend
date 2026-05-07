@@ -6,7 +6,7 @@ function isAbsolutePath(p: string): boolean {
   return p.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(p);
 }
 
-function resolveTrackPath(track: SetTrack, songsFolder: string): string {
+export function resolveTrackPath(track: SetTrack, songsFolder: string): string {
   const sourcePath = (track.filePath ?? track.file).trim();
   if (!sourcePath) return sourcePath;
   if (isAbsolutePath(sourcePath)) return sourcePath;

@@ -31,47 +31,50 @@ export function deriveSemanticTags(p: AudioProfile): SemanticTags {
 
   const isMinor = p.camelot?.endsWith('A') ?? false
   const camelotNum = parseInt(p.camelot ?? '0', 10)
+  // Some analyzers halve BPMs below 90 (e.g. 62 → actual 124) — double back for rule evaluation
+  const eb = p.bpm > 0 && p.bpm < 90 ? p.bpm * 2 : p.bpm
 
   // ── Vibe ──────────────────────────────────────────────────────────────────
-  if (p.bpm > 140) vibeTags.push('driving')
-  if (p.energy > 0.80 && p.bpm >= 125) vibeTags.push('intense')
-  if (p.energy > 0.75 && p.bpm >= 118 && p.bpm <= 135 && !isMinor) vibeTags.push('groovy')
-  if (p.energy < 0.45 && p.bpm < 115) vibeTags.push('dreamy')
+  if (eb >= 132) vibeTags.push('driving')
+  if (p.energy > 0.65 && eb >= 122) vibeTags.push('intense')
+  if (p.energy > 0.40 && eb >= 114 && eb <= 138 && !isMinor) vibeTags.push('groovy')
+  if (p.energy < 0.45 && eb < 112) vibeTags.push('dreamy')
   if (p.energy < 0.40 && isMinor) vibeTags.push('ethereal')
-  if (p.energy > 0.70 && p.bpm >= 130 && p.bpm < 138 && isMinor) vibeTags.push('hypnotic')
-  if (p.energy > 0.85 && isMinor) vibeTags.push('aggressive')
-  if (p.energy > 0.55 && p.bpm >= 90 && p.bpm <= 115) vibeTags.push('bouncy')
-  if (p.energy > 0.60 && p.bpm >= 138) vibeTags.push('raw')
+  if (p.energy > 0.40 && eb >= 120 && eb < 142 && isMinor) vibeTags.push('hypnotic')
+  if (p.energy > 0.78 && isMinor) vibeTags.push('aggressive')
+  if (p.energy > 0.42 && eb >= 90 && eb <= 116) vibeTags.push('bouncy')
+  if (p.energy > 0.55 && eb >= 138) vibeTags.push('raw')
+  if (p.energy < 0.50 && p.energy >= 0.30 && eb >= 118) vibeTags.push('minimal')
 
   // ── Mood ──────────────────────────────────────────────────────────────────
   if (isMinor) moodTags.push('dark')
   else moodTags.push('uplifting')
   if (p.energy < 0.40 && isMinor) moodTags.push('melancholic')
-  if (p.energy > 0.80 && !isMinor) moodTags.push('euphoric')
-  if (p.energy > 0.75 && isMinor) moodTags.push('tense')
+  if (p.energy > 0.70 && !isMinor) moodTags.push('euphoric')
+  if (p.energy > 0.68 && isMinor) moodTags.push('tense')
   if (p.energy < 0.35 && !isMinor) moodTags.push('peaceful')
   // Camelot 1A–3A (Db/Ab/Eb minor) tends towards mysterious
   if (isMinor && camelotNum >= 1 && camelotNum <= 3 && p.energy < 0.65) moodTags.push('mysterious')
   // Funky: mid-energy, major, moderate BPM
-  if (!isMinor && p.energy >= 0.50 && p.energy <= 0.75 && p.bpm >= 100 && p.bpm <= 125) moodTags.push('funky')
-  if (p.energy < 0.55 && isMinor && p.bpm >= 120) moodTags.push('emotional')
+  if (!isMinor && p.energy >= 0.42 && p.energy <= 0.78 && eb >= 98 && eb <= 128) moodTags.push('funky')
+  if (p.energy < 0.58 && isMinor && eb >= 118) moodTags.push('emotional')
 
   // ── Time of Night ─────────────────────────────────────────────────────────
-  if (p.bpm >= 128 && p.energy > 0.75) timeOfNightTags.push('peak-time')
-  if (p.energy < 0.45 || p.bpm < 105) {
+  if (eb >= 126 && p.energy > 0.65) timeOfNightTags.push('peak-time')
+  if (p.energy < 0.45 || eb < 105) {
     timeOfNightTags.push('opening')
-  } else if (p.energy < 0.65 || (p.bpm >= 105 && p.bpm < 125)) {
+  } else if (p.energy < 0.65 || (eb >= 105 && eb < 126)) {
     timeOfNightTags.push('warm-up')
   }
-  if (p.energy > 0.50 && p.bpm >= 124 && p.energy < 0.72) timeOfNightTags.push('after-hours')
-  if (p.energy < 0.50 && p.bpm >= 115) timeOfNightTags.push('closing')
+  if (p.energy > 0.48 && eb >= 122 && p.energy < 0.72) timeOfNightTags.push('after-hours')
+  if (p.energy < 0.52 && eb >= 112) timeOfNightTags.push('closing')
 
   // ── Venue ─────────────────────────────────────────────────────────────────
-  if (p.bpm >= 125 && p.energy > 0.65) venueTags.push('club')
-  if (p.bpm > 135 && p.energy > 0.80) venueTags.push('festival')
-  if (p.energy < 0.55 && p.bpm < 125) venueTags.push('bar')
+  if (eb >= 122 && p.energy > 0.50) venueTags.push('club')
+  if (eb > 132 && p.energy > 0.70) venueTags.push('festival')
+  if (p.energy < 0.58 && eb < 126) venueTags.push('bar')
   if (p.energy < 0.40) venueTags.push('lounge')
-  if (p.bpm > 135 && isMinor && p.energy > 0.75) venueTags.push('warehouse')
+  if (eb > 132 && isMinor && p.energy > 0.65) venueTags.push('warehouse')
 
   // ── Vocal type ────────────────────────────────────────────────────────────
   const genreStr = (p.genres ?? []).join(' ').toLowerCase()

@@ -421,7 +421,11 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
       if (meta.common.bpm && meta.common.bpm > 0) tagBpm = meta.common.bpm;
       if (meta.common.year && meta.common.year > 0) tagYear = meta.common.year;
       const rawComment = meta.common.comment;
-      if (rawComment && rawComment.length > 0) tagComment = rawComment[0].text ?? undefined;
+      if (rawComment && rawComment.length > 0) {
+        const first = rawComment[0];
+        const text = typeof first === 'string' ? first : first.text;
+        if (text && text.trim()) tagComment = text.trim();
+      }
     } catch { /* tag read failure is non-fatal */ }
 
     const fileBuffer = fs.readFileSync(filePath);

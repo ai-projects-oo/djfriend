@@ -37,7 +37,7 @@ function resolveTrackPath(track: SetTrack, songsFolder: string): string {
  * Convert an absolute file path to a Rekordbox-compatible Location URI.
  * Format: file://localhost/path/to/track.mp3 (spaces and special chars percent-encoded)
  */
-function toLocation(absolutePath: string): string {
+export function toLocation(absolutePath: string): string {
   // Normalise Windows backslashes
   const forward = absolutePath.replace(/\\/g, '/');
   // Encode each path segment individually (preserve slashes).

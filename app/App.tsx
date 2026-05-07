@@ -6,7 +6,9 @@ import SetTracklist from "./components/SetTracklist";
 import SettingsModal from "./components/SettingsModal";
 import CalendarPicker from "./components/CalendarPicker";
 import HistoryTab from "./components/HistoryTab";
+import LibraryTab from "./components/LibraryTab";
 import { genreMatchesUmbrella, TAG_GROUPS } from "./lib/genreUtils";
+import { parseRekordboxXml } from "./lib/rekordboxImport";
 import { GENRE_BPM_RANGES } from "./lib/bpmRanges";
 import {
   exchangeCodeForToken,
@@ -36,6 +38,22 @@ import type { SetPlan } from "./types";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
+
+function InfoMark({ text, align = 'left' }: { text: string; align?: 'left' | 'right' }) {
+  return (
+    <div className="relative group/im flex-shrink-0">
+      <div className="w-3.5 h-3.5 rounded-full border border-[#374151] flex items-center justify-center cursor-default">
+        <span className="text-[8px] text-[#4b5568] leading-none select-none">i</span>
+      </div>
+      <div className={`absolute bottom-full mb-2 w-52 pointer-events-none opacity-0 group-hover/im:opacity-100 transition-opacity z-50 ${align === 'right' ? 'right-0' : 'left-0'}`}>
+        <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
+          <p className="text-[10px] text-[#9ca3af] leading-relaxed">{text}</p>
+        </div>
+        <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${align === 'right' ? 'mr-1.5 ml-auto' : 'ml-1.5'}`} />
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -136,8 +154,8 @@ export default function App() {
 
 function AppInner() {
   const [activeTab, setActiveTab] = useState<
-    "Generator" | "History" | "Import"
-  >("Generator");
+    "Set Generator" | "Library" | "History" | "Import"
+  >("Set Generator");
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
       const raw = localStorage.getItem("djfriend-history");
@@ -167,6 +185,7 @@ function AppInner() {
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
+  const [isMacOS, setIsMacOS] = useState(true); // assume macOS until settings load
   const [energyCheckThreshold, setEnergyCheckThreshold] = useState(0.12);
   const [onboardingDismissed, setOnboardingDismissed] = useState(
     () => localStorage.getItem("djfriend-onboarding-dismissed") === "true",
@@ -287,6 +306,8 @@ function AppInner() {
 
   // Playlist filter — which import entry restricts the generator pool
   const [playlistFilterId, setPlaylistFilterId] = useState<string | null>(null);
+  // Selection from Library tab — set when user taps "Use in Set Generator"
+  const [librarySelection, setLibrarySelection] = useState<Set<string> | null>(null);
   // Controls visibility of the playlist picker select element in the Source card
   const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
   // Visual-only loading state for the Generate CTA button
@@ -330,9 +351,11 @@ function AppInner() {
   } = useSpotifyImport({ library, setHistory });
 
   // Derive the file set for the active playlist filter
-  // playlistFilterId can be a Spotify import entry ID or "apple:<playlistName>"
+  // playlistFilterId can be a Spotify import entry ID, "apple:<playlistName>", or "__selection__"
   const playlistFilterFiles = useMemo<Set<string> | undefined>(() => {
     if (!playlistFilterId) return undefined;
+    // Library tab selection
+    if (playlistFilterId === "__selection__") return librarySelection ?? undefined;
     // Apple Music playlist
     if (playlistFilterId.startsWith("apple:")) {
       const name = playlistFilterId.slice(6);
@@ -348,7 +371,7 @@ function AppInner() {
     if (!entry) return undefined;
     const songs = findSongsForImport(entry.tracks, library);
     return songs.length > 0 ? new Set(songs.map((s) => s.file)) : undefined;
-  }, [playlistFilterId, importHistory, library, applePlaylistFiles]);
+  }, [playlistFilterId, importHistory, library, applePlaylistFiles, librarySelection]);
 
   const playlistTotalMinutes = useMemo<number>(() => {
     if (!playlistFilterId || !playlistFilterFiles) return 0;
@@ -451,7 +474,7 @@ function AppInner() {
       setPrefs(migratedPrefs);
       setCurve(entry.curve);
       setGeneratedSet(entry.tracks);
-      setActiveTab("Generator");
+      setActiveTab("Set Generator");
     },
     [setPrefs, setCurve, setGeneratedSet],
   );
@@ -502,7 +525,7 @@ function AppInner() {
       if (songs.length === 0) return;
       handleLoadToSet(songs);
       setPlaylistFilterId(entry.id);
-      setActiveTab("Generator");
+      setActiveTab("Set Generator");
     },
     [library, handleLoadToSet, setPlaylistFilterId],
   );
@@ -524,6 +547,7 @@ function AppInner() {
         setHasRekordboxFolder(
           !!(d.rekordboxFolder && d.rekordboxFolder.trim()),
         );
+        if ((d as { platform?: string }).platform) setIsMacOS((d as { platform?: string }).platform === 'darwin');
         if (d.energyCheckThreshold !== undefined) setEnergyCheckThreshold(d.energyCheckThreshold);
         if ((d as { shareTelemetry?: boolean }).shareTelemetry !== undefined) setShareTelemetry((d as { shareTelemetry?: boolean }).shareTelemetry !== false);
         if ((d as { tipConfig?: TipConfig }).tipConfig) setTipConfig({ ...DEFAULT_TIP_CONFIG, ...(d as { tipConfig: TipConfig }).tipConfig });
@@ -647,7 +671,7 @@ function AppInner() {
   }, [setImportUrl, setLoadingSpotifyPlaylists, setPendingImportUrl, setSpotifyExportStatus, setSpotifyPlaylistPicker]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
+    <div className="h-screen bg-[#0a0a0f] text-[#e2e8f0] flex flex-col overflow-hidden">
       {/* Hidden audio element for in-app preview */}
       <audio
         ref={audioRef}
@@ -1056,40 +1080,10 @@ function AppInner() {
                 e.target.value = "";
                 if (!file) return;
                 const text = await file.text();
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(text, "text/xml");
-                const trackEls = Array.from(
-                  doc.querySelectorAll("TRACK[Location]"),
-                );
-                const tracks = trackEls.flatMap((el) => {
-                  const loc = el.getAttribute("Location") ?? "";
-                  // file://localhost/path/to/file.mp3 → /path/to/file.mp3
-                  // Windows: file://localhost/C:/Users/... → C:/Users/...
-                  let filePath = decodeURIComponent(
-                    loc
-                      .replace(/^file:\/\/localhost/, "")
-                      .replace(/^file:\/\//, ""),
-                  );
-                  // On Windows, strip leading "/" before drive letter (e.g. "/C:/..." → "C:/...")
-                  if (/^\/[A-Za-z]:/.test(filePath)) filePath = filePath.slice(1);
-                  const bpm = parseFloat(el.getAttribute("AverageBpm") ?? "0");
-                  const duration = parseFloat(
-                    el.getAttribute("TotalTime") ?? "0",
-                  );
-                  const tonality = el.getAttribute("Tonality") ?? "";
-                  if (!filePath || bpm <= 0) return [];
-                  return [
-                    {
-                      path: filePath,
-                      title: el.getAttribute("Name") ?? "",
-                      artist: el.getAttribute("Artist") ?? "",
-                      bpm,
-                      tonality,
-                      duration,
-                    },
-                  ];
-                });
-                void runRekordboxImport(tracks);
+                const { tracks } = parseRekordboxXml(text);
+                // Filter out tracks with no valid path; keep bpm=0 tracks so DJFriend can analyze them
+                const validTracks = tracks.filter(t => t.path.length > 0);
+                void runRekordboxImport(validTracks);
               }}
             />
             <div className="relative" ref={analyzeMenuRef}>
@@ -1103,7 +1097,7 @@ function AppInner() {
               </button>
               {analyzeMenuOpen && !loadingPlaylists && (
                 <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
-                  {navigator.userAgent.toLowerCase().includes("electron") && (
+                  {navigator.userAgent.toLowerCase().includes("electron") && isMacOS && (
                     <button
                       onClick={() => {
                         setAnalyzeMenuOpen(false);
@@ -1169,7 +1163,8 @@ function AppInner() {
         <div className="px-2 flex gap-1">
           {(
             [
-              "Generator",
+              "Set Generator",
+              "Library",
               "History",
               ...(hasSpotifyCredentials
                 ? (["Import"] as const)
@@ -1190,6 +1185,14 @@ function AppInner() {
                   <SpotifyIcon size={13} className="text-[#1db954]" />
                 )}
                 {tab}
+                {tab === "Library" && isInitializing && (
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-[#7c3aed]/30 border-t-[#7c3aed] animate-spin inline-block" />
+                )}
+                {tab === "Library" && !isInitializing && library.length > 0 && (
+                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                    {library.length}
+                  </span>
+                )}
                 {tab === "History" && history.length > 0 && (
                   <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
                     {history.length}
@@ -1206,14 +1209,16 @@ function AppInner() {
         </div>
       </header>
 
+      {/* Tab content — flex-1 so each tab fills remaining viewport height */}
+      <div className="flex-1 min-h-0 flex flex-col">
       {error && (
-        <div className="sm:hidden px-4 pt-3">
+        <div className="sm:hidden px-4 pt-3 flex-shrink-0">
           <p className="text-xs text-[#ef4444]">{error}</p>
         </div>
       )}
 
-      {activeTab === "Generator" && (
-        <main className="px-2 py-6">
+      {activeTab === "Set Generator" && (
+        <main className="px-2 py-6 overflow-y-auto flex-1">
           <div className="flex flex-col lg:flex-row lg:items-stretch gap-4">
             {/* ── LEFT SIDEBAR ── */}
             <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4">
@@ -1380,6 +1385,7 @@ function AppInner() {
                         <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
                           Duration
                         </span>
+                        <InfoMark text="Target set length. Tracks are added until this duration is reached. The estimate on the right is based on average track length in your current filtered library." />
                         {filteredTrackCount > 0 && (
                           <span className="text-[10px] text-[#475569]">≈ {filteredTrackCount} tracks</span>
                         )}
@@ -1462,9 +1468,12 @@ function AppInner() {
                     {/* BPM range */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
-                          BPM Range
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                            BPM Range
+                          </span>
+                          <InfoMark text="Hard filter — only tracks within this tempo range are considered. Leave both fields empty to include all tempos." />
+                        </div>
                         {(prefs.bpmMin != null || prefs.bpmMax != null) && (
                           <button
                             type="button"
@@ -1505,54 +1514,91 @@ function AppInner() {
                     </div>
 
                     {/* Scoring weights */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
-                          Scoring weights
-                        </span>
-                        {scoringWeights && (
-                          <button
-                            type="button"
-                            onClick={() => setScoringWeights(undefined)}
-                            className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
-                          >
-                            reset
-                          </button>
-                        )}
-                      </div>
-                      {(() => {
-                        const w = scoringWeights ?? { harmonicWeight: 0.45, bpmWeight: 0.22, transitionWeight: 0.08, energyWeight: 0.25 };
-                        const sliders: { key: keyof typeof w; label: string }[] = [
-                          { key: 'harmonicWeight',   label: 'Harmonic' },
-                          { key: 'energyWeight',     label: 'Energy' },
-                          { key: 'bpmWeight',        label: 'BPM' },
-                          { key: 'transitionWeight', label: 'Transition' },
-                        ];
-                        return (
-                          <div className="flex flex-col gap-2">
-                            {sliders.map(({ key, label }) => (
-                              <div key={key} className="flex items-center gap-2">
-                                <span className="text-[10px] text-[#475569] w-16 flex-shrink-0">{label}</span>
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={100}
-                                  value={Math.round(w[key] * 100)}
-                                  onChange={e => {
-                                    const val = Number(e.target.value) / 100;
-                                    setScoringWeights({ ...w, [key]: val });
-                                  }}
-                                  className="flex-1 accent-[#7c3aed] cursor-pointer"
-                                />
-                                <span className="text-[10px] text-[#64748b] w-6 text-right tabular-nums">
-                                  {Math.round(w[key] * 100)}
-                                </span>
+                    {(() => {
+                      const PRESETS: { name: string; desc: string; detail: string; weights: { harmonicWeight: number; energyWeight: number; bpmWeight: number; transitionWeight: number } }[] = [
+                        {
+                          name: 'Balanced',
+                          desc: 'Works for most sets',
+                          detail: 'Harmonic 45 · Energy 25 · BPM 22 · Transition 8',
+                          weights: { harmonicWeight: 0.45, energyWeight: 0.25, bpmWeight: 0.22, transitionWeight: 0.08 },
+                        },
+                        {
+                          name: 'Club',
+                          desc: 'Techno / house / trance',
+                          detail: 'Harmonic 55 · Energy 20 · BPM 20 · Transition 5',
+                          weights: { harmonicWeight: 0.55, energyWeight: 0.20, bpmWeight: 0.20, transitionWeight: 0.05 },
+                        },
+                        {
+                          name: 'Festival',
+                          desc: 'Big room — energy arc first',
+                          detail: 'Harmonic 20 · Energy 55 · BPM 20 · Transition 5',
+                          weights: { harmonicWeight: 0.20, energyWeight: 0.55, bpmWeight: 0.20, transitionWeight: 0.05 },
+                        },
+                        {
+                          name: 'Open Format',
+                          desc: 'Bar / mixed genre / wedding',
+                          detail: 'Harmonic 20 · Energy 30 · BPM 20 · Transition 30',
+                          weights: { harmonicWeight: 0.20, energyWeight: 0.30, bpmWeight: 0.20, transitionWeight: 0.30 },
+                        },
+                      ];
+                      const activePreset = PRESETS.find(p =>
+                        scoringWeights &&
+                        p.weights.harmonicWeight === scoringWeights.harmonicWeight &&
+                        p.weights.energyWeight === scoringWeights.energyWeight &&
+                        p.weights.bpmWeight === scoringWeights.bpmWeight &&
+                        p.weights.transitionWeight === scoringWeights.transitionWeight
+                      ) ?? PRESETS[0];
+                      return (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                              Scoring weights
+                            </span>
+                            <div className="relative group/info">
+                              <div className="w-3.5 h-3.5 rounded-full border border-[#374151] flex items-center justify-center cursor-default">
+                                <span className="text-[8px] text-[#4b5568] leading-none select-none">i</span>
                               </div>
-                            ))}
+                              <div className="absolute bottom-full left-0 mb-2 w-52 pointer-events-none opacity-0 group-hover/info:opacity-100 transition-opacity z-50">
+                                <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
+                                  <p className="text-[10px] font-semibold text-[#c4b5fd] mb-1">Scoring weights</p>
+                                  <p className="text-[10px] text-[#9ca3af] leading-relaxed">Controls what matters most when picking the next track. Choose the preset that matches your gig type — it adjusts how much harmonic key matching, energy flow, BPM proximity, and transition smoothness each contribute to the score.</p>
+                                </div>
+                                <div className="w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 ml-1.5 -mt-1" />
+                              </div>
+                            </div>
                           </div>
-                        );
-                      })()}
-                    </div>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {PRESETS.map((preset, i) => {
+                              const isActive = preset.name === activePreset.name;
+                              const isLast = i === PRESETS.length - 1;
+                              return (
+                                <div key={preset.name} className="relative group">
+                                  <button
+                                    type="button"
+                                    onClick={() => setScoringWeights(preset.name === 'Balanced' ? undefined : preset.weights)}
+                                    className={`text-[10px] px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
+                                      isActive
+                                        ? 'bg-[#7c3aed]/20 border-[#7c3aed]/60 text-[#a78bfa]'
+                                        : 'bg-[#0d0d14] border-[#1e1e2e] text-[#6b7280] hover:border-[#374151] hover:text-[#9ca3af]'
+                                    }`}
+                                  >
+                                    {preset.name}
+                                  </button>
+                                  <div className={`absolute bottom-full mb-2 w-44 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 ${isLast ? 'right-0' : 'left-0'}`}>
+                                    <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
+                                      <p className="text-[10px] font-semibold text-[#c4b5fd] mb-0.5">{preset.name}</p>
+                                      <p className="text-[10px] text-[#9ca3af] mb-1.5">{preset.desc}</p>
+                                      <p className="text-[10px] text-[#6b7280] leading-relaxed">{preset.detail}</p>
+                                    </div>
+                                    <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${isLast ? 'mr-3 ml-auto' : 'ml-3'}`} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                   </div>
                 );
@@ -1564,6 +1610,7 @@ function AppInner() {
                     <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
                       Source
                     </span>
+                    <InfoMark text="Choose which tracks to generate from — your full library or a specific imported playlist. The generator only considers tracks in the selected source." />
                     <div className="flex gap-1.5 flex-wrap">
                       <button
                         type="button"
@@ -1600,7 +1647,9 @@ function AppInner() {
                           }}
                           title={
                             playlistFilterId
-                              ? (playlistFilterId.startsWith("apple:")
+                              ? (playlistFilterId === "__selection__"
+                                  ? `Library Selection (${librarySelection?.size ?? 0})`
+                                  : playlistFilterId.startsWith("apple:")
                                   ? playlistFilterId.slice(6)
                                   : importHistory.find((e) => e.id === playlistFilterId)?.name ?? "Playlist")
                               : "Generate from a playlist"
@@ -1608,7 +1657,9 @@ function AppInner() {
                         >
                           <span className="truncate max-w-[160px]">
                             {playlistFilterId
-                              ? (playlistFilterId.startsWith("apple:")
+                              ? (playlistFilterId === "__selection__"
+                                  ? `Selection (${librarySelection?.size ?? 0})`
+                                  : playlistFilterId.startsWith("apple:")
                                   ? playlistFilterId.slice(6)
                                   : importHistory.find((e) => e.id === playlistFilterId)?.name ?? "Playlist")
                               : "From Playlist"}
@@ -2146,10 +2197,11 @@ function AppInner() {
             <div className="flex-1 min-w-0 flex flex-col gap-4">
               {/* Energy Curve */}
               <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 mb-4">
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
                     Energy Curve
                   </h2>
+                  <InfoMark text="Draw the energy arc for your set. Each point sets the target energy level at that position — 0 is low/mellow, 1 is peak intensity. The generator picks tracks that match the curve as closely as possible." />
                 </div>
                 <EnergyCurveEditor
                   points={curve}
@@ -2287,8 +2339,31 @@ function AppInner() {
         </main>
       )}
 
+      {activeTab === "Library" && (
+        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">
+          <LibraryTab
+            isInitializing={isInitializing}
+            library={library}
+            onUpdateTrack={(file, patch) => {
+              setLibrary(lib => lib.map(s => s.file === file ? { ...s, ...patch } : s));
+            }}
+            onReanalyzed={(file, update) => {
+              setLibrary(lib => lib.map(s => s.file === file ? { ...s, ...update } : s));
+            }}
+            onRemoveTracks={(files) => {
+              setLibrary(lib => lib.filter(s => !files.includes(s.file)));
+            }}
+            onSendToGenerator={(files) => {
+              setLibrarySelection(new Set(files));
+              setPlaylistFilterId("__selection__");
+              setActiveTab("Set Generator");
+            }}
+          />
+        </main>
+      )}
+
       {activeTab === "History" && (
-        <main className="px-2 py-6">
+        <main className="px-2 py-6 flex-1 overflow-y-auto">
           <HistoryTab
             history={history}
             setHistory={setHistory}
@@ -2309,7 +2384,7 @@ function AppInner() {
       )}
 
       {activeTab === "Import" && (
-        <main className="px-2 py-6">
+        <main className="px-2 py-6 flex-1 overflow-y-auto">
           {/* Import input */}
           <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -3488,6 +3563,8 @@ function AppInner() {
           </div>
         </div>
       )}
+
+      </div>{/* end tab content wrapper */}
 
       <SettingsModal
         open={settingsOpen}

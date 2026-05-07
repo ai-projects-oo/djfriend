@@ -66,6 +66,8 @@ export interface AppSong {
   energy: number
   genres: string[]
   genresFromSpotify?: boolean
+  year?: number
+  comment?: string
   semanticTags?: SemanticTags
 }
 
@@ -603,6 +605,102 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     fs.createReadStream(APPLE_RESULTS_PATH).pipe(res)
   })
 
+  // Stream comment/year back-fill for already-loaded library entries that are missing them.
+  // Returns NDJSON: one JSON object per line: { filePath: string, comment?: string, year?: number }
+  // filePath is the absolute path — matches song.filePath in the frontend.
+  // Also writes updates back to both results files.
+  middlewares.use('/api/backfill-meta', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson')
+    res.setHeader('Transfer-Encoding', 'chunked')
+
+    // Collect entries from both results files
+    const entries: Array<{ resultsPath: string; key: string; song: AppSong }> = []
+    const collect = (resultsPath: string) => {
+      if (!fs.existsSync(resultsPath)) return
+      try {
+        const data = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+        for (const [key, song] of Object.entries(data)) {
+          if (!song.comment || song.year == null || song.duration == null) entries.push({ resultsPath, key, song })
+        }
+      } catch { /* ignore */ }
+    }
+    if (songsFolder) collect(path.join(songsFolder, 'results.json'))
+    collect(APPLE_RESULTS_PATH)
+
+    // De-duplicate by filePath so we don't read the same file twice
+    const seen = new Set<string>()
+    const unique = entries.filter(e => { const fp = e.song.filePath; if (!fp || seen.has(fp)) return false; seen.add(fp); return true })
+
+    // Dirty-tracking per results file
+    const dirty = new Set<string>()
+
+    for (const { resultsPath, song } of unique) {
+      const fp = song.filePath
+      if (!fp || !fs.existsSync(fp)) continue
+      try {
+        const needsDuration = song.duration == null
+        const meta = await mm.parseFile(fp, { skipCovers: true, duration: needsDuration })
+        const patch: { comment?: string; year?: number; duration?: number } = {}
+        // music-metadata returns IComment[] for ID3v2 (text field) or plain string[] for M4A — handle both
+        if (!song.comment) {
+          const raw = meta.common.comment
+          if (raw && raw.length > 0) {
+            const first = raw[0]
+            const text = typeof first === 'string' ? first : first.text
+            if (text && text.trim()) patch.comment = text.trim()
+          }
+        }
+        if (song.year == null && meta.common.year != null) patch.year = meta.common.year
+        if (needsDuration && meta.format.duration != null && meta.format.duration > 0) patch.duration = meta.format.duration
+        if (Object.keys(patch).length === 0) continue
+        Object.assign(song, patch)
+        dirty.add(resultsPath)
+        // Use filePath as the identifier — matches song.filePath in the frontend
+        res.write(JSON.stringify({ filePath: fp, ...patch }) + '\n')
+      } catch { /* skip */ }
+    }
+
+    // Write back to results files
+    for (const resultsPath of dirty) {
+      try {
+        const data = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+        for (const { key, song } of entries.filter(e => e.resultsPath === resultsPath)) {
+          if (data[key]) Object.assign(data[key], { ...(song.comment ? { comment: song.comment } : {}), ...(song.year != null ? { year: song.year } : {}), ...(song.duration != null ? { duration: song.duration } : {}) })
+        }
+        fs.writeFileSync(resultsPath, JSON.stringify(data, null, 2), 'utf-8')
+      } catch { /* ignore */ }
+    }
+
+    res.end()
+  })
+
+  // Re-derive semantic tags for all library entries using current rule set
+  // Streams NDJSON { filePath, semanticTags } patches so frontend can update in memory
+  middlewares.use('/api/rederive-tags', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson')
+    res.setHeader('Transfer-Encoding', 'chunked')
+
+    const rederive = (resultsPath: string) => {
+      if (!fs.existsSync(resultsPath)) return
+      let data: Record<string, AppSong>
+      try { data = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong> } catch { return }
+      let dirty = false
+      for (const [, song] of Object.entries(data)) {
+        const tags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres ?? [] })
+        song.semanticTags = tags
+        if (song.filePath) res.write(JSON.stringify({ filePath: song.filePath, semanticTags: tags }) + '\n')
+        dirty = true
+      }
+      if (dirty) { try { fs.writeFileSync(resultsPath, JSON.stringify(data, null, 2), 'utf-8') } catch { /* ignore */ } }
+    }
+
+    if (songsFolder) rederive(path.join(songsFolder, 'results.json'))
+    rederive(APPLE_RESULTS_PATH)
+    res.end()
+  })
+
   middlewares.use('/api/history', async (req, res, next) => {
     res.setHeader('Content-Type', 'application/json')
     if (req.method === 'GET') {
@@ -635,7 +733,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
       const defaultTip = { help: true, info: true, ai: true }
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip, platform: process.platform }))
       return
     }
     if (req.method === 'POST') {
@@ -795,6 +893,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       for (const song of Object.values(resultsJson)) {
         if (!song.semanticTags) song.semanticTags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres })
       }
+      fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
       fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
       const songs = Object.values(resultsJson)
       writeEvent({ type: 'done', total: rbTracks.length, analyzed: songs.length, libraryName: 'Rekordbox', songs, resultsJson })
@@ -921,18 +1020,34 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         completed++
         writeEvent({ type: 'progress', completed, total: validPaths.length, folder: label, file })
         const cached = existing[filePath]
-        if (cached) { resultsJson[filePath] = cached; continue }
+        if (cached) {
+          // Back-fill comment/year into older cached entries that were saved before these fields existed
+          if (!cached.comment || cached.year == null) {
+            try {
+              const meta = await mm.parseFile(filePath, { duration: false })
+              if (!cached.comment && meta.common.comment?.[0]?.text) cached.comment = meta.common.comment[0].text
+              if (cached.year == null && meta.common.year != null) cached.year = meta.common.year
+            } catch { /* non-fatal */ }
+          }
+          resultsJson[filePath] = cached; continue
+        }
         try {
           let localGenres: string[] = []
           let localArtist: string | null = null
           let localTitle: string = path.basename(filePath, path.extname(filePath))
           let localDuration: number | null = null
+          let localComment: string | undefined
+          let localYear: number | undefined
           try {
             const meta = await mm.parseFile(filePath, { duration: true })
             localGenres = meta.common.genre ?? []
             localArtist = meta.common.artist ?? null
             if (meta.common.title) localTitle = meta.common.title
             if (meta.format.duration != null) localDuration = meta.format.duration
+            // Eagerly read comment + year; also picked up by analyzeAudio but this
+            // ensures they're present even when analysis falls back to Spotify features
+            if (meta.common.comment?.[0]?.text) localComment = meta.common.comment[0].text
+            if (meta.common.year != null) localYear = meta.common.year
           } catch { /* ignore */ }
           const match = token ? await searchTrack(localArtist, localTitle, token) : null
           const [features, spotifyGenres] = await Promise.all([
@@ -950,7 +1065,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           const genres = localGenres.length > 0 ? localGenres : spotifyGenres
           const normalizedBpm = normalizeBpm(finalFeatures.bpm, finalFeatures.energy, genres, finalFeatures.tagBpm)
           const camelot = keyInfo.camelot
-          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizedBpm, key: keyInfo.keyName, camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(finalFeatures.year != null ? { year: finalFeatures.year } : {}), ...(finalFeatures.comment ? { comment: finalFeatures.comment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}), semanticTags: deriveSemanticTags({ bpm: normalizedBpm, camelot, energy: finalFeatures.energy, genres, ...finalFeatures.spectral }) }
+          const resolvedYear = finalFeatures.year ?? localYear
+          const resolvedComment = finalFeatures.comment ?? localComment
+          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizedBpm, key: keyInfo.keyName, camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(resolvedYear != null ? { year: resolvedYear } : {}), ...(resolvedComment ? { comment: resolvedComment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}), semanticTags: deriveSemanticTags({ bpm: normalizedBpm, camelot, energy: finalFeatures.energy, genres, ...finalFeatures.spectral }) }
         } catch { /* skip */ }
       }
       for (const song of Object.values(resultsJson)) {
@@ -1291,6 +1408,70 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Re-analysis failed' })
       res.end()
     }
+  })
+
+  // Album art: extract embedded cover from audio file on demand
+  middlewares.use('/api/album-art', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    const url = new URL(req.url ?? '', 'http://localhost')
+    const filePath = url.searchParams.get('path')
+    if (!filePath) { res.statusCode = 400; res.end('Missing path'); return }
+    const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(songsFolder ?? '', filePath)
+    if (!isPathAllowed(absolutePath, songsFolder, path.dirname(APPLE_RESULTS_PATH))) { res.statusCode = 403; res.end('Forbidden'); return }
+    if (!AUDIO_EXTENSIONS.has(path.extname(absolutePath).toLowerCase())) { res.statusCode = 400; res.end('Not an audio file'); return }
+    try {
+      const meta = await mm.parseFile(absolutePath, { skipCovers: false, duration: false })
+      const pic = meta.common.picture?.[0]
+      if (!pic) { res.statusCode = 404; res.end('No artwork'); return }
+      res.setHeader('Content-Type', pic.format)
+      res.setHeader('Cache-Control', 'public, max-age=86400')
+      res.end(pic.data)
+    } catch { res.statusCode = 500; res.end('Error reading artwork') }
+  })
+
+  // Patch track metadata in results.json (title, artist, genres) — does not touch ID3 tags
+  middlewares.use('/api/track-meta', async (req, res, next) => {
+    if (req.method !== 'PATCH') { next(); return }
+    let body: { file?: string; patch?: Partial<AppSong> }
+    try { body = JSON.parse(await new Promise<string>((resolve, reject) => { let d = ''; req.on('data', c => { d += c }); req.on('end', () => resolve(d)); req.on('error', reject) })) } catch { res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid JSON' })); return }
+    const { file, patch } = body
+    if (!file || !patch) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing file or patch' })); return }
+    const allowed: (keyof AppSong)[] = ['artist', 'title', 'genres', 'year', 'comment']
+    const safePatch: Partial<AppSong> = {}
+    for (const k of allowed) { if (k in patch) (safePatch as Record<string, unknown>)[k] = patch[k] }
+    if (Object.keys(safePatch).length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: 'No patchable fields' })); return }
+    const patchFile = (resultsPath: string, key: string): void => {
+      if (!fs.existsSync(resultsPath)) return
+      try {
+        const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+        if (!results[key]) return
+        Object.assign(results[key], safePatch)
+        fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+      } catch { /* ignore */ }
+    }
+    if (songsFolder) patchFile(path.join(songsFolder, 'results.json'), file)
+    patchFile(APPLE_RESULTS_PATH, file)
+    res.end(JSON.stringify({ ok: true }))
+  })
+
+  // Remove tracks from results.json by file key
+  middlewares.use('/api/remove-tracks', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    let body: { files?: string[] }
+    try { body = JSON.parse(await new Promise<string>((resolve, reject) => { let d = ''; req.on('data', c => { d += c }); req.on('end', () => resolve(d)); req.on('error', reject) })) } catch { res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid JSON' })); return }
+    const { files } = body
+    if (!Array.isArray(files) || files.length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing files array' })); return }
+    const removeFromFile = (resultsPath: string): void => {
+      if (!fs.existsSync(resultsPath)) return
+      try {
+        const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+        for (const f of files) delete results[f]
+        fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+      } catch { /* ignore */ }
+    }
+    if (songsFolder) removeFromFile(path.join(songsFolder, 'results.json'))
+    removeFromFile(APPLE_RESULTS_PATH)
+    res.end(JSON.stringify({ ok: true }))
   })
 
 }

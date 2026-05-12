@@ -1025,6 +1025,44 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     }
   })
 
+  // Fetch the highest-res image for a single release from the Discogs release endpoint.
+  // Results are cached in memory for the session to avoid repeat API calls.
+  const releaseImageCache = new Map<number, string>()
+  middlewares.use('/api/discogs/release-image', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    const qs = req.url?.split('?')[1] ?? ''
+    const idStr = new URLSearchParams(qs).get('id') ?? ''
+    const releaseId = parseInt(idStr, 10)
+    if (!releaseId) { res.writeHead(400); res.end(); return }
+    const s = readSettings()
+    if (!s.discogsAccessToken || !s.discogsAccessTokenSecret || !s.discogsConsumerKey || !s.discogsConsumerSecret) {
+      res.writeHead(401); res.end(); return
+    }
+    if (releaseImageCache.has(releaseId)) {
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ uri: releaseImageCache.get(releaseId) }))
+      return
+    }
+    try {
+      const url = `https://api.discogs.com/releases/${releaseId}`
+      const authHeader = discogsAuthHeader({
+        method: 'GET', url,
+        consumerKey: s.discogsConsumerKey, consumerSecret: s.discogsConsumerSecret,
+        token: s.discogsAccessToken, tokenSecret: s.discogsAccessTokenSecret,
+      })
+      const r = await fetch(url, { headers: { Authorization: authHeader, 'User-Agent': 'DJFriend/1.0 +https://djfriend.app' } })
+      if (!r.ok) { res.writeHead(r.status); res.end(); return }
+      const data = await r.json() as { images?: Array<{ type: string; uri: string; width: number; height: number }> }
+      const primary = data.images?.find(i => i.type === 'primary') ?? data.images?.[0]
+      const uri = primary?.uri ?? ''
+      if (uri) releaseImageCache.set(releaseId, uri)
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ uri }))
+    } catch {
+      res.writeHead(502); res.end()
+    }
+  })
+
   middlewares.use('/api/discogs/image-proxy', async (req, res, next) => {
     if (req.method !== 'GET') { next(); return }
     const qs  = req.url?.split('?')[1] ?? ''

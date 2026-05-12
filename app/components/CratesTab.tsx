@@ -86,12 +86,12 @@ interface Props {
 function VinylPlaceholder() {
   return (
     <div className="w-full h-full bg-[#0d0d14] flex items-center justify-center">
-      <svg viewBox="0 0 80 80" className="w-3/5 h-3/5 opacity-20" fill="currentColor">
-        <circle cx="40" cy="40" r="38" className="text-[#475569]" />
-        <circle cx="40" cy="40" r="28" className="text-[#0d0d14]" fill="#0d0d14" />
-        <circle cx="40" cy="40" r="24" className="text-[#2a2a3a]" />
-        <circle cx="40" cy="40" r="16" className="text-[#0d0d14]" fill="#0d0d14" />
-        <circle cx="40" cy="40" r="12" className="text-[#334155]" />
+      <svg viewBox="0 0 80 80" className="w-3/5 h-3/5" fill="currentColor">
+        <circle cx="40" cy="40" r="38" fill="#3f3f5a" />
+        <circle cx="40" cy="40" r="28" fill="#0d0d14" />
+        <circle cx="40" cy="40" r="24" fill="#2a2a40" />
+        <circle cx="40" cy="40" r="16" fill="#0d0d14" />
+        <circle cx="40" cy="40" r="12" fill="#3a3a52" />
         <circle cx="40" cy="40" r="4"  fill="#0d0d14" />
       </svg>
     </div>
@@ -109,11 +109,37 @@ function AlbumArt({ release, imageSrc, isManualLink, effectivelyMatched }: {
   isManualLink?: boolean;
   effectivelyMatched?: boolean;
 }) {
-  const [errored, setErrored] = useState(false);
+  const [errored, setErrored]       = useState(false);
+  const [hiRes, setHiRes]           = useState<string | null>(null);
+  const [hiResFailed, setHiResFailed] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Lazy-fetch full-res image when card enters viewport
+  useEffect(() => {
+    if (hiRes || hiResFailed || !imageSrc) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(entries => {
+      if (!entries[0].isIntersecting) return;
+      obs.disconnect();
+      fetch(`/api/discogs/release-image?id=${release.releaseId}`)
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then((d: { uri?: string }) => {
+          if (d.uri && !d.uri.includes('spacer.gif')) setHiRes(`/api/discogs/image-proxy?url=${encodeURIComponent(d.uri)}`);
+          else setHiResFailed(true);
+        })
+        .catch(() => setHiResFailed(true));
+    }, { rootMargin: '200px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [release.releaseId, imageSrc, hiRes, hiResFailed]);
+
+  const displaySrc = hiRes ?? imageSrc;
+
   return (
-    <div className="relative w-full aspect-square bg-[#0d0d14] overflow-hidden">
-      {imageSrc && !errored
-        ? <img src={imageSrc} alt={release.title} className="w-full h-full object-cover" onError={() => setErrored(true)} />
+    <div ref={containerRef} className="relative w-full aspect-square bg-[#0d0d14] overflow-hidden">
+      {displaySrc && !errored
+        ? <img src={displaySrc} alt={release.title} className="w-full h-full object-cover" onError={() => { if (hiRes) { setHiRes(null); setHiResFailed(true); } else setErrored(true); }} />
         : <VinylPlaceholder />
       }
       {effectivelyMatched && (
@@ -360,7 +386,7 @@ export default function CratesTab({
         {releases.length === 0 && (
           <p className="text-center text-[#475569] text-sm pt-16">No releases match your filter.</p>
         )}
-        <div className="grid grid-cols-3 gap-x-4 gap-y-6">
+        <div className="grid grid-cols-6 gap-x-3 gap-y-5">
           {releases.map(release => {
             const manual  = manualData.get(release.releaseId);
             const comment = manual?.comment;
@@ -381,7 +407,7 @@ export default function CratesTab({
             const q = encodeURIComponent(`${release.artist} ${release.title}`);
 
             return (
-              <div key={release.releaseId} className="group flex flex-col">
+              <div key={release.releaseId} className="group flex flex-col bg-white/5 rounded-lg overflow-hidden">
 
                 {/* ── Art ── */}
                 <AlbumArt
@@ -392,13 +418,13 @@ export default function CratesTab({
                 />
 
                 {/* ── Details ── */}
-                <div className="pt-2 pb-1 flex flex-col gap-1.5">
+                <div className="px-2 pt-2 pb-2 flex flex-col gap-1.5">
 
                   {/* Title + artist */}
                   <div>
-                    <p className="text-[13px] font-semibold text-[#e2e8f0] leading-snug line-clamp-2">{release.title}</p>
-                    <p className="text-[12px] text-[#64748b] leading-snug mt-0.5 truncate">by {release.artist}</p>
-                    {release.year && <p className="text-[11px] text-[#334155] mt-0.5">{release.year}</p>}
+                    <p className="text-[11px] font-bold text-[#f1f5f9] leading-snug line-clamp-2">{release.title}</p>
+                    <p className="text-[10px] font-medium text-[#94a3b8] leading-snug mt-0.5 truncate">{release.artist}</p>
+                    {release.year && <p className="text-[10px] font-semibold text-[#475569] mt-0.5">{release.year}</p>}
                   </div>
 
                   {/* BPM / key / energy */}

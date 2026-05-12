@@ -103,26 +103,24 @@ function proxyThumb(url?: string): string | undefined {
   return `/api/discogs/image-proxy?url=${encodeURIComponent(url)}`;
 }
 
-function AlbumArt({ release, thumbSrc, effectivelyMatched }: { release: DiscogsRelease; thumbSrc?: string; effectivelyMatched?: boolean }) {
+function AlbumArt({ release, imageSrc, isManualLink, effectivelyMatched }: {
+  release: DiscogsRelease;
+  imageSrc?: string;
+  isManualLink?: boolean;
+  effectivelyMatched?: boolean;
+}) {
   const [errored, setErrored] = useState(false);
-
-  const matchRing =
-    effectivelyMatched && release.matchConfidence === 'exact'  ? 'ring-2 ring-[#22c55e]' :
-    effectivelyMatched && release.matchConfidence === 'fuzzy'  ? 'ring-2 ring-[#f59e0b]' :
-    effectivelyMatched                                         ? 'ring-2 ring-[#7c3aed]' :
-    '';
-
   return (
-    <div className={`relative w-full flex items-center justify-center bg-[#0d0d14] rounded-md overflow-hidden min-h-[80px] ${matchRing}`}>
-      {thumbSrc && !errored
-        ? <img src={thumbSrc} alt={release.title} className="max-w-full w-auto h-auto max-h-[240px]" onError={() => setErrored(true)} />
-        : <div className="aspect-square w-full"><VinylPlaceholder /></div>
+    <div className="relative w-full aspect-square bg-[#0d0d14] overflow-hidden">
+      {imageSrc && !errored
+        ? <img src={imageSrc} alt={release.title} className="w-full h-full object-cover" onError={() => setErrored(true)} />
+        : <VinylPlaceholder />
       }
       {effectivelyMatched && (
-        <div className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full shadow ${
+        <div className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full shadow-lg ring-2 ring-black/40 ${
+          isManualLink                        ? 'bg-[#7c3aed]' :
           release.matchConfidence === 'exact' ? 'bg-[#22c55e]' :
-          release.matchConfidence === 'fuzzy' ? 'bg-[#f59e0b]' :
-          'bg-[#7c3aed]'
+                                                'bg-[#f59e0b]'
         }`} />
       )}
     </div>
@@ -362,18 +360,18 @@ export default function CratesTab({
         {releases.length === 0 && (
           <p className="text-center text-[#475569] text-sm pt-16">No releases match your filter.</p>
         )}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-x-4 gap-y-6">
           {releases.map(release => {
             const manual  = manualData.get(release.releaseId);
             const comment = manual?.comment;
-            const thumb   = proxyThumb(release.thumb);
+            const imageSrc = proxyThumb(release.coverImage ?? release.thumb);
             const isEditComment = editingComment === release.releaseId;
             const isLinking     = linking === release.releaseId;
 
             const manualLinkedSong = manual?.matchedFile
               ? library.find(s => s.file === manual.matchedFile)
               : null;
-            const effectivelyMatched = release.inLibrary || !!manualLinkedSong;
+            const effectivelyMatched   = release.inLibrary || !!manualLinkedSong;
             const effectiveMatchedFile = release.matchedFile ?? manual?.matchedFile;
             const bpm     = release.bpm     ?? manualLinkedSong?.bpm     ?? manual?.bpm;
             const camelot = release.camelot ?? manualLinkedSong?.camelot ?? manual?.camelot;
@@ -383,46 +381,54 @@ export default function CratesTab({
             const q = encodeURIComponent(`${release.artist} ${release.title}`);
 
             return (
-              <div key={release.releaseId}
-                className="group flex flex-col bg-[#12121a] rounded-lg border border-[#1a1a2a] hover:border-[#2a2a3a] transition-colors overflow-hidden relative">
+              <div key={release.releaseId} className="group flex flex-col">
 
-                <AlbumArt release={release} thumbSrc={thumb} effectivelyMatched={effectivelyMatched} />
+                {/* ── Art ── */}
+                <AlbumArt
+                  release={release}
+                  imageSrc={imageSrc}
+                  isManualLink={isManualLink}
+                  effectivelyMatched={effectivelyMatched}
+                />
 
-                {/* Info below art */}
-                <div className="flex flex-col gap-1.5 p-2 relative">
+                {/* ── Details ── */}
+                <div className="pt-2 pb-1 flex flex-col gap-1.5">
 
-                  {/* Artist + title */}
+                  {/* Title + artist */}
                   <div>
-                    <p className="text-[11px] font-semibold text-[#e2e8f0] truncate leading-tight">{release.artist}</p>
-                    <p className="text-[10px] text-[#64748b] truncate leading-tight mt-0.5">{release.title}</p>
-                    {release.year && <p className="text-[9px] text-[#334155] mt-0.5">{release.year}</p>}
+                    <p className="text-[13px] font-semibold text-[#e2e8f0] leading-snug line-clamp-2">{release.title}</p>
+                    <p className="text-[12px] text-[#64748b] leading-snug mt-0.5 truncate">by {release.artist}</p>
+                    {release.year && <p className="text-[11px] text-[#334155] mt-0.5">{release.year}</p>}
                   </div>
 
-                  {/* BPM + Key row */}
+                  {/* BPM / key / energy */}
                   {canEdit ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number" placeholder="BPM"
+                    <div className="flex items-center gap-1.5">
+                      <input type="number" placeholder="BPM"
                         defaultValue={manual?.bpm ?? ''}
                         onBlur={e => saveField(release.releaseId, 'bpm', e.target.value)}
-                        className="w-14 rounded px-1.5 py-0.5 text-[10px] font-medium bg-[#0d0d14] border border-[#2a2a3a] text-[#94a3b8] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] transition-colors tabular-nums"
+                        className="w-16 rounded px-2 py-1 text-[11px] bg-[#12121a] border border-[#2a2a3a] text-[#94a3b8] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] transition-colors tabular-nums"
                       />
-                      <input
-                        type="text" placeholder="Key"
+                      <input type="text" placeholder="Key"
                         defaultValue={manual?.camelot ?? ''}
                         onBlur={e => saveField(release.releaseId, 'camelot', e.target.value)}
-                        className="w-10 rounded px-1.5 py-0.5 text-[10px] font-medium bg-[#0d0d14] border border-[#2a2a3a] text-[#a78bfa] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] transition-colors uppercase"
+                        className="w-12 rounded px-2 py-1 text-[11px] bg-[#12121a] border border-[#2a2a3a] text-[#a78bfa] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] transition-colors uppercase"
                       />
                     </div>
                   ) : (
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {bpm     && <span className="text-[11px] text-[#94a3b8] tabular-nums">{Math.round(bpm)} BPM</span>}
+                        {camelot && <span className="text-[11px] font-bold text-[#a78bfa]">{camelot}</span>}
+                        {energy != null && (
+                          <div className="flex-1 min-w-[2rem] h-1 rounded-full bg-[#1e1e2e] overflow-hidden" title={`Energy ${Math.round(energy * 100)}%`}>
+                            <div className="h-full rounded-full bg-[#7c3aed]" style={{ width: `${energy * 100}%` }} />
+                          </div>
+                        )}
+                      </div>
                       {effectiveMatchedFile && (
                         <div className="flex items-center gap-1">
-                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                            isManualLink ? 'bg-[#7c3aed]' :
-                            release.matchConfidence === 'fuzzy' ? 'bg-[#f59e0b]' : 'bg-[#22c55e]'
-                          }`} />
-                          <p className="text-[9px] text-[#475569] truncate font-mono leading-tight flex-1">
+                          <p className="text-[10px] text-[#334155] truncate font-mono flex-1">
                             {effectiveMatchedFile.split(/[\\/]/).pop()}
                           </p>
                           <button type="button"
@@ -435,57 +441,47 @@ export default function CratesTab({
                           </button>
                         </div>
                       )}
-                      <div className="flex items-center gap-1.5">
-                        {bpm && <span className="text-[10px] font-semibold text-[#94a3b8] tabular-nums">{bpm}</span>}
-                        {camelot && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-[#7c3aed22] text-[#a78bfa]">{camelot}</span>}
-                        {energy != null && (
-                          <div className="flex-1 h-1 rounded-full bg-[#1e1e2e] overflow-hidden" title={`Energy ${Math.round(energy * 100)}%`}>
-                            <div className="h-full rounded-full bg-[#7c3aed]" style={{ width: `${energy * 100}%` }} />
-                          </div>
-                        )}
-                      </div>
                     </div>
                   )}
 
-                  {/* Comment (edit mode) */}
-                  {isEditComment && (
-                    <div className="flex flex-col gap-1">
+                  {/* Comment */}
+                  {isEditComment ? (
+                    <div className="flex flex-col gap-1.5">
                       <textarea ref={commentRef} placeholder="Notes…" defaultValue={comment ?? ''} rows={2}
-                        className="w-full rounded px-1.5 py-1 text-[10px] bg-[#0d0d14] border border-[#2a2a3a] text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] resize-none" />
-                      <div className="flex gap-1">
+                        className="w-full rounded px-2 py-1 text-[11px] bg-[#12121a] border border-[#2a2a3a] text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] resize-none" />
+                      <div className="flex gap-1.5">
                         <button type="button" onClick={() => saveComment(release.releaseId)}
-                          className="text-[9px] px-2 py-0.5 rounded bg-[#7c3aed] text-white cursor-pointer">Save</button>
+                          className="text-[10px] px-2.5 py-1 rounded bg-[#7c3aed] text-white cursor-pointer hover:bg-[#6d28d9] transition-colors">Save</button>
                         <button type="button" onClick={() => setEditingComment(null)}
-                          className="text-[9px] px-2 py-0.5 rounded border border-[#2a2a3a] text-[#64748b] cursor-pointer">Cancel</button>
+                          className="text-[10px] px-2.5 py-1 rounded border border-[#2a2a3a] text-[#64748b] cursor-pointer hover:text-[#94a3b8] transition-colors">Cancel</button>
                       </div>
                     </div>
-                  )}
-                  {!isEditComment && comment && (
-                    <p className="text-[9px] text-[#475569] italic line-clamp-2 cursor-pointer hover:text-[#64748b]"
+                  ) : comment ? (
+                    <p className="text-[11px] text-[#475569] italic line-clamp-2 cursor-pointer hover:text-[#64748b] transition-colors"
                       onClick={() => setEditingComment(release.releaseId)}>{comment}</p>
-                  )}
+                  ) : null}
 
-                  {/* Action row: store links + link + note + print */}
-                  <div className="flex items-center gap-1.5 pt-0.5">
+                  {/* ── Action row ── */}
+                  <div className="flex items-center gap-2 pt-1">
                     <a href={`https://www.discogs.com/release/${release.releaseId}`} target="_blank" rel="noopener noreferrer"
-                      className="text-[#475569] hover:text-white transition-colors cursor-pointer" title="Open on Discogs">
-                      <DiscogsIcon size={13} />
+                      className="text-[#334155] hover:text-white transition-colors" title="Open on Discogs">
+                      <DiscogsIcon size={14} />
                     </a>
                     <a href={`https://www.beatport.com/search/tracks?q=${q}`} target="_blank" rel="noopener noreferrer"
-                      className="text-[#475569] hover:text-[#01ff95] transition-colors cursor-pointer" title="Search on Beatport">
-                      <BeatportIcon size={13} />
+                      className="text-[#334155] hover:text-[#01ff95] transition-colors" title="Search on Beatport">
+                      <BeatportIcon size={14} />
                     </a>
                     <a href={`https://www.traxsource.com/search?term=${q}`} target="_blank" rel="noopener noreferrer"
-                      className="text-[#475569] hover:text-[#00aaff] transition-colors cursor-pointer" title="Search on Traxsource">
-                      <TraxsourceIcon size={13} />
+                      className="text-[#334155] hover:text-[#00aaff] transition-colors" title="Search on Traxsource">
+                      <TraxsourceIcon size={14} />
                     </a>
                     {hasSpotify && (
                       <a href={`https://open.spotify.com/search/${q}`} target="_blank" rel="noopener noreferrer"
-                        className="text-[#475569] hover:text-[#1db954] transition-colors cursor-pointer" title="Search on Spotify">
-                        <SpotifyIcon size={13} />
+                        className="text-[#334155] hover:text-[#1db954] transition-colors" title="Search on Spotify">
+                        <SpotifyIcon size={14} />
                       </a>
                     )}
-                    <div className="flex items-center gap-1.5 ml-auto">
+                    <div className="flex items-center gap-2 ml-auto">
                       <button type="button"
                         onClick={() => setLinking(isLinking ? null : release.releaseId)}
                         className={`transition-colors cursor-pointer ${isLinking ? 'text-[#7c3aed]' : 'text-[#334155] hover:text-[#a78bfa]'}`}
@@ -502,7 +498,7 @@ export default function CratesTab({
                         </svg>
                       </button>
                       <button type="button"
-                        onClick={() => printSticker({ artist: release.artist, title: release.title, year: release.year, bpm, camelot, genres: release.genres, styles: release.styles, comment, thumb })}
+                        onClick={() => printSticker({ artist: release.artist, title: release.title, year: release.year, bpm, camelot, genres: release.genres, styles: release.styles, comment, thumb: proxyThumb(release.thumb) })}
                         className="text-[#334155] hover:text-[#94a3b8] transition-colors cursor-pointer" title="Print sticker">
                         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
                           <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>

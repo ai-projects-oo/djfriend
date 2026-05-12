@@ -90,7 +90,8 @@ function parseDiscogsReleases(raw: DiscogsRawRelease[]) {
   return raw.map(r => {
     const info = r.basic_information
     const artist = info.artists.map(a => a.name.replace(/\s*\(\d+\)$/, '')).join(', ')
-    const thumb = info.thumb && !info.thumb.includes('spacer.gif') ? info.thumb : undefined
+    const thumb      = info.thumb        && !info.thumb.includes('spacer.gif')        ? info.thumb        : undefined
+    const coverImage = info.cover_image  && !info.cover_image.includes('spacer.gif') ? info.cover_image  : undefined
     return {
       releaseId: info.id,
       title:     info.title,
@@ -100,7 +101,8 @@ function parseDiscogsReleases(raw: DiscogsRawRelease[]) {
       genres:    info.genres ?? [],
       styles:    info.styles ?? [],
       inLibrary: false as boolean,
-      ...(thumb ? { thumb } : {}),
+      ...(thumb      ? { thumb }      : {}),
+      ...(coverImage ? { coverImage } : {}),
     }
   })
 }

@@ -155,6 +155,7 @@ export interface DiscogsRelease {
   manualMatchFile?: string;
   matchedFile?:     string;
   thumb?:           string;
+  coverImage?:      string;  // higher-res image from Discogs (600px+)
   bpm?:             number;
   camelot?:         string;
   energy?:          number;

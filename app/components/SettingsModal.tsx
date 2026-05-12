@@ -98,12 +98,6 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [hasDiscogsConsumerKey, setHasDiscogsConsumerKey] = useState(false)
   const [discogsConnectedAs, setDiscogsConnectedAs] = useState('')
 
-  const [hasGroqKey, setHasGroqKey] = useState(false)
-  const [learnGenre, setLearnGenre] = useState('')
-  const [learnPhase, setLearnPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [learnMessage, setLearnMessage] = useState('')
-  const [hasMixcloudPatterns, setHasMixcloudPatterns] = useState(false)
-
   async function checkPath(folderPath: string, setStatus: (s: PathStatus) => void) {
     if (!folderPath.trim()) { setStatus('idle'); return }
     setStatus('checking')
@@ -124,7 +118,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; tipConfig?: { help: boolean; info: boolean; ai: boolean }; hasDiscogsOAuth?: boolean; discogsUsername?: string; hasDiscogsConsumerKey?: boolean; hasGroqKey?: boolean; hasMixcloudPatterns?: boolean }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; tipConfig?: { help: boolean; info: boolean; ai: boolean }; hasDiscogsOAuth?: boolean; discogsUsername?: string; hasDiscogsConsumerKey?: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
         loadedMusicFolder.current = d.musicFolder ?? ''
         setRekordboxFolder(d.rekordboxFolder ?? '')
@@ -139,8 +133,6 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         setHasDiscogsOAuth(d.hasDiscogsOAuth ?? false)
         setHasDiscogsConsumerKey(d.hasDiscogsConsumerKey ?? false)
         setDiscogsConnectedAs(d.discogsUsername ?? '')
-        setHasGroqKey(d.hasGroqKey ?? false)
-        setHasMixcloudPatterns(d.hasMixcloudPatterns ?? false)
       })
       .catch(() => {})
   }, [open])
@@ -178,43 +170,6 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
   function triggerSync() {
     if (onSyncDiscogs) onSyncDiscogs()
-  }
-
-  async function learnMixcloud() {
-    if (!learnGenre.trim()) return
-    setLearnPhase('running')
-    setLearnMessage('Starting…')
-    try {
-      const res = await apiFetch('/api/ai/learn-mixcloud', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ genre: learnGenre.trim() }),
-      })
-      const reader = res.body?.getReader()
-      const decoder = new TextDecoder()
-      if (!reader) throw new Error('No stream')
-      let buf = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        const lines = buf.split('\n')
-        buf = lines.pop() ?? ''
-        for (const line of lines) {
-          if (!line.trim()) continue
-          try {
-            const evt = JSON.parse(line) as { phase: string; message?: string; loaded?: number; total?: number }
-            if (evt.phase === 'done') { setLearnPhase('done'); setHasMixcloudPatterns(true); setLearnMessage(`Done! Learned patterns for "${learnGenre}".`) }
-            else if (evt.phase === 'error') { setLearnPhase('error'); setLearnMessage(evt.message ?? 'Failed.') }
-            else if (evt.loaded != null && evt.total != null) setLearnMessage(`Fetching sets… ${evt.loaded}/${evt.total}`)
-            else if (evt.message) setLearnMessage(evt.message)
-          } catch { /* ignore malformed */ }
-        }
-      }
-    } catch (e) {
-      setLearnPhase('error')
-      setLearnMessage(e instanceof Error ? e.message : 'Failed.')
-    }
   }
 
   async function clearDatabase() {
@@ -496,44 +451,6 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             </div>
           </div>
         </div>
-
-        {/* ── AI (Mixcloud learning — only shown when server has Groq key) ── */}
-        {hasGroqKey && (
-          <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">
-              AI Set Planner
-              {hasMixcloudPatterns && <span className="ml-2 normal-case tracking-normal font-normal text-[#22c55e]">● Active</span>}
-            </h3>
-            <div className="space-y-2">
-              <label className="block text-xs text-[#64748b]">Teach AI a genre from Mixcloud</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={learnGenre}
-                  onChange={e => setLearnGenre(e.target.value)}
-                  placeholder="e.g. techno, house, drum and bass"
-                  disabled={learnPhase === 'running'}
-                  className="flex-1 rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors disabled:opacity-50"
-                  onKeyDown={e => { if (e.key === 'Enter') void learnMixcloud() }}
-                />
-                <button
-                  type="button"
-                  onClick={learnMixcloud}
-                  disabled={learnPhase === 'running' || !learnGenre.trim()}
-                  className="px-3 py-1.5 text-xs font-medium rounded-md border border-[#2a2a3a] text-[#94a3b8] hover:text-white hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  {learnPhase === 'running' ? 'Learning…' : '↺ Learn'}
-                </button>
-              </div>
-              {learnMessage && (
-                <p className={`text-[11px] ${learnPhase === 'error' ? 'text-[#ef4444]' : learnPhase === 'done' ? 'text-[#22c55e]' : 'text-[#475569]'}`}>
-                  {learnMessage}
-                </p>
-              )}
-              <p className="text-[11px] text-[#334155]">Analyzes real DJ sets to auto-tune energy curves and scoring weights on Generate.</p>
-            </div>
-          </div>
-        )}
 
         {/* ── Danger Zone (both platforms) ─────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#1e1e2e]">

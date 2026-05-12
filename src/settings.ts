@@ -29,8 +29,6 @@ export interface Settings {
   discogsAccessToken?:        string
   discogsAccessTokenSecret?:  string
   discogsUsername?:           string
-  groqApiKey?:                string  // set via GROQ_API_KEY env var; never exposed to client
-  mixcloudPatterns?:          string  // JSON-serialised MixcloudPatterns; updated by /api/ai/learn-mixcloud
 }
 
 export function readSettings(): Partial<Settings> {
@@ -41,7 +39,6 @@ export function readSettings(): Partial<Settings> {
     ...(process.env.SONGS_FOLDER ? { musicFolder: process.env.SONGS_FOLDER } : {}),
     ...(process.env.DISCOGS_CONSUMER_KEY ? { discogsConsumerKey: process.env.DISCOGS_CONSUMER_KEY } : {}),
     ...(process.env.DISCOGS_CONSUMER_SECRET ? { discogsConsumerSecret: process.env.DISCOGS_CONSUMER_SECRET } : {}),
-    ...(process.env.GROQ_API_KEY ? { groqApiKey: process.env.GROQ_API_KEY } : {}),
   }
   try {
     if (!fs.existsSync(SETTINGS_PATH)) return fromEnv

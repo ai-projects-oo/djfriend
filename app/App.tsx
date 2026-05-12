@@ -38,6 +38,7 @@ import { transitionFeatures } from "./lib/mlFeatures";
 import { blendModels, isValidModelWeights } from "./lib/mlModel";
 import { SCORE_THRESHOLDS } from "./lib/setScore";
 import VenuePlannerPanel from "./components/VenuePlannerPanel";
+import AIPlannerPanel from "./components/AIPlannerPanel";
 import SuggestionsStrip from "./components/SuggestionsStrip";
 import CratesTab from "./components/CratesTab";
 import type { SetPlan } from "./types";
@@ -217,6 +218,8 @@ function AppInner() {
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
   const [hasDiscogsOAuth, setHasDiscogsOAuth] = useState(false);
+  const [hasGroqKey, setHasGroqKey] = useState(false);
+  const [aiPlannerOpen, setAiPlannerOpen] = useState(false);
   const [isMacOS, setIsMacOS] = useState(true); // assume macOS until settings load
   const [energyCheckThreshold, setEnergyCheckThreshold] = useState(0.12);
   const [onboardingDismissed, setOnboardingDismissed] = useState(
@@ -660,6 +663,7 @@ function AppInner() {
         if (d.musicFolder) setFolderPath((prev) => prev || d.musicFolder!);
         if (d.hasSecret !== undefined) setHasSpotifyCredentials(d.hasSecret);
         if ((d as { hasDiscogsOAuth?: boolean }).hasDiscogsOAuth !== undefined) setHasDiscogsOAuth(!!(d as { hasDiscogsOAuth?: boolean }).hasDiscogsOAuth);
+        if ((d as { hasGroqKey?: boolean }).hasGroqKey !== undefined) setHasGroqKey(!!(d as { hasGroqKey?: boolean }).hasGroqKey);
         setHasRekordboxFolder(
           !!(d.rekordboxFolder && d.rekordboxFolder.trim()),
         );
@@ -1048,6 +1052,18 @@ function AppInner() {
                   );
                 })}
               </div>
+            )}
+
+            {hasGroqKey && (
+              <button
+                onClick={() => setAiPlannerOpen(o => !o)}
+                title="AI Set Planner"
+                className={`p-1.5 transition-colors cursor-pointer ${aiPlannerOpen ? 'text-[#a78bfa]' : 'text-[#475569] hover:text-[#a78bfa]'}`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M20 14v6"/><path d="M17 17h6"/>
+                </svg>
+              </button>
             )}
 
             <div className="relative">
@@ -3778,6 +3794,16 @@ function AppInner() {
         discogsSyncPhase={discogsSyncStatus.phase}
         discogsSyncMessage={discogsSyncStatus.phase === 'error' ? discogsSyncStatus.message : undefined}
       />
+
+      {/* ── AI Set Planner slide-in panel ── */}
+      {aiPlannerOpen && (
+        <AIPlannerPanel
+          onClose={() => setAiPlannerOpen(false)}
+          onApply={handleApplyPlan}
+          availableGenres={[...new Set(library.flatMap(s => s.genres))].sort()}
+          librarySize={library.length}
+        />
+      )}
 
     </div>
   );

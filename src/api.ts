@@ -793,7 +793,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
       const defaultTip = { help: true, info: true, ai: true }
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip, hasDiscogsOAuth: !!(s.discogsAccessToken && s.discogsUsername), discogsUsername: s.discogsUsername ?? '', hasDiscogsConsumerKey: !!(s.discogsConsumerKey && s.discogsConsumerSecret), platform: process.platform }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip, hasDiscogsOAuth: !!(s.discogsAccessToken && s.discogsUsername), discogsUsername: s.discogsUsername ?? '', hasDiscogsConsumerKey: !!(s.discogsConsumerKey && s.discogsConsumerSecret), platform: process.platform, hasGroqKey: !!s.groqApiKey, hasMixcloudPatterns: !!s.mixcloudPatterns }))
       return
     }
     if (req.method === 'POST') {
@@ -807,6 +807,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (typeof body.energyCheckThreshold === 'number') updates.energyCheckThreshold = Math.max(0.12, Math.min(1, body.energyCheckThreshold))
       if (typeof body.shareTelemetry === 'boolean') updates.shareTelemetry = body.shareTelemetry
       if (body.tipConfig && typeof body.tipConfig === 'object') updates.tipConfig = body.tipConfig as { help: boolean; info: boolean; ai: boolean }
+      if (typeof body.groqApiKey === 'string') updates.groqApiKey = body.groqApiKey.trim() || undefined
       writeSettings(updates)
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))
@@ -1800,6 +1801,130 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (songsFolder) removeFromFile(path.join(songsFolder, 'results.json'))
     removeFromFile(APPLE_RESULTS_PATH)
     res.end(JSON.stringify({ ok: true }))
+  })
+
+  // ── AI: Learn from Mixcloud ────────────────────────────────────────────────
+  middlewares.use('/api/ai/learn-mixcloud', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    const s = readSettings()
+    if (!s.groqApiKey) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No Groq API key configured.' })); return }
+    const body = await readJsonBody(req) as { genre?: string }
+    const genre = (body.genre ?? 'techno').trim()
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const write = (obj: Record<string, unknown>) => res.write(`${JSON.stringify(obj)}\n`)
+    try {
+      // 1. Search Mixcloud for sets in this genre
+      write({ phase: 'fetching', message: `Searching Mixcloud for "${genre}" sets…` })
+      const searchUrl = `https://api.mixcloud.com/search/?q=${encodeURIComponent(genre)}&type=cloudcast&limit=50`
+      const searchRes = await fetch(searchUrl, { headers: { 'User-Agent': 'DJFriend/1.0' } })
+      if (!searchRes.ok) throw new Error(`Mixcloud search failed: ${searchRes.status}`)
+      const searchData = await searchRes.json() as { data: Array<{ key: string; name: string }> }
+      const cloudcasts = searchData.data ?? []
+      write({ phase: 'fetching', message: `Found ${cloudcasts.length} sets. Fetching tracklists…`, total: cloudcasts.length })
+
+      // 2. Fetch sections (tracklists) for each cloudcast
+      interface Section { artist?: { name: string }; song?: { name: string }; start_time?: number }
+      const transitions: Array<{ fromBpm?: number; toBpm?: number; fromKey?: string; toKey?: string }> = []
+      let fetched = 0
+      for (const cc of cloudcasts) {
+        try {
+          await new Promise(r => setTimeout(r, 500)) // respect rate limit
+          const secUrl = `https://api.mixcloud.com${cc.key}sections/`
+          const secRes = await fetch(secUrl, { headers: { 'User-Agent': 'DJFriend/1.0' } })
+          if (!secRes.ok) { fetched++; continue }
+          const secData = await secRes.json() as { data: Section[] }
+          const tracks = secData.data ?? []
+          for (let i = 1; i < tracks.length; i++) {
+            transitions.push({ fromKey: undefined, toKey: undefined }) // keys not in Mixcloud data
+          }
+          fetched++
+          write({ phase: 'fetching', loaded: fetched, total: cloudcasts.length })
+        } catch { fetched++ }
+      }
+
+      // 3. Ask Groq to analyze and produce structured patterns
+      write({ phase: 'analyzing', message: 'Analyzing patterns with AI…' })
+      const { OpenAI } = await import('openai')
+      const groq = new OpenAI({ apiKey: s.groqApiKey, baseURL: 'https://api.groq.com/openai/v1' })
+
+      const prompt = `You are a DJ set analyst. Based on ${cloudcasts.length} "${genre}" DJ sets found on Mixcloud, produce a JSON object describing typical set patterns for this genre. Include:
+- typical BPM range (min, max, peak)
+- typical energy arc (array of {position: 0-1, energy: 0-1} points)
+- recommended scoring weights (harmonicWeight, bpmWeight, energyWeight summing to 1.0)
+- a one-sentence description of the genre's set style
+Return ONLY valid JSON matching this schema exactly:
+{"genre":"string","bpmMin":number,"bpmMax":number,"bpmPeak":number,"energyArc":[{"x":number,"y":number}],"scoringWeights":{"harmonicWeight":number,"bpmWeight":number,"energyWeight":number},"description":"string","setsAnalyzed":number}`
+
+      const completion = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+      })
+
+      const patterns = JSON.parse(completion.choices[0].message.content ?? '{}') as Record<string, unknown>
+      patterns.setsAnalyzed = cloudcasts.length
+      patterns.genre = genre
+
+      // 4. Store patterns in settings
+      const existing = s.mixcloudPatterns ? JSON.parse(s.mixcloudPatterns) as Record<string, unknown> : {}
+      existing[genre] = patterns
+      writeSettings({ mixcloudPatterns: JSON.stringify(existing) })
+
+      write({ phase: 'done', genre, patterns })
+      res.end()
+    } catch (err) {
+      write({ phase: 'error', message: err instanceof Error ? err.message : 'Learning failed.' })
+      res.end()
+    }
+  })
+
+  // ── AI: Plan a set ────────────────────────────────────────────────────────
+  middlewares.use('/api/ai/plan-set', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    const s = readSettings()
+    if (!s.groqApiKey) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: 'No Groq API key configured.' })); return }
+    const body = await readJsonBody(req) as { prompt?: string; librarySize?: number; availableGenres?: string[] }
+    if (!body.prompt?.trim()) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: 'Missing prompt.' })); return }
+    try {
+      const { OpenAI } = await import('openai')
+      const groq = new OpenAI({ apiKey: s.groqApiKey, baseURL: 'https://api.groq.com/openai/v1' })
+
+      const patterns = s.mixcloudPatterns ? JSON.parse(s.mixcloudPatterns) as Record<string, unknown> : {}
+      const patternSummary = Object.keys(patterns).length > 0
+        ? `\n\nLearned genre patterns from Mixcloud:\n${JSON.stringify(patterns, null, 2)}`
+        : ''
+
+      const systemPrompt = `You are an expert DJ set planner. Given a DJ's gig description, return a JSON set plan.
+Available genres in library: ${(body.availableGenres ?? []).join(', ') || 'mixed'}.
+Library size: ${body.librarySize ?? 'unknown'} tracks.${patternSummary}
+
+Return ONLY valid JSON matching this exact schema:
+{"curve":[{"x":number,"y":number}],"bpmMin":number,"bpmMax":number,"bpmTarget":number,"scoringWeights":{"harmonicWeight":number,"bpmWeight":number,"energyWeight":number},"reasoning":"string"}
+
+Rules:
+- curve must have 4-6 points, x from 0 to 1, y from 0 to 1
+- scoringWeights must sum to 1.0
+- reasoning is one sentence explaining the plan`
+
+      const completion = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: body.prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.4,
+      })
+
+      const plan = JSON.parse(completion.choices[0].message.content ?? '{}')
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true, plan }))
+    } catch (err) {
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Planning failed.' }))
+    }
   })
 
 }

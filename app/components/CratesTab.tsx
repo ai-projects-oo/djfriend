@@ -113,10 +113,10 @@ function AlbumArt({ release, thumbSrc, effectivelyMatched }: { release: DiscogsR
     '';
 
   return (
-    <div className={`relative aspect-square w-full overflow-hidden rounded-md bg-[#0d0d14] ${matchRing}`}>
+    <div className={`relative w-full flex items-center justify-center bg-[#0d0d14] rounded-md overflow-hidden min-h-[80px] ${matchRing}`}>
       {thumbSrc && !errored
-        ? <img src={thumbSrc} alt={release.title} className="w-full h-full object-cover" onError={() => setErrored(true)} />
-        : <VinylPlaceholder />
+        ? <img src={thumbSrc} alt={release.title} className="max-w-full w-auto h-auto max-h-[240px]" onError={() => setErrored(true)} />
+        : <div className="aspect-square w-full"><VinylPlaceholder /></div>
       }
       {effectivelyMatched && (
         <div className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full shadow ${
@@ -386,10 +386,7 @@ export default function CratesTab({
               <div key={release.releaseId}
                 className="group flex flex-col bg-[#12121a] rounded-lg border border-[#1a1a2a] hover:border-[#2a2a3a] transition-colors overflow-hidden relative">
 
-                {/* Album art — full width square */}
-                <div className="w-full aspect-square">
-                  <AlbumArt release={release} thumbSrc={thumb} effectivelyMatched={effectivelyMatched} />
-                </div>
+                <AlbumArt release={release} thumbSrc={thumb} effectivelyMatched={effectivelyMatched} />
 
                 {/* Info below art */}
                 <div className="flex flex-col gap-1.5 p-2 relative">

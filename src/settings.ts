@@ -29,6 +29,8 @@ export interface Settings {
   discogsAccessToken?:        string
   discogsAccessTokenSecret?:  string
   discogsUsername?:           string
+  groqApiKey?:                string
+  mixcloudPatterns?:          string  // JSON-serialised MixcloudPatterns; updated by /api/ai/learn-mixcloud
 }
 
 export function readSettings(): Partial<Settings> {

@@ -422,11 +422,14 @@ function AppInner() {
     const files = new Set<string>();
     for (const r of discogsCollection.releases) {
       if (cratesRejected.has(r.releaseId)) continue;
-      if (r.matchedFile && r.energy != null) { files.add(r.matchedFile); continue; }
+      if (r.matchedFile) {
+        const linked = library.find(s => s.file === r.matchedFile);
+        if (linked && linked.bpm > 0 && linked.camelot && linked.energy != null) { files.add(r.matchedFile); continue; }
+      }
       const manual = cratesManualData.get(r.releaseId);
       if (manual?.matchedFile) {
         const linked = library.find(s => s.file === manual.matchedFile);
-        if (linked?.energy != null) files.add(manual.matchedFile);
+        if (linked && linked.bpm > 0 && linked.camelot && linked.energy != null) files.add(manual.matchedFile);
       }
     }
     return files.size > 0 ? files : undefined;

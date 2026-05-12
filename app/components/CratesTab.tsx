@@ -407,7 +407,7 @@ export default function CratesTab({
             const q = encodeURIComponent(`${release.artist} ${release.title}`);
 
             return (
-              <div key={release.releaseId} className="group flex flex-col bg-white/5 rounded-lg overflow-hidden">
+              <div key={release.releaseId} className="group flex flex-col bg-white/15 rounded-lg overflow-hidden">
 
                 {/* ── Art ── */}
                 <AlbumArt
@@ -422,9 +422,9 @@ export default function CratesTab({
 
                   {/* Title + artist */}
                   <div>
-                    <p className="text-[11px] font-bold text-[#f1f5f9] leading-snug line-clamp-2">{release.title}</p>
-                    <p className="text-[10px] font-medium text-[#94a3b8] leading-snug mt-0.5 truncate">{release.artist}</p>
-                    {release.year && <p className="text-[10px] font-semibold text-[#475569] mt-0.5">{release.year}</p>}
+                    <p className="text-[11px] font-bold text-white leading-snug line-clamp-2">{release.title}</p>
+                    <p className="text-[10px] font-medium text-white/70 leading-snug mt-0.5 truncate">{release.artist}</p>
+                    {release.year && <p className="text-[10px] font-semibold text-white/40 mt-0.5">{release.year}</p>}
                   </div>
 
                   {/* BPM / key / energy */}
@@ -433,33 +433,33 @@ export default function CratesTab({
                       <input type="number" placeholder="BPM"
                         defaultValue={manual?.bpm ?? ''}
                         onBlur={e => saveField(release.releaseId, 'bpm', e.target.value)}
-                        className="w-16 rounded px-2 py-1 text-[11px] bg-[#12121a] border border-[#2a2a3a] text-[#94a3b8] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] transition-colors tabular-nums"
+                        className="w-full rounded-md px-2 py-1.5 text-[12px] font-semibold bg-white/10 border border-white/20 text-white placeholder-white/30 focus:outline-none focus:border-[#7c3aed] focus:bg-white/15 transition-colors tabular-nums"
                       />
                       <input type="text" placeholder="Key"
                         defaultValue={manual?.camelot ?? ''}
                         onBlur={e => saveField(release.releaseId, 'camelot', e.target.value)}
-                        className="w-12 rounded px-2 py-1 text-[11px] bg-[#12121a] border border-[#2a2a3a] text-[#a78bfa] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] transition-colors uppercase"
+                        className="w-full rounded-md px-2 py-1.5 text-[12px] font-semibold bg-white/10 border border-white/20 text-[#a78bfa] placeholder-white/30 focus:outline-none focus:border-[#7c3aed] focus:bg-white/15 transition-colors uppercase"
                       />
                     </div>
                   ) : (
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {bpm     && <span className="text-[11px] text-[#94a3b8] tabular-nums">{Math.round(bpm)} BPM</span>}
-                        {camelot && <span className="text-[11px] font-bold text-[#a78bfa]">{camelot}</span>}
+                        {bpm     && <span className="text-[11px] font-semibold text-white/80 tabular-nums">{Math.round(bpm)} BPM</span>}
+                        {camelot && <span className="text-[11px] font-bold text-[#c4b5fd]">{camelot}</span>}
                         {energy != null && (
-                          <div className="flex-1 min-w-[2rem] h-1 rounded-full bg-[#1e1e2e] overflow-hidden" title={`Energy ${Math.round(energy * 100)}%`}>
-                            <div className="h-full rounded-full bg-[#7c3aed]" style={{ width: `${energy * 100}%` }} />
+                          <div className="flex-1 min-w-[2rem] h-1.5 rounded-full bg-white/10 overflow-hidden" title={`Energy ${Math.round(energy * 100)}%`}>
+                            <div className="h-full rounded-full bg-[#a78bfa]" style={{ width: `${energy * 100}%` }} />
                           </div>
                         )}
                       </div>
                       {effectiveMatchedFile && (
                         <div className="flex items-center gap-1">
-                          <p className="text-[10px] text-[#334155] truncate font-mono flex-1">
+                          <p className="text-[10px] text-white/40 truncate font-mono flex-1">
                             {effectiveMatchedFile.split(/[\\/]/).pop()}
                           </p>
                           <button type="button"
                             onClick={() => isManualLink ? unlinkFile(release.releaseId) : rejectMatch(release.releaseId)}
-                            className="flex-shrink-0 text-[#334155] hover:text-[#ef4444] transition-colors cursor-pointer"
+                            className="flex-shrink-0 text-white/30 hover:text-[#ef4444] transition-colors cursor-pointer"
                             title={isManualLink ? 'Remove link' : 'Remove match'}>
                             <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                               <line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/>
@@ -483,34 +483,34 @@ export default function CratesTab({
                       </div>
                     </div>
                   ) : comment ? (
-                    <p className="text-[11px] text-[#475569] italic line-clamp-2 cursor-pointer hover:text-[#64748b] transition-colors"
+                    <p className="text-[11px] text-white/40 italic line-clamp-2 cursor-pointer hover:text-white/60 transition-colors"
                       onClick={() => setEditingComment(release.releaseId)}>{comment}</p>
                   ) : null}
 
                   {/* ── Action row ── */}
                   <div className="flex items-center gap-2 pt-1">
                     <a href={`https://www.discogs.com/release/${release.releaseId}`} target="_blank" rel="noopener noreferrer"
-                      className="text-[#334155] hover:text-white transition-colors" title="Open on Discogs">
+                      className="text-white/35 hover:text-white transition-colors" title="Open on Discogs">
                       <DiscogsIcon size={14} />
                     </a>
                     <a href={`https://www.beatport.com/search/tracks?q=${q}`} target="_blank" rel="noopener noreferrer"
-                      className="text-[#334155] hover:text-[#01ff95] transition-colors" title="Search on Beatport">
+                      className="text-white/35 hover:text-[#01ff95] transition-colors" title="Search on Beatport">
                       <BeatportIcon size={14} />
                     </a>
                     <a href={`https://www.traxsource.com/search?term=${q}`} target="_blank" rel="noopener noreferrer"
-                      className="text-[#334155] hover:text-[#00aaff] transition-colors" title="Search on Traxsource">
+                      className="text-white/35 hover:text-[#00aaff] transition-colors" title="Search on Traxsource">
                       <TraxsourceIcon size={14} />
                     </a>
                     {hasSpotify && (
                       <a href={`https://open.spotify.com/search/${q}`} target="_blank" rel="noopener noreferrer"
-                        className="text-[#334155] hover:text-[#1db954] transition-colors" title="Search on Spotify">
+                        className="text-white/35 hover:text-[#1db954] transition-colors" title="Search on Spotify">
                         <SpotifyIcon size={14} />
                       </a>
                     )}
                     <div className="flex items-center gap-2 ml-auto">
                       <button type="button"
                         onClick={() => setLinking(isLinking ? null : release.releaseId)}
-                        className={`transition-colors cursor-pointer ${isLinking ? 'text-[#7c3aed]' : 'text-[#334155] hover:text-[#a78bfa]'}`}
+                        className={`transition-colors cursor-pointer ${isLinking ? 'text-[#a78bfa]' : 'text-white/35 hover:text-[#a78bfa]'}`}
                         title="Link digital file">
                         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                           <path d="M7 9a3 3 0 0 0 4.243 0l2-2a3 3 0 0 0-4.243-4.243l-1 1"/>
@@ -518,14 +518,14 @@ export default function CratesTab({
                         </svg>
                       </button>
                       <button type="button" onClick={() => setEditingComment(release.releaseId)}
-                        className="text-[#334155] hover:text-[#a78bfa] transition-colors cursor-pointer" title="Add note">
+                        className="text-white/35 hover:text-[#a78bfa] transition-colors cursor-pointer" title="Add note">
                         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
                           <path d="M2 2h12v9H9.5l-2 2.5L5.5 11H2V2zm1 1v7h2.9l1.6 2 1.6-2H13V3H3z"/>
                         </svg>
                       </button>
                       <button type="button"
                         onClick={() => printSticker({ artist: release.artist, title: release.title, year: release.year, bpm, camelot, genres: release.genres, styles: release.styles, comment, thumb: proxyThumb(release.thumb) })}
-                        className="text-[#334155] hover:text-[#94a3b8] transition-colors cursor-pointer" title="Print sticker">
+                        className="text-white/35 hover:text-white/80 transition-colors cursor-pointer" title="Print sticker">
                         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
                           <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
                           <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>

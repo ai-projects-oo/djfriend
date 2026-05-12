@@ -5,7 +5,7 @@ import { config } from 'dotenv'
 
 config() // load .env if present
 
-function getSettingsDir(): string {
+export function getSettingsDir(): string {
   if (process.platform === 'win32') return path.join(process.env.APPDATA ?? os.homedir(), 'djfriend')
   if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'djfriend')
   return path.join(os.homedir(), '.config', 'djfriend')

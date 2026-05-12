@@ -11,9 +11,9 @@ import { scanFolder } from './scanner.js'
 import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
-import { readSettings, writeSettings } from './settings.js'
+import { readSettings, writeSettings, getSettingsDir } from './settings.js'
 import { deriveSemanticTags } from './ai.js'
-import { initWeights, trainOnVectors } from './mlTrain.js'
+import { initWeights, trainOnVectors, isValidModelWeights } from './mlTrain.js'
 import type { ModelWeights } from './mlTrain.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
@@ -34,20 +34,58 @@ const execFileAsync = promisify(execFile)
 export const APPLE_RESULTS_PATH = path.join(os.homedir(), 'Music', 'djfriend-results-v3.json')
 export const HISTORY_PATH = path.join(os.homedir(), 'Music', 'djfriend-history.json')
 
-// Community telemetry — in-memory (ephemeral; resets on server restart)
-const communityVectors: number[][] = []
+// Community telemetry — persisted to disk so data survives server restarts
+const TELEMETRY_DIR = getSettingsDir()
+const TELEMETRY_VECTORS_PATH = path.join(TELEMETRY_DIR, 'telemetry-vectors.jsonl')
+const COMMUNITY_MODEL_PATH   = path.join(TELEMETRY_DIR, 'community-model.json')
+const RETRAIN_EVERY = 50
+const MAX_VECTORS   = 10_000
+
+let communityVectors: number[][] = []
 let communityModel: ModelWeights | null = null
 let vectorsSinceLastTrain = 0
-const RETRAIN_EVERY = 50
-const MAX_VECTORS = 10_000  // cap memory usage
+
+// Load persisted vectors on startup
+try {
+  fs.mkdirSync(TELEMETRY_DIR, { recursive: true })
+  if (fs.existsSync(TELEMETRY_VECTORS_PATH)) {
+    const lines = fs.readFileSync(TELEMETRY_VECTORS_PATH, 'utf-8').split('\n').filter(Boolean)
+    for (const line of lines) {
+      try {
+        const v = JSON.parse(line) as unknown
+        if (Array.isArray(v) && v.length === 18 && (v as number[]).every(n => typeof n === 'number')) communityVectors.push(v as number[])
+      } catch { /* skip */ }
+    }
+    if (communityVectors.length > MAX_VECTORS) communityVectors = communityVectors.slice(-MAX_VECTORS)
+    console.log(`[telemetry] loaded ${communityVectors.length} persisted vectors`)
+  }
+} catch { /* non-fatal */ }
+
+// Load persisted community model on startup
+try {
+  if (fs.existsSync(COMMUNITY_MODEL_PATH)) {
+    const saved = JSON.parse(fs.readFileSync(COMMUNITY_MODEL_PATH, 'utf-8')) as unknown
+    if (isValidModelWeights(saved)) {
+      communityModel = saved
+      console.log(`[telemetry] loaded community model v${communityModel.version} (${communityModel.trainedSamples} samples)`)
+    }
+  }
+} catch { /* non-fatal */ }
+
+function persistVectors() {
+  try {
+    fs.writeFileSync(TELEMETRY_VECTORS_PATH, communityVectors.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8')
+  } catch { /* non-fatal */ }
+}
 
 function maybeTrain() {
   if (vectorsSinceLastTrain < RETRAIN_EVERY) return
   vectorsSinceLastTrain = 0
-  const sample = communityVectors.slice(-5000)  // train on latest 5k
+  const sample = communityVectors.slice(-5000)
   setImmediate(() => {
     communityModel = trainOnVectors(communityModel, sample, 2, 0.004)
-    console.log(`[telemetry] community model updated — ${communityModel.trainedSamples} total samples`)
+    console.log(`[telemetry] community model updated — v${communityModel.version}, ${communityModel.trainedSamples} total samples`)
+    try { fs.writeFileSync(COMMUNITY_MODEL_PATH, JSON.stringify(communityModel), 'utf-8') } catch { /* non-fatal */ }
   })
 }
 
@@ -624,6 +662,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         if (overflow > 0) communityVectors.splice(0, overflow)
         communityVectors.push(...valid)
         vectorsSinceLastTrain += valid.length
+        setImmediate(persistVectors)
         maybeTrain()
         res.setHeader('Content-Type', 'application/json')
         res.end(JSON.stringify({ ok: true, received: valid.length, total: communityVectors.length }))

@@ -10,6 +10,19 @@ export interface ModelWeights {
   trainedSamples: number
 }
 
+export function isValidModelWeights(w: unknown): w is ModelWeights {
+  if (typeof w !== 'object' || w === null) return false
+  const m = w as Record<string, unknown>
+  return (
+    Array.isArray(m.w1) && (m.w1 as unknown[][])[0]?.length === 18 &&
+    Array.isArray(m.b1) && m.b1.length === 32 &&
+    Array.isArray(m.w2) && (m.w2 as unknown[][])[0]?.length === 32 &&
+    Array.isArray(m.b2) && m.b2.length === 32 &&
+    Array.isArray(m.w3) && m.w3.length === 32 &&
+    typeof m.b3 === 'number'
+  )
+}
+
 function sigmoid(x: number) { return 1 / (1 + Math.exp(-x)) }
 
 export function initWeights(): ModelWeights {

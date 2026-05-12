@@ -71,6 +71,64 @@ export interface AppSong {
   semanticTags?: SemanticTags
 }
 
+interface DiscogsRawRelease {
+  id: number
+  basic_information: {
+    id: number
+    title: string
+    artists: Array<{ name: string }>
+    year: number
+    formats: Array<{ name: string }>
+    genres: string[]
+    styles: string[]
+    thumb?: string
+    cover_image?: string
+  }
+}
+
+function parseDiscogsReleases(raw: DiscogsRawRelease[]) {
+  return raw.map(r => {
+    const info = r.basic_information
+    const artist = info.artists.map(a => a.name.replace(/\s*\(\d+\)$/, '')).join(', ')
+    const thumb = info.thumb && !info.thumb.includes('spacer.gif') ? info.thumb : undefined
+    return {
+      releaseId: info.id,
+      title:     info.title,
+      artist,
+      year:      info.year || undefined,
+      formats:   info.formats.map(f => f.name),
+      genres:    info.genres ?? [],
+      styles:    info.styles ?? [],
+      inLibrary: false as boolean,
+      ...(thumb ? { thumb } : {}),
+    }
+  })
+}
+
+function discogsAuthHeader(opts: {
+  method: string; url: string;
+  consumerKey: string; consumerSecret: string;
+  token?: string; tokenSecret?: string;
+  callbackUrl?: string; verifier?: string;
+}): string {
+  const nonce = crypto.randomBytes(16).toString('hex')
+  const timestamp = Math.floor(Date.now() / 1000).toString()
+  const sig = `${encodeURIComponent(opts.consumerSecret)}&${encodeURIComponent(opts.tokenSecret ?? '')}`
+  const parts: Record<string, string> = {
+    oauth_consumer_key:      opts.consumerKey,
+    oauth_nonce:             nonce,
+    oauth_signature:         sig,
+    oauth_signature_method:  'PLAINTEXT',
+    oauth_timestamp:         timestamp,
+    oauth_version:           '1.0',
+  }
+  if (opts.token)       parts.oauth_token    = opts.token
+  if (opts.callbackUrl) parts.oauth_callback = opts.callbackUrl
+  if (opts.verifier)    parts.oauth_verifier = opts.verifier
+  const header = Object.entries(parts).map(([k, v]) => `${k}="${encodeURIComponent(v)}"`).join(', ')
+  return `OAuth ${header}`
+}
+
 type NextFn = (err?: unknown) => void
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: NextFn) => void
 export interface MiddlewareApp { use(fn: Middleware): void; use(path: string, fn: Middleware): void }
@@ -733,7 +791,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
       const defaultTip = { help: true, info: true, ai: true }
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip, platform: process.platform }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip, hasDiscogsOAuth: !!(s.discogsAccessToken && s.discogsUsername), discogsUsername: s.discogsUsername ?? '', hasDiscogsConsumerKey: !!(s.discogsConsumerKey && s.discogsConsumerSecret), platform: process.platform }))
       return
     }
     if (req.method === 'POST') {
@@ -753,6 +811,236 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       return
     }
     next()
+  })
+
+  middlewares.use('/api/discogs/connect', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    const s = readSettings()
+    if (!s.discogsConsumerKey || !s.discogsConsumerSecret) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Consumer Key and Secret not configured.' }))
+      return
+    }
+    try {
+      const callbackUrl = 'http://127.0.0.1:8888/discogs-callback'
+      const authHeader = discogsAuthHeader({
+        method: 'POST', url: 'https://api.discogs.com/oauth/request_token',
+        consumerKey: s.discogsConsumerKey, consumerSecret: s.discogsConsumerSecret,
+        callbackUrl,
+      })
+      const tokenRes = await fetch('https://api.discogs.com/oauth/request_token', {
+        method: 'POST',
+        headers: { Authorization: authHeader, 'User-Agent': 'DJFriend/1.0 +https://djfriend.app', 'Content-Type': 'application/x-www-form-urlencoded' },
+      })
+      const text = await tokenRes.text()
+      if (!tokenRes.ok) {
+        res.writeHead(502, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: `Discogs request token failed: ${text}` }))
+        return
+      }
+      const params = new URLSearchParams(text)
+      const oauthToken = params.get('oauth_token')
+      const oauthTokenSecret = params.get('oauth_token_secret')
+      if (!oauthToken || !oauthTokenSecret) {
+        res.writeHead(502, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Invalid request token response.' }))
+        return
+      }
+      writeSettings({ discogsRequestTokenSecret: oauthTokenSecret })
+      res.writeHead(302, { Location: `https://www.discogs.com/oauth/authorize?oauth_token=${oauthToken}` })
+      res.end()
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Connect failed.' }))
+    }
+  })
+
+  middlewares.use('/api/discogs/callback', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    const body = await readJsonBody(req) as { oauth_token?: string; oauth_verifier?: string }
+    const s = readSettings()
+    if (!s.discogsConsumerKey || !s.discogsConsumerSecret || !s.discogsRequestTokenSecret || !body.oauth_token || !body.oauth_verifier) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Missing OAuth state.' }))
+      return
+    }
+    try {
+      const accessAuthHeader = discogsAuthHeader({
+        method: 'POST', url: 'https://api.discogs.com/oauth/access_token',
+        consumerKey: s.discogsConsumerKey, consumerSecret: s.discogsConsumerSecret,
+        token: body.oauth_token, tokenSecret: s.discogsRequestTokenSecret,
+        verifier: body.oauth_verifier,
+      })
+      const accessRes = await fetch('https://api.discogs.com/oauth/access_token', {
+        method: 'POST',
+        headers: { Authorization: accessAuthHeader, 'User-Agent': 'DJFriend/1.0 +https://djfriend.app', 'Content-Type': 'application/x-www-form-urlencoded' },
+      })
+      const accessText = await accessRes.text()
+      if (!accessRes.ok) {
+        res.writeHead(502, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: `Access token exchange failed: ${accessText}` }))
+        return
+      }
+      const accessParams = new URLSearchParams(accessText)
+      const accessToken = accessParams.get('oauth_token')
+      const accessTokenSecret = accessParams.get('oauth_token_secret')
+      if (!accessToken || !accessTokenSecret) {
+        res.writeHead(502, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Invalid access token response.' }))
+        return
+      }
+      const identityAuthHeader = discogsAuthHeader({
+        method: 'GET', url: 'https://api.discogs.com/oauth/identity',
+        consumerKey: s.discogsConsumerKey, consumerSecret: s.discogsConsumerSecret,
+        token: accessToken, tokenSecret: accessTokenSecret,
+      })
+      const identityRes = await fetch('https://api.discogs.com/oauth/identity', {
+        headers: { Authorization: identityAuthHeader, 'User-Agent': 'DJFriend/1.0 +https://djfriend.app' },
+      })
+      const identity = await identityRes.json() as { username?: string }
+      const username = identity.username ?? ''
+      writeSettings({ discogsAccessToken: accessToken, discogsAccessTokenSecret: accessTokenSecret, discogsUsername: username, discogsRequestTokenSecret: undefined })
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true, username }))
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Callback failed.' }))
+    }
+  })
+
+  middlewares.use('/api/discogs/sync', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>) => { res.write(`${JSON.stringify(event)}\n`) }
+    try {
+      const s = readSettings()
+      if (!s.discogsAccessToken || !s.discogsAccessTokenSecret || !s.discogsConsumerKey || !s.discogsConsumerSecret || !s.discogsUsername) {
+        writeEvent({ type: 'error', message: 'Discogs not connected. Use "Connect Discogs" in Settings.' })
+        res.end(); return
+      }
+      const { discogsConsumerKey, discogsConsumerSecret, discogsAccessToken, discogsAccessTokenSecret, discogsUsername } = s
+      const makeHeaders = (method: string, url: string) => ({
+        Authorization: discogsAuthHeader({ method, url, consumerKey: discogsConsumerKey, consumerSecret: discogsConsumerSecret, token: discogsAccessToken, tokenSecret: discogsAccessTokenSecret }),
+        'User-Agent': 'DJFriend/1.0 +https://djfriend.app',
+      })
+      const url1 = `https://api.discogs.com/users/${encodeURIComponent(discogsUsername)}/collection/folders/0/releases?per_page=100&page=1`
+      const firstRes = await fetch(url1, { headers: makeHeaders('GET', url1) })
+      if (!firstRes.ok) {
+        const text = await firstRes.text()
+        writeEvent({ type: 'error', message: `Discogs API error ${firstRes.status}: ${text}` })
+        res.end(); return
+      }
+      const firstPage = await firstRes.json() as {
+        pagination: { pages: number; items: number }
+        releases: DiscogsRawRelease[]
+      }
+      const totalPages = firstPage.pagination.pages
+      const totalItems = firstPage.pagination.items
+      const releases = parseDiscogsReleases(firstPage.releases)
+      writeEvent({ type: 'progress', loaded: releases.length, total: totalItems })
+
+      for (let page = 2; page <= totalPages; page++) {
+        await new Promise(r => setTimeout(r, 1050))
+        const pageUrl = `https://api.discogs.com/users/${encodeURIComponent(discogsUsername)}/collection/folders/0/releases?per_page=100&page=${page}`
+        const pageRes = await fetch(pageUrl, { headers: makeHeaders('GET', pageUrl) })
+        if (!pageRes.ok) {
+          writeEvent({ type: 'error', message: `Discogs API error ${pageRes.status} on page ${page}` })
+          res.end(); return
+        }
+        const data = await pageRes.json() as { releases: DiscogsRawRelease[] }
+        releases.push(...parseDiscogsReleases(data.releases))
+        writeEvent({ type: 'progress', loaded: releases.length, total: totalItems })
+      }
+
+      writeEvent({ type: 'done', releases })
+      res.end()
+    } catch (err) {
+      writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Discogs sync failed.' })
+      res.end()
+    }
+  })
+
+  middlewares.use('/api/discogs/beatport-lookup', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const body = await readJsonBody(req) as { artist?: string; title?: string }
+      const q = [body.artist, body.title].filter(Boolean).join(' ')
+      if (!q.trim()) { res.writeHead(400); res.end(JSON.stringify({ error: 'Missing artist/title' })); return }
+
+      const url = `https://www.beatport.com/search/tracks?q=${encodeURIComponent(q)}`
+      const pageRes = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      })
+      const html = await pageRes.text()
+
+      // Extract __NEXT_DATA__ JSON embedded by Next.js
+      const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)
+      if (!match) { res.writeHead(502); res.end(JSON.stringify({ error: 'Could not parse Beatport page' })); return }
+
+      interface BpTrack { bpm?: number; key_name?: string; track_name?: string; release?: { release_image_uri?: string } }
+      interface BpData  { props?: { pageProps?: { dehydratedState?: { queries?: Array<{ state?: { data?: { data?: BpTrack[] } } }> } } } }
+      const nextData = JSON.parse(match[1]) as BpData
+
+      const tracks = nextData?.props?.pageProps?.dehydratedState?.queries?.[0]?.state?.data?.data ?? []
+      const track = tracks[0]
+
+      if (!track) { res.writeHead(404); res.end(JSON.stringify({ error: 'Track not found on Beatport' })); return }
+
+      // Convert key name (e.g. "G Minor") to Camelot
+      const KEY_MAP: Record<string, number> = {
+        'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
+        'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8,
+        'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11,
+      }
+      let camelot: string | undefined
+      let keyName: string | undefined
+      if (track.key_name) {
+        const [note, mode] = track.key_name.split(' ')
+        const pitchClass = KEY_MAP[note]
+        if (pitchClass !== undefined) {
+          const result = toCamelot(pitchClass, mode?.toLowerCase() === 'major' ? 1 : 0)
+          if (result) { camelot = result.camelot; keyName = result.keyName }
+        }
+      }
+
+      res.end(JSON.stringify({
+        ok:      true,
+        bpm:     track.bpm,
+        camelot,
+        keyName: keyName ?? track.key_name,
+        thumb:   track.release?.release_image_uri,
+        trackName: track.track_name,
+      }))
+    } catch (err) {
+      res.writeHead(500)
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Lookup failed' }))
+    }
+  })
+
+  middlewares.use('/api/discogs/image-proxy', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    const qs  = req.url?.split('?')[1] ?? ''
+    const url = new URLSearchParams(qs).get('url') ?? ''
+    if (!url.startsWith('https://i.discogs.com/')) {
+      res.writeHead(400); res.end(); return
+    }
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': 'DJFriend/1.0 +https://djfriend.app' } })
+      res.writeHead(r.status, {
+        'Content-Type':  r.headers.get('Content-Type')  ?? 'image/jpeg',
+        'Cache-Control': 'public, max-age=86400',
+      })
+      const buf = await r.arrayBuffer()
+      res.end(Buffer.from(buf))
+    } catch {
+      res.writeHead(502); res.end()
+    }
   })
 
   middlewares.use('/api/check-path', (req, res, next) => {
@@ -888,7 +1176,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         else if (needsSpotify && token) {
           try { const match = await searchTrack(track.artist, track.title, token); if (match?.artistId) genres = await getArtistGenres(match.artistId, token) } catch { /* ignore */ }
         }
-        resultsJson[track.path] = { filePath: track.path, file: path.basename(track.path), artist: track.artist || 'Unknown artist', title: track.title, duration: track.duration || undefined, bpm: track.bpm, key: finalKey.keyName, camelot: finalKey.camelot, energy: 0.5, genres, ...(localGenres.length === 0 && genres.length > 0 ? { genresFromSpotify: true } : {}) }
+        resultsJson[track.path] = { filePath: track.path, file: path.basename(track.path), artist: track.artist || 'Unknown artist', title: track.title, duration: track.duration || undefined, bpm: isNaN(track.bpm) ? 0 : track.bpm, key: finalKey.keyName, camelot: finalKey.camelot, energy: 0.5, genres, ...(localGenres.length === 0 && genres.length > 0 ? { genresFromSpotify: true } : {}) }
       }
       for (const song of Object.values(resultsJson)) {
         if (!song.semanticTags) song.semanticTags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres })

@@ -113,6 +113,12 @@ export interface GenerateOptions {
   maxDurationSeconds?: number;
   /** scoring weight overrides — defaults reproduce existing behaviour */
   weights?: ScoringWeights;
+  /** file paths eligible for the Discogs crates-first bonus (subset of pool) */
+  discogsBonusFiles?: Set<string>;
+  /** file paths that are vinyl records — drives the turntable constraint */
+  vinylFiles?: Set<string>;
+  /** 1 = no consecutive vinyl tracks; 2 = up to 2 in a row (default, unconstrained) */
+  turntables?: 1 | 2;
   /** set history used to compute per-track familiarity scores */
   history?: HistoryEntry[];
   /** trained ML model weights — when present, blends learned score with rule-based */
@@ -136,10 +142,19 @@ function generateSetOnce(
 ): SetTrack[] {
   if (songs.length === 0) return [];
 
-  const genreFilteredSongs = songs.filter((song) => matchesGenrePrefs(song, prefs.genres));
-  let candidatePool = genreFilteredSongs.length > 0 ? genreFilteredSongs : songs;
+  // Playlist is the primary constraint — applied first so genre/BPM/date refine within it,
+  // never accidentally fall back to the full library when the playlist tracks don't match.
+  let candidatePool = songs.slice();
+  if (options?.playlistFilterFiles?.size) {
+    const playlistFiltered = songs.filter(s => options.playlistFilterFiles!.has(s.file));
+    if (playlistFiltered.length > 0) candidatePool = playlistFiltered;
+  }
 
-  // BPM range hard filter — applied after genre filter, before date filter
+  // Genre filter refines within the current pool (playlist or full library)
+  const genreFiltered = candidatePool.filter((song) => matchesGenrePrefs(song, prefs.genres));
+  if (genreFiltered.length > 0) candidatePool = genreFiltered;
+
+  // BPM range hard filter
   if (prefs.bpmMin != null || prefs.bpmMax != null) {
     const lo = prefs.bpmMin ?? 0;
     const hi = prefs.bpmMax ?? Infinity;
@@ -175,11 +190,6 @@ function generateSetOnce(
       return true;
     });
     if (dateFiltered.length > 0) candidatePool = dateFiltered;
-  }
-
-  if (options?.playlistFilterFiles?.size) {
-    const filtered = candidatePool.filter(s => options.playlistFilterFiles!.has(s.file));
-    if (filtered.length > 0) candidatePool = filtered;
   }
 
   if (options?.excludeFiles?.size) {
@@ -228,7 +238,13 @@ function generateSetOnce(
       (a, b) => Math.abs(a.energy - targetEnergy) - Math.abs(b.energy - targetEnergy),
     );
     const K = Math.max(5, Math.ceil(available.length * 0.15));
-    const energyNeighbours = available.slice(0, K);
+    let energyNeighbours = available.slice(0, K);
+
+    // Turntable constraint: with 1 turntable, never follow a vinyl track with another vinyl track
+    if (options?.turntables === 1 && options.vinylFiles && prevTrack && options.vinylFiles.has(prevTrack.file)) {
+      const nonVinyl = energyNeighbours.filter(s => !options.vinylFiles!.has(s.file));
+      if (nonVinyl.length > 0) energyNeighbours = nonVinyl;
+    }
 
     // 4. Score every candidate in the energy neighbourhood
     type R = { text: string; quality: 'good' | 'ok' | 'bad' | 'bonus' | 'info' };
@@ -268,7 +284,8 @@ function generateSetOnce(
       const baseScore = mlScore !== null ? ruleScore * 0.7 + mlScore * 0.3 : ruleScore;
       // legacy jitter support
       const jitter = options?.jitter ? Math.random() * options.jitter : 0;
-      const score = baseScore + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + jitter;
+      const discogsBonus = (options?.weights?.discogsBonus && options.discogsBonusFiles?.has(song.file)) ? options.weights.discogsBonus : 0;
+      const score = baseScore + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + discogsBonus + jitter;
 
       const reasons: R[] = [];
       if (prevCamelot !== null) {

@@ -70,6 +70,30 @@ export function CopyIcon({ size = 16, className = '' }: IconProps) {
   );
 }
 
+export function DiscogsIcon({ size = 16, className = '' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
+    </svg>
+  );
+}
+
+export function BeatportIcon({ size = 16, className = '' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.5 5H12c2.21 0 4 1.79 4 4 0 1.48-.81 2.77-2 3.46V17h-1.5v-2h-2v-1.5H12c1.38 0 2.5-1.12 2.5-2.5S13.38 8.5 12 8.5h-1.5V13H9V7h1.5z"/>
+    </svg>
+  );
+}
+
+export function TraxsourceIcon({ size = 16, className = '' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4 7.5h-3V17h-2V9.5H8V8h8v1.5z"/>
+    </svg>
+  );
+}
+
 export function ImageIcon({ size = 16, className = '' }: IconProps) {
   return (
     <svg

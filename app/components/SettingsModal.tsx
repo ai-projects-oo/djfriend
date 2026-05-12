@@ -63,12 +63,19 @@ interface Props {
   onSaved: (folderChanged: boolean) => void
   /** called after the database is cleared */
   onDatabaseCleared?: () => void
+  /** trigger a Discogs collection sync (credentials are stored server-side) */
+  onSyncDiscogs?: () => void
+  /** current Discogs collection (for staleness badge) */
+  discogsCollection?: { syncedAt: number; totalReleases: number } | null
+  /** current Discogs sync status */
+  discogsSyncPhase?: 'idle' | 'syncing' | 'done' | 'error'
+  discogsSyncMessage?: string
 }
 
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron')
 
-export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleared }: Props) {
+export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleared, onSyncDiscogs, discogsCollection, discogsSyncPhase, discogsSyncMessage }: Props) {
   // Desktop-only state
   const [musicFolder, setMusicFolder] = useState('')
   const loadedMusicFolder = useRef('')
@@ -86,6 +93,10 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [clearing, setClearing] = useState(false)
   const [clearConfirm, setClearConfirm] = useState(false)
   const [error, setError] = useState('')
+
+  const [hasDiscogsOAuth, setHasDiscogsOAuth] = useState(false)
+  const [hasDiscogsConsumerKey, setHasDiscogsConsumerKey] = useState(false)
+  const [discogsConnectedAs, setDiscogsConnectedAs] = useState('')
 
   async function checkPath(folderPath: string, setStatus: (s: PathStatus) => void) {
     if (!folderPath.trim()) { setStatus('idle'); return }
@@ -107,7 +118,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; tipConfig?: { help: boolean; info: boolean; ai: boolean } }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; tipConfig?: { help: boolean; info: boolean; ai: boolean }; hasDiscogsOAuth?: boolean; discogsUsername?: string; hasDiscogsConsumerKey?: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
         loadedMusicFolder.current = d.musicFolder ?? ''
         setRekordboxFolder(d.rekordboxFolder ?? '')
@@ -119,6 +130,9 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         setShareTelemetry(d.shareTelemetry !== false)
         if (d.tipConfig) setTipConfig(Object.assign({ help: true, info: true, ai: true }, d.tipConfig))
         setHasSpotifySecret(d.hasSecret ?? false)
+        setHasDiscogsOAuth(d.hasDiscogsOAuth ?? false)
+        setHasDiscogsConsumerKey(d.hasDiscogsConsumerKey ?? false)
+        setDiscogsConnectedAs(d.discogsUsername ?? '')
       })
       .catch(() => {})
   }, [open])
@@ -154,6 +168,10 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     // Page will redirect — no finally cleanup needed
   }
 
+  function triggerSync() {
+    if (onSyncDiscogs) onSyncDiscogs()
+  }
+
   async function clearDatabase() {
     setClearing(true)
     setError('')
@@ -170,6 +188,10 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       setClearing(false)
     }
   }
+
+  const discogsDaysSince = discogsCollection
+    ? Math.floor((+new Date() - discogsCollection.syncedAt) / 86400000)
+    : null
 
   if (!open) return null
 
@@ -374,6 +396,60 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               </span>
             </div>
           </label>
+        </div>
+
+        {/* ── Discogs ──────────────────────────────────────────────── */}
+        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">Discogs</h3>
+            {hasDiscogsOAuth && discogsConnectedAs && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#22c55e22] text-[#22c55e]">Connected as {discogsConnectedAs}</span>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {!hasDiscogsConsumerKey && (
+              <p className="text-[11px] text-[#ef4444]">Discogs app credentials not configured. Contact the app developer.</p>
+            )}
+
+            {discogsCollection && discogsDaysSince !== null && (
+              <p className={`text-[11px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#475569]'}`}>
+                {discogsCollection.totalReleases} releases · synced {discogsDaysSince === 0 ? 'today' : `${discogsDaysSince}d ago`}
+                {discogsDaysSince >= 30 && ' · collection may be out of date'}
+              </p>
+            )}
+
+            {discogsSyncPhase === 'syncing' && (
+              <p className="text-[11px] text-[#7c3aed]">Syncing collection…</p>
+            )}
+            {discogsSyncPhase === 'done' && (
+              <p className="text-[11px] text-[#22c55e]">Collection synced.</p>
+            )}
+            {discogsSyncPhase === 'error' && discogsSyncMessage && (
+              <p className="text-[11px] text-[#ef4444]">{discogsSyncMessage}</p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { window.location.href = '/api/discogs/connect' }}
+                disabled={!hasDiscogsConsumerKey}
+                className="px-3 py-2 text-xs font-medium rounded-md border border-[#2a2a3a] text-[#94a3b8] hover:text-white hover:border-[#7c3aed] hover:bg-[#12121a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                {hasDiscogsOAuth ? 'Reconnect Discogs ↗' : 'Connect Discogs ↗'}
+              </button>
+              {hasDiscogsOAuth && (
+                <button
+                  type="button"
+                  onClick={triggerSync}
+                  disabled={discogsSyncPhase === 'syncing'}
+                  className="px-3 py-2 text-xs font-medium rounded-md border border-[#2a2a3a] text-[#94a3b8] hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  {discogsSyncPhase === 'syncing' ? 'Syncing…' : '↺ Sync Collection'}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ── Danger Zone (both platforms) ─────────────────────────── */}

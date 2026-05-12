@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import type { HistoryEntry, DJPreferences, TipConfig } from "./types";
-import { DEFAULT_TIP_CONFIG } from "./types";
+import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind } from "./types";
+import { DEFAULT_TIP_CONFIG, DEFAULT_DJ_SYSTEM, vinylDeckCount } from "./types";
 import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
 import SettingsModal from "./components/SettingsModal";
@@ -29,28 +29,57 @@ import { useLibrary } from "./hooks/useLibrary";
 import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
+import { useDiscogsCollection } from "./hooks/useDiscogsCollection";
+import { getDiscogsMatchedFiles } from "./lib/discogsCollection";
 import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
+import { loadManualData, loadRejected, type ManualData } from "./lib/discogsManualData";
 import { camelotColor } from "./lib/camelotColors";
 import { transitionFeatures } from "./lib/mlFeatures";
 import { blendModels, isValidModelWeights } from "./lib/mlModel";
+import { SCORE_THRESHOLDS } from "./lib/setScore";
 import VenuePlannerPanel from "./components/VenuePlannerPanel";
+import SuggestionsStrip from "./components/SuggestionsStrip";
+import CratesTab from "./components/CratesTab";
 import type { SetPlan } from "./types";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
 
 function InfoMark({ text, align = 'left' }: { text: string; align?: 'left' | 'right' }) {
+  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const ref = useRef<HTMLDivElement>(null);
+
+  function show() {
+    if (!ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    setPos({ top: r.top - 8, left: align === 'right' ? r.right : r.left });
+    setVisible(true);
+  }
+
   return (
-    <div className="relative group/im flex-shrink-0">
+    <div ref={ref} className="relative flex-shrink-0" onMouseEnter={show} onMouseLeave={() => setVisible(false)}>
       <div className="w-3.5 h-3.5 rounded-full border border-[#374151] flex items-center justify-center cursor-default">
         <span className="text-[8px] text-[#4b5568] leading-none select-none">i</span>
       </div>
-      <div className={`absolute bottom-full mb-2 w-52 pointer-events-none opacity-0 group-hover/im:opacity-100 transition-opacity z-50 ${align === 'right' ? 'right-0' : 'left-0'}`}>
-        <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
-          <p className="text-[10px] text-[#9ca3af] leading-relaxed">{text}</p>
+      {visible && (
+        <div
+          className="pointer-events-none"
+          style={{
+            position: 'fixed',
+            zIndex: 9999,
+            top: pos.top,
+            ...(align === 'right' ? { right: window.innerWidth - pos.left } : { left: pos.left }),
+            transform: 'translateY(-100%)',
+            width: '208px',
+          }}
+        >
+          <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
+            <p className="text-[10px] text-[#9ca3af] leading-relaxed">{text}</p>
+          </div>
+          <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${align === 'right' ? 'mr-1.5 ml-auto' : 'ml-1.5'}`} />
         </div>
-        <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${align === 'right' ? 'mr-1.5 ml-auto' : 'ml-1.5'}`} />
-      </div>
+      )}
     </div>
   );
 }
@@ -154,7 +183,7 @@ export default function App() {
 
 function AppInner() {
   const [activeTab, setActiveTab] = useState<
-    "Set Generator" | "Library" | "History" | "Import"
+    "Set Generator" | "Library" | "Crates" | "History" | "Import"
   >("Set Generator");
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
@@ -181,16 +210,20 @@ function AppInner() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [plannerOpen, setPlannerOpen] = useState(false);
+  const [plannerVenue, setPlannerVenue] = useState<import('./types').VenueType>('Club');
+  const [plannerPhase, setPlannerPhase] = useState<import('./types').SetPhase>('Peak time');
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
+  const [hasDiscogsOAuth, setHasDiscogsOAuth] = useState(false);
   const [isMacOS, setIsMacOS] = useState(true); // assume macOS until settings load
   const [energyCheckThreshold, setEnergyCheckThreshold] = useState(0.12);
   const [onboardingDismissed, setOnboardingDismissed] = useState(
     () => localStorage.getItem("djfriend-onboarding-dismissed") === "true",
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [scoringOpen, setScoringOpen] = useState(false);
   const [dateCalendar, setDateCalendar] = useState<"from" | "to" | null>(null);
   const [analyzeMenuOpen, setAnalyzeMenuOpen] = useState(false);
   const [playlistSearch, setPlaylistSearch] = useState("");
@@ -350,6 +383,55 @@ function AppInner() {
     handleBrowseSpotifyPlaylists,
   } = useSpotifyImport({ library, setHistory });
 
+  const {
+    discogsCollection,
+    discogsMode,
+    setDiscogsMode,
+    syncStatus: discogsSyncStatus,
+    syncCollection: syncDiscogsCollection,
+  } = useDiscogsCollection(library);
+
+  const discogsDaysSince = discogsCollection
+    ? Math.floor((+new Date() - discogsCollection.syncedAt) / 86400000)
+    : null;
+
+  // Crates manual data + rejected — lifted here so vinylFiles can be derived reactively
+  const [cratesManualData, setCratesManualData] = useState<Map<number, ManualData>>(loadManualData);
+  const [cratesRejected, setCratesRejected]     = useState<Set<number>>(loadRejected);
+
+  // DJ System config — channel count and type per channel
+  const [djSystem, setDjSystem] = useState<DJSystem>(() => {
+    try {
+      const raw = localStorage.getItem('djfriend-dj-system');
+      if (raw) return JSON.parse(raw) as DJSystem;
+    } catch { /* */ }
+    return DEFAULT_DJ_SYSTEM;
+  });
+
+  const handleSetDjSystem = useCallback((sys: DJSystem) => {
+    setDjSystem(sys);
+    try { localStorage.setItem('djfriend-dj-system', JSON.stringify(sys)); } catch { /* */ }
+  }, []);
+
+  const djVinylDecks = vinylDeckCount(djSystem);
+  const turntables: 1 | 2 = djVinylDecks <= 1 ? 1 : 2;
+
+  // Build the set of vinyl file paths eligible for the turntable constraint
+  const vinylFiles = useMemo<Set<string> | undefined>(() => {
+    if (djVinylDecks === 0 || !discogsCollection) return undefined;
+    const files = new Set<string>();
+    for (const r of discogsCollection.releases) {
+      if (cratesRejected.has(r.releaseId)) continue;
+      if (r.matchedFile && r.energy != null) { files.add(r.matchedFile); continue; }
+      const manual = cratesManualData.get(r.releaseId);
+      if (manual?.matchedFile) {
+        const linked = library.find(s => s.file === manual.matchedFile);
+        if (linked?.energy != null) files.add(manual.matchedFile);
+      }
+    }
+    return files.size > 0 ? files : undefined;
+  }, [djVinylDecks, discogsCollection, cratesRejected, cratesManualData, library]);
+
   // Derive the file set for the active playlist filter
   // playlistFilterId can be a Spotify import entry ID, "apple:<playlistName>", or "__selection__"
   const playlistFilterFiles = useMemo<Set<string> | undefined>(() => {
@@ -362,8 +444,8 @@ function AppInner() {
       const files = applePlaylistFiles[name];
       if (!files || files.length === 0) return undefined;
       const fileSet = new Set(files);
-      // Only include files that are actually in the library
-      const inLib = library.filter(s => fileSet.has(s.file));
+      // Match by full path (Apple Music library) OR filePath (Rekordbox library uses filePath, file=basename)
+      const inLib = library.filter(s => fileSet.has(s.file) || fileSet.has(s.filePath ?? ''));
       return inLib.length > 0 ? new Set(inLib.map(s => s.file)) : undefined;
     }
     // Spotify import entry
@@ -387,6 +469,21 @@ function AppInner() {
     return SET_DURATIONS.find((d) => d >= playlistTotalMinutes) ?? 180;
   }, [playlistFilterId, playlistTotalMinutes]);
 
+  // Discogs pool intersection — "crates" mode hard-filters the pool
+  const discogsCrateFiles = useMemo<Set<string> | undefined>(() => {
+    if (discogsMode === 'library' || !discogsCollection) return undefined;
+    return getDiscogsMatchedFiles(discogsCollection, library);
+  }, [discogsMode, discogsCollection, library]);
+
+  // Effective playlist filter files — intersects playlist + discogs when both are active
+  const effectiveFilterFiles = useMemo<Set<string> | undefined>(() => {
+    if (!discogsCrateFiles && !playlistFilterFiles) return undefined;
+    if (!discogsCrateFiles) return playlistFilterFiles;
+    if (!playlistFilterFiles) return discogsCrateFiles.size > 0 ? discogsCrateFiles : undefined;
+    const intersection = new Set([...playlistFilterFiles].filter(f => discogsCrateFiles.has(f)));
+    return intersection.size > 0 ? intersection : undefined;
+  }, [playlistFilterFiles, discogsCrateFiles]);
+
   // Auto-select effect wired below after setPrefs is available from useSetGenerator
 
   const {
@@ -402,6 +499,7 @@ function AppInner() {
     genreGroups,
     availableTags,
     filteredTrackCount,
+    setScore,
     handleGenerate,
     selectGenre,
     handleCurveChange,
@@ -413,9 +511,22 @@ function AppInner() {
     handleUpdateTrack,
     handleLoadToSet,
     handleAppendTracks,
+    canAppendTracks,
     scoringWeights,
     setScoringWeights,
-  } = useSetGenerator(library, setLibrary, playlistFilterFiles, history, mlWeights);
+    setSuggestions,
+    insertSuggestion,
+  } = useSetGenerator(
+    library,
+    setLibrary,
+    effectiveFilterFiles,
+    history,
+    mlWeights,
+    discogsMode === 'crates-first' ? discogsCrateFiles : undefined,
+    discogsMode === 'crates-first' ? 0.12 : undefined,
+    vinylFiles,
+    turntables,
+  );
 
   const energyIssues = useMemo(
     () => generatedSet.filter(t => Math.abs(t.energy - t.targetEnergy) > energyCheckThreshold),
@@ -499,6 +610,7 @@ function AppInner() {
     handleToggleSpotifyMatch,
     handleConfirmSpotifyExport,
     handleRenameEntry,
+    handleRateEntry,
   } = useSpotifyExport({ generatedSet, prefs, curve, setHistory });
 
   const handleExportImportM3U = useCallback(
@@ -544,6 +656,7 @@ function AppInner() {
       .then((d) => {
         if (d.musicFolder) setFolderPath((prev) => prev || d.musicFolder!);
         if (d.hasSecret !== undefined) setHasSpotifyCredentials(d.hasSecret);
+        if ((d as { hasDiscogsOAuth?: boolean }).hasDiscogsOAuth !== undefined) setHasDiscogsOAuth(!!(d as { hasDiscogsOAuth?: boolean }).hasDiscogsOAuth);
         setHasRekordboxFolder(
           !!(d.rekordboxFolder && d.rekordboxFolder.trim()),
         );
@@ -557,6 +670,24 @@ function AppInner() {
 
   useEffect(() => {
     loadSettings();
+  }, [loadSettings]);
+
+  // Handle Discogs OAuth callback — /discogs-callback?oauth_token=…&oauth_verifier=…
+  useEffect(() => {
+    if (!window.location.pathname.startsWith('/discogs-callback')) return;
+    const params = new URLSearchParams(window.location.search);
+    const oauthToken    = params.get('oauth_token');
+    const oauthVerifier = params.get('oauth_verifier');
+    window.history.replaceState({}, '', '/');
+    if (!oauthToken || !oauthVerifier) return;
+    apiFetch('/api/discogs/callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oauth_token: oauthToken, oauth_verifier: oauthVerifier }),
+    })
+      .then(r => r.json())
+      .then((d: { ok: boolean; username?: string }) => { if (d.ok) loadSettings(); })
+      .catch(() => {});
   }, [loadSettings]);
 
   // Load local ML model then silently blend with community model from Render
@@ -915,19 +1046,6 @@ function AppInner() {
                 })}
               </div>
             )}
-            {/* Venue Planner toggle */}
-            <button
-              onClick={() => setPlannerOpen(o => !o)}
-              title="Venue Planner"
-              className="p-1.5 transition-colors cursor-pointer"
-              style={{ color: plannerOpen ? '#7c3aed' : '#475569' }}
-            >
-              {/* location-pin icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                <circle cx="12" cy="10" r="3"/>
-              </svg>
-            </button>
 
             <div className="relative">
               <button
@@ -1166,6 +1284,7 @@ function AppInner() {
               "Set Generator",
               "Library",
               "History",
+              ...(hasDiscogsOAuth ? (["Crates"] as const) : ([] as const)),
               ...(hasSpotifyCredentials
                 ? (["Import"] as const)
                 : ([] as const)),
@@ -1184,6 +1303,11 @@ function AppInner() {
                 {tab === "Import" && (
                   <SpotifyIcon size={13} className="text-[#1db954]" />
                 )}
+                {tab === "Crates" && (
+                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
+                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
+                  </svg>
+                )}
                 {tab}
                 {tab === "Library" && isInitializing && (
                   <span className="w-3.5 h-3.5 rounded-full border-2 border-[#7c3aed]/30 border-t-[#7c3aed] animate-spin inline-block" />
@@ -1196,6 +1320,11 @@ function AppInner() {
                 {tab === "History" && history.length > 0 && (
                   <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
                     {history.length}
+                  </span>
+                )}
+                {tab === "Crates" && discogsCollection && (
+                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                    {discogsCollection.releases.length}
                   </span>
                 )}
                 {tab === "Import" && importHistory.length > 0 && (
@@ -1223,387 +1352,7 @@ function AppInner() {
             {/* ── LEFT SIDEBAR ── */}
             <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4">
 
-              {/* Venue Planner panel — shown when toolbar toggle is active */}
-              {plannerOpen && (
-                <VenuePlannerPanel
-                  onApply={handleApplyPlan}
-                  onClose={() => setPlannerOpen(false)}
-                />
-              )}
-
-              {/* Card 3: Duration + Actions */}
-              {(() => {
-                const FALLBACK_DURATION = 210;
-                const rawPlaylistSec = generatedSet.reduce(
-                  (s, t) => s + (t.duration ?? FALLBACK_DURATION),
-                  0,
-                );
-                const transitions = Math.max(0, generatedSet.length - 1);
-                const estSetSec = rawPlaylistSec - MIX_OVERLAP_SEC * transitions;
-                const fmtMin = (s: number) => {
-                  const m = Math.round(s / 60);
-                  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
-                };
-                return (
-                  <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
-                    {/* Primary CTA — Generate */}
-                    <div className="relative group">
-                    <button
-                      onClick={() => {
-                        if (library.length === 0 || isGenerating) return;
-                        setIsGenerating(true);
-                        setTimeout(() => {
-                          handleGenerate();
-                          setIsGenerating(false);
-                        }, 0);
-                      }}
-                      disabled={
-                        isInitializing || library.length === 0 || isGenerating || prefs.genres.length === 0
-                      }
-                      aria-label="Generate set"
-                      className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
-                      style={{
-                        background: isGenerating
-                          ? "linear-gradient(135deg, #6d28d9, #5b21b6)"
-                          : "linear-gradient(135deg, #7c3aed, #6d28d9)",
-                        padding: "12px 16px",
-                        fontSize: "0.95rem",
-                        fontWeight: 700,
-                        boxShadow: isGenerating ? "none" : undefined,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!e.currentTarget.disabled) {
-                          e.currentTarget.style.background =
-                            "linear-gradient(135deg, #8b5cf6, #7c3aed)";
-                          e.currentTarget.style.boxShadow =
-                            "0 0 20px rgba(124,58,237,0.4)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = isGenerating
-                          ? "linear-gradient(135deg, #6d28d9, #5b21b6)"
-                          : "linear-gradient(135deg, #7c3aed, #6d28d9)";
-                        e.currentTarget.style.boxShadow = "";
-                      }}
-                    >
-                      {isGenerating ? (
-                        <>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="15"
-                            height="15"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="animate-pulse"
-                          >
-                            <polygon points="5,3 19,12 5,21" />
-                          </svg>
-                          <span className="animate-pulse">Generating…</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="15"
-                            height="15"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                          >
-                            <polygon points="5,3 19,12 5,21" />
-                          </svg>
-                          Generate
-                        </>
-                      )}
-                    </button>
-                    {prefs.genres.length === 0 && tipConfig.help && (
-                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
-                        Pick a genre first to generate a set
-                      </div>
-                    )}
-                    </div>
-                    {generatedSet.length > 0 && (
-                      <div className="relative group">
-                        <button
-                          onClick={handleAppendTracks}
-                          disabled={isInitializing || library.length === 0 || prefs.genres.length === 0}
-                          className="w-full flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#a78bfa] text-sm font-medium py-2 rounded-md transition-colors cursor-pointer"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                          </svg>
-                          Append tracks
-                        </button>
-                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
-                          Add more tracks to the end of the current set — your locks and reorders stay untouched
-                        </div>
-                      </div>
-                    )}
-                    {/* Genre (umbrella) */}
-                    {genreGroups.length > 0 && (
-                      <div className="border-t border-[#1e1e2e] pt-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
-                            Genre
-                          </span>
-                          {prefs.genres.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => selectGenre("Any")}
-                              className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
-                            >
-                              clear
-                            </button>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {genreGroups.map((label) => {
-                            const value = `~${label}`;
-                            const active = prefs.genres.includes(value);
-                            return (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() => selectGenre(value)}
-                                className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
-                                style={{
-                                  backgroundColor: active ? "#7c3aed" : "transparent",
-                                  color: active ? "#fff" : "#a78bfa",
-                                  borderColor: active ? "#7c3aed" : "#4c1d95",
-                                }}
-                              >
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="border-t border-[#1e1e2e] pt-3">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
-                          Duration
-                        </span>
-                        <InfoMark text="Target set length. Tracks are added until this duration is reached. The estimate on the right is based on average track length in your current filtered library." />
-                        {filteredTrackCount > 0 && (
-                          <span className="text-[10px] text-[#475569]">≈ {filteredTrackCount} tracks</span>
-                        )}
-                      </div>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {/* "Any" pill — unlimited mode */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPrefs((p) => ({ ...p, setDuration: null }))
-                          }
-                          disabled={minViablePill !== null}
-                          title={
-                            minViablePill !== null
-                              ? "Not available in playlist mode"
-                              : undefined
-                          }
-                          className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border disabled:opacity-30 disabled:cursor-not-allowed"
-                          style={{
-                            backgroundColor:
-                              prefs.setDuration === null
-                                ? "#7c3aed"
-                                : "transparent",
-                            color:
-                              prefs.setDuration === null ? "#fff" : "#64748b",
-                            borderColor:
-                              prefs.setDuration === null
-                                ? "#7c3aed"
-                                : "#2a2a3a",
-                          }}
-                        >
-                          Any
-                        </button>
-                        {SET_DURATIONS.map((min) => {
-                          const active = prefs.setDuration === min;
-                          // In playlist mode: only the min viable pill is enabled
-                          const lockedByPlaylist =
-                            minViablePill !== null && min !== minViablePill;
-                          const disabled = lockedByPlaylist;
-                          const title = lockedByPlaylist
-                            ? min < (minViablePill ?? 0)
-                              ? `Playlist is ~${Math.ceil(playlistTotalMinutes)}m — too short`
-                              : `Use ${minViablePill}m to match the playlist length`
-                            : undefined;
-                          return (
-                            <button
-                              key={min}
-                              type="button"
-                              onClick={() => {
-                                if (!disabled)
-                                  setPrefs((p) => ({ ...p, setDuration: min }));
-                              }}
-                              disabled={disabled}
-                              title={title}
-                              className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border disabled:opacity-30 disabled:cursor-not-allowed"
-                              style={{
-                                backgroundColor: active
-                                  ? "#7c3aed"
-                                  : "transparent",
-                                color: active ? "#fff" : "#64748b",
-                                borderColor: active ? "#7c3aed" : "#2a2a3a",
-                              }}
-                            >
-                              {min}m
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    {generatedSet.length >= 2 && (
-                      <div className="flex items-center gap-3 text-[10px] text-[#475569] border-t border-[#1e1e2e] pt-2">
-                        <span title="Sum of all track durations">Playlist: <span className="text-[#64748b] font-semibold">{fmtMin(rawPlaylistSec)}</span></span>
-                        <span className="text-[#1e1e2e]">·</span>
-                        <span title="Estimated actual set length accounting for 2-min crossfades">Est. set: <span className="text-[#94a3b8] font-semibold">{fmtMin(estSetSec)}</span></span>
-                        <span className="text-[#1e1e2e]">·</span>
-                        <span className="text-[#4b5568]">{generatedSet.length} tracks</span>
-                      </div>
-                    )}
-
-                    {/* BPM range */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
-                            BPM Range
-                          </span>
-                          <InfoMark text="Hard filter — only tracks within this tempo range are considered. Leave both fields empty to include all tempos." />
-                        </div>
-                        {(prefs.bpmMin != null || prefs.bpmMax != null) && (
-                          <button
-                            type="button"
-                            onClick={() => setPrefs(p => ({ ...p, bpmMin: undefined, bpmMax: undefined }))}
-                            className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
-                          >
-                            clear
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={40}
-                          max={250}
-                          placeholder="Min"
-                          value={prefs.bpmMin ?? ""}
-                          onChange={e => {
-                            const v = e.target.value === "" ? undefined : Number(e.target.value);
-                            setPrefs(p => ({ ...p, bpmMin: v }));
-                          }}
-                          className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
-                        />
-                        <span className="text-[#4b5568] text-xs flex-shrink-0">–</span>
-                        <input
-                          type="number"
-                          min={40}
-                          max={250}
-                          placeholder="Max"
-                          value={prefs.bpmMax ?? ""}
-                          onChange={e => {
-                            const v = e.target.value === "" ? undefined : Number(e.target.value);
-                            setPrefs(p => ({ ...p, bpmMax: v }));
-                          }}
-                          className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Scoring weights */}
-                    {(() => {
-                      const PRESETS: { name: string; desc: string; detail: string; weights: { harmonicWeight: number; energyWeight: number; bpmWeight: number; transitionWeight: number } }[] = [
-                        {
-                          name: 'Balanced',
-                          desc: 'Works for most sets',
-                          detail: 'Harmonic 45 · Energy 25 · BPM 22 · Transition 8',
-                          weights: { harmonicWeight: 0.45, energyWeight: 0.25, bpmWeight: 0.22, transitionWeight: 0.08 },
-                        },
-                        {
-                          name: 'Club',
-                          desc: 'Techno / house / trance',
-                          detail: 'Harmonic 55 · Energy 20 · BPM 20 · Transition 5',
-                          weights: { harmonicWeight: 0.55, energyWeight: 0.20, bpmWeight: 0.20, transitionWeight: 0.05 },
-                        },
-                        {
-                          name: 'Festival',
-                          desc: 'Big room — energy arc first',
-                          detail: 'Harmonic 20 · Energy 55 · BPM 20 · Transition 5',
-                          weights: { harmonicWeight: 0.20, energyWeight: 0.55, bpmWeight: 0.20, transitionWeight: 0.05 },
-                        },
-                        {
-                          name: 'Open Format',
-                          desc: 'Bar / mixed genre / wedding',
-                          detail: 'Harmonic 20 · Energy 30 · BPM 20 · Transition 30',
-                          weights: { harmonicWeight: 0.20, energyWeight: 0.30, bpmWeight: 0.20, transitionWeight: 0.30 },
-                        },
-                      ];
-                      const activePreset = PRESETS.find(p =>
-                        scoringWeights &&
-                        p.weights.harmonicWeight === scoringWeights.harmonicWeight &&
-                        p.weights.energyWeight === scoringWeights.energyWeight &&
-                        p.weights.bpmWeight === scoringWeights.bpmWeight &&
-                        p.weights.transitionWeight === scoringWeights.transitionWeight
-                      ) ?? PRESETS[0];
-                      return (
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
-                              Scoring weights
-                            </span>
-                            <div className="relative group/info">
-                              <div className="w-3.5 h-3.5 rounded-full border border-[#374151] flex items-center justify-center cursor-default">
-                                <span className="text-[8px] text-[#4b5568] leading-none select-none">i</span>
-                              </div>
-                              <div className="absolute bottom-full left-0 mb-2 w-52 pointer-events-none opacity-0 group-hover/info:opacity-100 transition-opacity z-50">
-                                <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
-                                  <p className="text-[10px] font-semibold text-[#c4b5fd] mb-1">Scoring weights</p>
-                                  <p className="text-[10px] text-[#9ca3af] leading-relaxed">Controls what matters most when picking the next track. Choose the preset that matches your gig type — it adjusts how much harmonic key matching, energy flow, BPM proximity, and transition smoothness each contribute to the score.</p>
-                                </div>
-                                <div className="w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 ml-1.5 -mt-1" />
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex gap-1.5 flex-wrap">
-                            {PRESETS.map((preset, i) => {
-                              const isActive = preset.name === activePreset.name;
-                              const isLast = i === PRESETS.length - 1;
-                              return (
-                                <div key={preset.name} className="relative group">
-                                  <button
-                                    type="button"
-                                    onClick={() => setScoringWeights(preset.name === 'Balanced' ? undefined : preset.weights)}
-                                    className={`text-[10px] px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
-                                      isActive
-                                        ? 'bg-[#7c3aed]/20 border-[#7c3aed]/60 text-[#a78bfa]'
-                                        : 'bg-[#0d0d14] border-[#1e1e2e] text-[#6b7280] hover:border-[#374151] hover:text-[#9ca3af]'
-                                    }`}
-                                  >
-                                    {preset.name}
-                                  </button>
-                                  <div className={`absolute bottom-full mb-2 w-44 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 ${isLast ? 'right-0' : 'left-0'}`}>
-                                    <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
-                                      <p className="text-[10px] font-semibold text-[#c4b5fd] mb-0.5">{preset.name}</p>
-                                      <p className="text-[10px] text-[#9ca3af] mb-1.5">{preset.desc}</p>
-                                      <p className="text-[10px] text-[#6b7280] leading-relaxed">{preset.detail}</p>
-                                    </div>
-                                    <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${isLast ? 'mr-3 ml-auto' : 'ml-3'}`} />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                  </div>
-                );
-              })()}
-              {/* Card 2.5: Source — visible when there are playlists (Apple Music or Spotify) */}
+              {/* Card 1: Source — visible when playlists exist (Apple Music or Spotify) */}
               {(Object.keys(applePlaylistFiles).length > 0 || importHistory.length > 0) && (
                 <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -1620,13 +1369,9 @@ function AppInner() {
                         }}
                         className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
                         style={{
-                          backgroundColor: !playlistFilterId
-                            ? "#7c3aed"
-                            : "transparent",
+                          backgroundColor: !playlistFilterId ? "#7c3aed" : "transparent",
                           color: !playlistFilterId ? "#fff" : "#64748b",
-                          borderColor: !playlistFilterId
-                            ? "#7c3aed"
-                            : "#2a2a3a",
+                          borderColor: !playlistFilterId ? "#7c3aed" : "#2a2a3a",
                         }}
                       >
                         Full Library
@@ -1637,13 +1382,9 @@ function AppInner() {
                           onClick={() => setSourceDropdownOpen((v) => !v)}
                           className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border truncate max-w-[200px] flex items-center gap-1"
                           style={{
-                            backgroundColor: playlistFilterId
-                              ? "#7c3aed"
-                              : "transparent",
+                            backgroundColor: playlistFilterId ? "#7c3aed" : "transparent",
                             color: playlistFilterId ? "#fff" : "#64748b",
-                            borderColor: playlistFilterId
-                              ? "#7c3aed"
-                              : "#2a2a3a",
+                            borderColor: playlistFilterId ? "#7c3aed" : "#2a2a3a",
                           }}
                           title={
                             playlistFilterId
@@ -1664,18 +1405,8 @@ function AppInner() {
                                   : importHistory.find((e) => e.id === playlistFilterId)?.name ?? "Playlist")
                               : "From Playlist"}
                           </span>
-                          <svg
-                            className="w-3 h-3 shrink-0 opacity-70"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 9l-7 7-7-7"
-                            />
+                          <svg className="w-3 h-3 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </button>
                         {sourceDropdownOpen && (
@@ -1683,65 +1414,40 @@ function AppInner() {
                             <button
                               type="button"
                               className="w-full text-left px-3 py-2 text-xs text-[#64748b] hover:bg-[#1e1e2e] transition-colors cursor-pointer"
-                              onClick={() => {
-                                setPlaylistFilterId(null);
-                                setSourceDropdownOpen(false);
-                              }}
+                              onClick={() => { setPlaylistFilterId(null); setSourceDropdownOpen(false); }}
                             >
                               — Full Library (no filter) —
                             </button>
-                            {/* Apple Music playlists */}
                             {Object.entries(applePlaylistFiles).map(([name, files]) => {
                               const id = `apple:${name}`;
-                              const inLib = files.filter(f => library.some(s => s.file === f)).length;
+                              const inLib = files.filter(f => library.some(s => s.file === f || s.filePath === f)).length;
                               const isSelected = playlistFilterId === id;
                               return (
                                 <button
                                   key={id}
                                   type="button"
                                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center justify-between gap-2 cursor-pointer"
-                                  style={{
-                                    color: isSelected ? "#a78bfa" : "#e2e8f0",
-                                    backgroundColor: isSelected ? "#1e1a2e" : undefined,
-                                  }}
-                                  onClick={() => {
-                                    setPlaylistFilterId(id);
-                                    setSourceDropdownOpen(false);
-                                  }}
+                                  style={{ color: isSelected ? "#a78bfa" : "#e2e8f0", backgroundColor: isSelected ? "#1e1a2e" : undefined }}
+                                  onClick={() => { setPlaylistFilterId(id); setSourceDropdownOpen(false); }}
                                 >
                                   <span className="truncate">{name}</span>
-                                  <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">
-                                    {inLib} tracks
-                                  </span>
+                                  <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">{inLib} tracks</span>
                                 </button>
                               );
                             })}
-                            {/* Spotify import playlists */}
                             {importHistory.map((entry) => {
-                              const inLib = entry.tracks.filter(
-                                (t) => t.inLibrary,
-                              ).length;
+                              const inLib = entry.tracks.filter((t) => t.inLibrary).length;
                               const isSelected = playlistFilterId === entry.id;
                               return (
                                 <button
                                   key={entry.id}
                                   type="button"
                                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center justify-between gap-2 cursor-pointer"
-                                  style={{
-                                    color: isSelected ? "#a78bfa" : "#e2e8f0",
-                                    backgroundColor: isSelected
-                                      ? "#1e1a2e"
-                                      : undefined,
-                                  }}
-                                  onClick={() => {
-                                    setPlaylistFilterId(entry.id);
-                                    setSourceDropdownOpen(false);
-                                  }}
+                                  style={{ color: isSelected ? "#a78bfa" : "#e2e8f0", backgroundColor: isSelected ? "#1e1a2e" : undefined }}
+                                  onClick={() => { setPlaylistFilterId(entry.id); setSourceDropdownOpen(false); }}
                                 >
                                   <span className="truncate">{entry.name}</span>
-                                  <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">
-                                    {inLib}/{entry.tracks.length}
-                                  </span>
+                                  <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">{inLib}/{entry.tracks.length}</span>
                                 </button>
                               );
                             })}
@@ -1752,14 +1458,285 @@ function AppInner() {
                   </div>
                   {playlistFilterId && playlistFilterFiles && (
                     <p className="text-[11px] text-[#64748b]">
-                      <span className="text-[#94a3b8] font-medium">
-                        {playlistFilterFiles.size}
-                      </span>{" "}
-                      tracks in playlist
+                      <span className="text-[#94a3b8] font-medium">{playlistFilterFiles.size}</span> tracks in playlist
                     </p>
                   )}
                 </div>
               )}
+
+              {/* Discogs filter — visible only when a collection has been synced */}
+              {discogsCollection && (
+                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Crates</span>
+                    <div className="flex items-center gap-2">
+                      {discogsDaysSince !== null && (
+                        <span className={`text-[10px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#334155]'}`}>
+                          {discogsDaysSince === 0 ? 'Synced today' : `Synced ${discogsDaysSince}d ago`}
+                          {discogsDaysSince >= 30 && ' ⚠'}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        title="Re-sync Discogs collection"
+                        onClick={() => void syncDiscogsCollection()}
+                        disabled={discogsSyncStatus.phase === 'syncing'}
+                        className="text-[10px] text-[#475569] hover:text-[#a78bfa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                        aria-label="Re-sync Discogs collection"
+                      >
+                        {discogsSyncStatus.phase === 'syncing' ? '…' : '↺'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex rounded-lg border border-[#2a2a3a] overflow-hidden text-xs font-medium">
+                    {(['library', 'crates-first', 'crates'] as DiscogsMode[]).map((mode) => {
+                      const labels: Record<DiscogsMode, string> = { library: 'Library', 'crates-first': 'Crates first', crates: 'Crates' };
+                      const active = discogsMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setDiscogsMode(mode)}
+                          className="flex-1 px-2 py-1.5 transition-colors cursor-pointer text-center"
+                          style={{
+                            backgroundColor: active ? '#7c3aed' : 'transparent',
+                            color: active ? '#fff' : '#64748b',
+                          }}
+                          title={mode === 'library' ? 'All tracks' : mode === 'crates-first' ? 'Vinyl tracks score +0.12 bonus' : 'Vinyl-only set'}
+                          aria-label={labels[mode]}
+                        >
+                          {labels[mode]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {discogsMode === 'crates' && discogsCrateFiles && discogsCrateFiles.size === 0 && (
+                    <p className="text-[11px] text-[#ef4444]">No library tracks matched your collection. Re-sync in Settings.</p>
+                  )}
+                  {discogsMode !== 'library' && discogsCrateFiles && discogsCrateFiles.size > 0 && (
+                    <p className="text-[11px] text-[#64748b]">
+                      <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> tracks matched
+                    </p>
+                  )}
+
+                  {/* DJ System */}
+                  <div className="pt-2 border-t border-[#1e1e2e] flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">DJ System</span>
+                      {/* Channel count picker */}
+                      <div className="flex rounded overflow-hidden border border-[#2a2a3a] text-[10px] font-medium">
+                        {([2, 3, 4] as const).map(n => {
+                          const active = djSystem.channels.length === n;
+                          return (
+                            <button key={n} type="button"
+                              onClick={() => {
+                                const cur = djSystem.channels;
+                                let next: ChannelKind[];
+                                if (n > cur.length) next = [...cur, ...Array(n - cur.length).fill('digital' as ChannelKind)];
+                                else next = cur.slice(0, n);
+                                handleSetDjSystem({ channels: next });
+                              }}
+                              className="px-2 py-1 transition-colors cursor-pointer"
+                              style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#64748b' }}
+                            >
+                              {n}ch
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Per-channel type selector */}
+                    <div className="flex flex-col gap-1">
+                      {djSystem.channels.map((kind, i) => (
+                        <div key={i} className="flex items-center justify-between">
+                          <span className="text-[10px] text-[#475569]">Ch {i + 1}</span>
+                          <div className="flex rounded overflow-hidden border border-[#2a2a3a] text-[10px] font-medium">
+                            {(['digital', 'vinyl'] as ChannelKind[]).map(k => {
+                              const active = kind === k;
+                              return (
+                                <button key={k} type="button"
+                                  onClick={() => {
+                                    const next = [...djSystem.channels] as ChannelKind[];
+                                    next[i] = k;
+                                    handleSetDjSystem({ channels: next });
+                                  }}
+                                  className="px-2.5 py-1 transition-colors cursor-pointer capitalize"
+                                  style={{ backgroundColor: active ? (k === 'vinyl' ? '#f59e0b22' : '#7c3aed') : 'transparent', color: active ? (k === 'vinyl' ? '#f59e0b' : '#fff') : '#64748b' }}
+                                >
+                                  {k}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Summary */}
+                    {djVinylDecks > 0 ? (
+                      <p className="text-[10px] text-[#64748b]">
+                        {djVinylDecks === 1
+                          ? 'Vinyl and digital alternate — no two vinyl in a row'
+                          : 'Vinyl-to-vinyl transitions allowed'}
+                        {vinylFiles ? <span> · <span className="text-[#a78bfa] font-medium">{vinylFiles.size}</span> eligible</span> : null}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-[#334155]">Digital only — vinyl tracks excluded from set</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Card 2: Venue Planner */}
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setPlannerOpen(o => !o)}
+                  className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">Venue Planner</span>
+                    {!plannerOpen && (
+                      <span className="text-[10px] text-[#334155]">{plannerVenue} · {plannerPhase}</span>
+                    )}
+                  </div>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`text-[#475569] transition-transform duration-150 ${plannerOpen ? 'rotate-180' : ''}`}>
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                {plannerOpen && (
+                  <div className="border-t border-[#1e1e2e]">
+                    <VenuePlannerPanel
+                      onApply={handleApplyPlan}
+                      venue={plannerVenue}
+                      phase={plannerPhase}
+                      onVenueChange={setPlannerVenue}
+                      onPhaseChange={setPlannerPhase}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Card 3: Genre */}
+              {genreGroups.length > 0 && (
+                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Genre</span>
+                    {prefs.genres.length > 0 && (
+                      <button type="button" onClick={() => selectGenre("Any")} className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors">
+                        clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {genreGroups.map((label) => {
+                      const value = `~${label}`;
+                      const active = prefs.genres.includes(value);
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => selectGenre(value)}
+                          className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                          style={{
+                            backgroundColor: active ? "#7c3aed" : "transparent",
+                            color: active ? "#fff" : "#a78bfa",
+                            borderColor: active ? "#7c3aed" : "#4c1d95",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Card 3: Duration + BPM Range */}
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-4">
+                {/* Duration */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">Duration</span>
+                    <InfoMark text="Target set length. Tracks are added until this duration is reached. The estimate on the right is based on average track length in your current filtered library." />
+                    {filteredTrackCount > 0 && (
+                      <span className="text-[10px] text-[#475569]">≈ {filteredTrackCount} tracks</span>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setPrefs((p) => ({ ...p, setDuration: null }))}
+                      disabled={minViablePill !== null && !playlistFilterId}
+                      title={playlistFilterId ? "Include all tracks from this playlist" : undefined}
+                      className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border disabled:opacity-30 disabled:cursor-not-allowed"
+                      style={{
+                        backgroundColor: prefs.setDuration === null ? "#7c3aed" : "transparent",
+                        color: prefs.setDuration === null ? "#fff" : "#64748b",
+                        borderColor: prefs.setDuration === null ? "#7c3aed" : "#2a2a3a",
+                      }}
+                    >
+                      {playlistFilterId ? "Max" : "Any"}
+                    </button>
+                    {SET_DURATIONS.map((min) => {
+                      const active = prefs.setDuration === min;
+                      const lockedByPlaylist = minViablePill !== null && min !== minViablePill;
+                      const title = lockedByPlaylist
+                        ? min < (minViablePill ?? 0)
+                          ? `Playlist is ~${Math.ceil(playlistTotalMinutes)}m — too short`
+                          : `Use ${minViablePill}m to match the playlist length`
+                        : undefined;
+                      return (
+                        <button
+                          key={min}
+                          type="button"
+                          onClick={() => { if (!lockedByPlaylist) setPrefs((p) => ({ ...p, setDuration: min })); }}
+                          disabled={lockedByPlaylist}
+                          title={title}
+                          className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border disabled:opacity-30 disabled:cursor-not-allowed"
+                          style={{
+                            backgroundColor: active ? "#7c3aed" : "transparent",
+                            color: active ? "#fff" : "#64748b",
+                            borderColor: active ? "#7c3aed" : "#2a2a3a",
+                          }}
+                        >
+                          {min}m
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* BPM Range */}
+                <div className="border-t border-[#1e1e2e] pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">BPM Range</span>
+                      <InfoMark text="Hard filter — only tracks within this tempo range are considered. Leave both fields empty to include all tempos." />
+                    </div>
+                    {(prefs.bpmMin != null || prefs.bpmMax != null) && (
+                      <button type="button" onClick={() => setPrefs(p => ({ ...p, bpmMin: undefined, bpmMax: undefined }))} className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors">
+                        clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" min={40} max={250} placeholder="Min"
+                      value={prefs.bpmMin ?? ""}
+                      onChange={e => { const v = e.target.value === "" ? undefined : Number(e.target.value); setPrefs(p => ({ ...p, bpmMin: v })); }}
+                      className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
+                    />
+                    <span className="text-[#4b5568] text-xs flex-shrink-0">–</span>
+                    <input
+                      type="number" min={40} max={250} placeholder="Max"
+                      value={prefs.bpmMax ?? ""}
+                      onChange={e => { const v = e.target.value === "" ? undefined : Number(e.target.value); setPrefs(p => ({ ...p, bpmMax: v })); }}
+                      className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
+                    />
+                  </div>
+                </div>
+              </div>
               {/* Card 2: Filters (only when tag data exists) */}
               {availableTags.vibeTags.length +
                 availableTags.moodTags.length +
@@ -2191,6 +2168,164 @@ function AppInner() {
                     </div>
                   );
                 })()}
+
+              {/* Card 5: Scoring weights — collapsible, advanced */}
+              {(() => {
+                const PRESETS: { name: string; desc: string; detail: string; weights: { harmonicWeight: number; energyWeight: number; bpmWeight: number; transitionWeight: number } }[] = [
+                  { name: 'Balanced', desc: 'Works for most sets', detail: 'Harmonic 45 · Energy 25 · BPM 22 · Transition 8', weights: { harmonicWeight: 0.45, energyWeight: 0.25, bpmWeight: 0.22, transitionWeight: 0.08 } },
+                  { name: 'Club', desc: 'Techno / house / trance', detail: 'Harmonic 55 · Energy 20 · BPM 20 · Transition 5', weights: { harmonicWeight: 0.55, energyWeight: 0.20, bpmWeight: 0.20, transitionWeight: 0.05 } },
+                  { name: 'Festival', desc: 'Big room — energy arc first', detail: 'Harmonic 20 · Energy 55 · BPM 20 · Transition 5', weights: { harmonicWeight: 0.20, energyWeight: 0.55, bpmWeight: 0.20, transitionWeight: 0.05 } },
+                  { name: 'Open Format', desc: 'Bar / mixed genre / wedding', detail: 'Harmonic 20 · Energy 30 · BPM 20 · Transition 30', weights: { harmonicWeight: 0.20, energyWeight: 0.30, bpmWeight: 0.20, transitionWeight: 0.30 } },
+                ];
+                const activePreset = PRESETS.find(p =>
+                  scoringWeights &&
+                  p.weights.harmonicWeight === scoringWeights.harmonicWeight &&
+                  p.weights.energyWeight === scoringWeights.energyWeight &&
+                  p.weights.bpmWeight === scoringWeights.bpmWeight &&
+                  p.weights.transitionWeight === scoringWeights.transitionWeight
+                ) ?? PRESETS[0];
+                const nonDefault = activePreset.name !== 'Balanced';
+                return (
+                  <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setScoringOpen(o => !o)}
+                      className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">Scoring</span>
+                        {nonDefault && (
+                          <span className="text-[10px] font-medium bg-[#7c3aed33] text-[#a78bfa] border border-[#7c3aed66] px-1.5 py-0.5 rounded-full">
+                            {activePreset.name}
+                          </span>
+                        )}
+                      </div>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`text-[#475569] transition-transform duration-150 ${scoringOpen ? "rotate-180" : ""}`}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                    {scoringOpen && (
+                      <div className="px-4 pb-4 border-t border-[#1e1e2e] pt-3 flex flex-col gap-2">
+                        <p className="text-[10px] text-[#475569] leading-relaxed">Controls what matters most when picking the next track.</p>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {PRESETS.map((preset, i) => {
+                            const isActive = preset.name === activePreset.name;
+                            const isLast = i === PRESETS.length - 1;
+                            return (
+                              <div key={preset.name} className="relative group">
+                                <button
+                                  type="button"
+                                  onClick={() => setScoringWeights(preset.name === 'Balanced' ? undefined : preset.weights)}
+                                  className={`text-[10px] px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
+                                    isActive
+                                      ? 'bg-[#7c3aed]/20 border-[#7c3aed]/60 text-[#a78bfa]'
+                                      : 'bg-[#0d0d14] border-[#1e1e2e] text-[#6b7280] hover:border-[#374151] hover:text-[#9ca3af]'
+                                  }`}
+                                >
+                                  {preset.name}
+                                </button>
+                                <div className={`absolute bottom-full mb-2 w-44 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 ${isLast ? 'right-0' : 'left-0'}`}>
+                                  <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
+                                    <p className="text-[10px] font-semibold text-[#c4b5fd] mb-0.5">{preset.name}</p>
+                                    <p className="text-[10px] text-[#9ca3af] mb-1.5">{preset.desc}</p>
+                                    <p className="text-[10px] text-[#6b7280] leading-relaxed">{preset.detail}</p>
+                                  </div>
+                                  <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${isLast ? 'mr-3 ml-auto' : 'ml-3'}`} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Card 6: Generate CTA — always at the bottom of the sidebar */}
+              {(() => {
+                const FALLBACK_DURATION = 210;
+                const rawPlaylistSec = generatedSet.reduce((s, t) => s + (t.duration ?? FALLBACK_DURATION), 0);
+                const transitions = Math.max(0, generatedSet.length - 1);
+                const estSetSec = rawPlaylistSec - MIX_OVERLAP_SEC * transitions;
+                const fmtMin = (s: number) => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
+                return (
+                  <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
+                    <div className="relative group">
+                      <button
+                        onClick={() => {
+                          if (library.length === 0 || isGenerating) return;
+                          setIsGenerating(true);
+                          setTimeout(() => { handleGenerate(); setIsGenerating(false); }, 0);
+                        }}
+                        disabled={
+                          isInitializing || library.length === 0 || isGenerating ||
+                          (prefs.genres.length === 0 && !playlistFilterId) ||
+                          (!!playlistFilterId && playlistFilterFiles === undefined)
+                        }
+                        aria-label="Generate set"
+                        className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
+                        style={{
+                          background: isGenerating ? "linear-gradient(135deg, #6d28d9, #5b21b6)" : "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                          padding: "12px 16px",
+                          fontSize: "0.95rem",
+                          fontWeight: 700,
+                          boxShadow: isGenerating ? "none" : undefined,
+                        }}
+                        onMouseEnter={(e) => { if (!e.currentTarget.disabled) { e.currentTarget.style.background = "linear-gradient(135deg, #8b5cf6, #7c3aed)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(124,58,237,0.4)"; } }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = isGenerating ? "linear-gradient(135deg, #6d28d9, #5b21b6)" : "linear-gradient(135deg, #7c3aed, #6d28d9)"; e.currentTarget.style.boxShadow = ""; }}
+                      >
+                        {isGenerating ? (
+                          <>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" className="animate-pulse"><polygon points="5,3 19,12 5,21" /></svg>
+                            <span className="animate-pulse">Generating…</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+                            Generate
+                          </>
+                        )}
+                      </button>
+                      {prefs.genres.length === 0 && !playlistFilterId && tipConfig.help && (
+                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
+                          Pick a genre first to generate a set
+                        </div>
+                      )}
+                      {!!playlistFilterId && playlistFilterFiles === undefined && (
+                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
+                          None of these playlist tracks are in your library
+                        </div>
+                      )}
+                    </div>
+                    {generatedSet.length > 0 && (
+                      <div className="relative group">
+                        <button
+                          onClick={handleAppendTracks}
+                          disabled={isInitializing || library.length === 0 || !canAppendTracks || (prefs.genres.length === 0 && !playlistFilterId) || (!!playlistFilterId && playlistFilterFiles === undefined)}
+                          className="w-full flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#a78bfa] text-sm font-medium py-2 rounded-md transition-colors cursor-pointer"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                          Append tracks
+                        </button>
+                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
+                          Add more tracks to the end of the current set — your locks and reorders stay untouched
+                        </div>
+                      </div>
+                    )}
+                    {generatedSet.length >= 2 && (
+                      <div className="flex items-center gap-3 text-[10px] text-[#475569] border-t border-[#1e1e2e] pt-2">
+                        <span title="Sum of all track durations">Playlist: <span className="text-[#64748b] font-semibold">{fmtMin(rawPlaylistSec)}</span></span>
+                        <span className="text-[#1e1e2e]">·</span>
+                        <span title="Estimated actual set length accounting for 2-min crossfades">Est. set: <span className="text-[#94a3b8] font-semibold">{fmtMin(estSetSec)}</span></span>
+                        <span className="text-[#1e1e2e]">·</span>
+                        <span className="text-[#4b5568]">{generatedSet.length} tracks</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
             </div>
 
             {/* ── RIGHT: Generated Set ── */}
@@ -2217,6 +2352,23 @@ function AppInner() {
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
                     Generated Set
                   </h2>
+                  {setScore !== null && (() => {
+                    const scoreColor = setScore.total >= SCORE_THRESHOLDS.good
+                      ? '#22c55e' : setScore.total >= SCORE_THRESHOLDS.fair
+                      ? '#f59e0b' : '#ef4444';
+                    const tooltip = `Harmonic: ${Math.round((1 - setScore.harmonicRate) * 100)}%  ·  Energy fit: ${Math.round((1 - setScore.avgEnergyError) * 100)}%  ·  BPM flow: ${Math.round(setScore.bpmSmoothness * 100)}%`;
+                    return (
+                      <div
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-[#0d0d14] cursor-default"
+                        style={{ borderColor: `${scoreColor}33` }}
+                        title={tooltip}
+                      >
+                        <span className="text-[10px] text-[#64748b] font-medium">Score</span>
+                        <span className="text-sm font-bold tabular-nums" style={{ color: scoreColor }}>{setScore.total}</span>
+                        <span className="text-[10px] text-[#334155]">/ 100</span>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <SetTracklist
                   tracks={generatedSet}
@@ -2256,6 +2408,18 @@ function AppInner() {
                       : undefined
                   }
                 />
+
+                {generatedSet.length > 0 && (
+                  <div className="mt-3">
+                    <SuggestionsStrip
+                      suggestions={setSuggestions}
+                      setDuration={prefs.setDuration}
+                      actualDurationSec={generatedSet.reduce((s, t) => s + (t.duration ?? 210), 0)}
+                      onAdd={(track) => insertSuggestion(track)}
+                      onExtend={(extra) => setPrefs(p => ({ ...p, setDuration: (p.setDuration ?? 0) + extra }))}
+                    />
+                  </div>
+                )}
 
                 {generatedSet.length >= 2 && (
                   <div className="mt-4 rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
@@ -2378,7 +2542,26 @@ function AppInner() {
               hasSpotifyCredentials ? startSpotifyExport : undefined
             }
             handleRenameEntry={handleRenameEntry}
+            handleRateEntry={handleRateEntry}
             onLoadEntry={handleLoadHistoryEntry}
+          />
+        </main>
+      )}
+
+      {activeTab === "Crates" && (
+        <main className="flex-1 overflow-hidden">
+          <CratesTab
+            collection={discogsCollection}
+            onSync={() => void syncDiscogsCollection()}
+            syncPhase={discogsSyncStatus.phase}
+            syncMessage={discogsSyncStatus.phase === 'error' ? (discogsSyncStatus as { phase: 'error'; message: string }).message : undefined}
+            hasOAuth={hasDiscogsOAuth}
+            hasSpotify={hasSpotifyCredentials}
+            library={library}
+            manualData={cratesManualData}
+            onManualDataChange={setCratesManualData}
+            rejectedMatches={cratesRejected}
+            onRejectedChange={setCratesRejected}
           />
         </main>
       )}
@@ -3587,6 +3770,10 @@ function AppInner() {
           localStorage.removeItem("djfriend-history");
           apiFetch('/api/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '[]' }).catch(() => {});
         }}
+        onSyncDiscogs={() => void syncDiscogsCollection()}
+        discogsCollection={discogsCollection}
+        discogsSyncPhase={discogsSyncStatus.phase}
+        discogsSyncMessage={discogsSyncStatus.phase === 'error' ? discogsSyncStatus.message : undefined}
       />
 
     </div>

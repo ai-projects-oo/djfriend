@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-import { describe, test, expect } from 'vitest'
+import { describe, test, it, expect } from 'vitest'
 import { generateSet } from '../app/lib/setGenerator'
+import { deriveSemanticTags } from '../src/ai'
+import type { AudioProfile } from '../src/ai'
 import type { Song, DJPreferences, CurvePoint } from '../app/types/index'
 
 // SemanticTags will be added to app/types/index.ts by the frontend agent.
@@ -255,5 +257,139 @@ describe('Enrichment skip logic', () => {
     const keys = toEnrich.map(([k]) => k)
     expect(keys).toContain('untagged-1.mp3')
     expect(keys).toContain('untagged-2.mp3')
+  })
+})
+
+// ─── Suite 4: deriveSemanticTags edge cases ────────────────────────────────────
+
+function makeProfile(overrides: Partial<AudioProfile> = {}): AudioProfile {
+  return { bpm: 128, camelot: '8B', energy: 0.6, genres: [], ...overrides }
+}
+
+describe('deriveSemanticTags — BPM halving / effectiveBpm', () => {
+  it('doubles BPM below 90 (e.g. 89 → eb=178) and adds driving', () => {
+    const { vibeTags } = deriveSemanticTags(makeProfile({ bpm: 89, energy: 0.5 }))
+    expect(vibeTags).toContain('driving')
+  })
+
+  it('does not double BPM at exactly 90', () => {
+    // eb = 90 — below the 132 threshold for driving
+    const { vibeTags } = deriveSemanticTags(makeProfile({ bpm: 90, energy: 0.5 }))
+    expect(vibeTags).not.toContain('driving')
+  })
+
+  it('adds driving at exactly eb=132', () => {
+    const { vibeTags } = deriveSemanticTags(makeProfile({ bpm: 132, energy: 0.5 }))
+    expect(vibeTags).toContain('driving')
+  })
+
+  it('does not add driving at eb=131', () => {
+    const { vibeTags } = deriveSemanticTags(makeProfile({ bpm: 131, energy: 0.5 }))
+    expect(vibeTags).not.toContain('driving')
+  })
+
+  it('bpm=0 produces no driving or groovy tags', () => {
+    const { vibeTags } = deriveSemanticTags(makeProfile({ bpm: 0, energy: 0.6 }))
+    expect(vibeTags).not.toContain('driving')
+    expect(vibeTags).not.toContain('groovy')
+  })
+})
+
+describe('deriveSemanticTags — minimum / zero values', () => {
+  it('does not crash with all-zero inputs', () => {
+    expect(() => deriveSemanticTags({ bpm: 0, camelot: '', energy: 0, genres: [] })).not.toThrow()
+  })
+
+  it('zero energy + zero bpm adds dreamy vibe (energy<0.45 && eb<112)', () => {
+    const { vibeTags } = deriveSemanticTags({ bpm: 0, camelot: '8B', energy: 0, genres: [] })
+    expect(vibeTags).toContain('dreamy')
+  })
+
+  it('empty camelot string is treated as major (isMinor=false)', () => {
+    const { moodTags } = deriveSemanticTags(makeProfile({ camelot: '' }))
+    expect(moodTags).toContain('uplifting')
+    expect(moodTags).not.toContain('dark')
+  })
+})
+
+describe('deriveSemanticTags — typical house/techno track', () => {
+  it('128 BPM, energy 0.55, major → groovy', () => {
+    const { vibeTags } = deriveSemanticTags(makeProfile({ bpm: 128, energy: 0.55, camelot: '8B' }))
+    expect(vibeTags).toContain('groovy')
+  })
+
+  it('133 BPM, energy 0.7, minor → driving + hypnotic', () => {
+    const { vibeTags } = deriveSemanticTags(makeProfile({ bpm: 133, energy: 0.7, camelot: '8A' }))
+    expect(vibeTags).toContain('driving')
+    expect(vibeTags).toContain('hypnotic')
+  })
+
+  it('major key always gets uplifting mood', () => {
+    const { moodTags } = deriveSemanticTags(makeProfile({ camelot: '5B' }))
+    expect(moodTags).toContain('uplifting')
+  })
+
+  it('minor key always gets dark mood', () => {
+    const { moodTags } = deriveSemanticTags(makeProfile({ camelot: '5A' }))
+    expect(moodTags).toContain('dark')
+  })
+})
+
+describe('deriveSemanticTags — vocalType detection', () => {
+  it('vocal genre keyword forces vocalType="vocal"', () => {
+    const { vocalType } = deriveSemanticTags(makeProfile({ genres: ['Vocal House'] }))
+    expect(vocalType).toBe('vocal')
+  })
+
+  it('techno genre keyword forces vocalType="instrumental"', () => {
+    const { vocalType } = deriveSemanticTags(makeProfile({ genres: ['Techno'] }))
+    expect(vocalType).toBe('instrumental')
+  })
+
+  it('vocalLikelihood >= 0.62 → vocal', () => {
+    const { vocalType } = deriveSemanticTags(makeProfile({ vocalLikelihood: 0.62 }))
+    expect(vocalType).toBe('vocal')
+  })
+
+  it('vocalLikelihood 0.61 → mostly-vocal', () => {
+    const { vocalType } = deriveSemanticTags(makeProfile({ vocalLikelihood: 0.61 }))
+    expect(vocalType).toBe('mostly-vocal')
+  })
+
+  it('vocalLikelihood 0.42 → mostly-vocal (lower boundary)', () => {
+    const { vocalType } = deriveSemanticTags(makeProfile({ vocalLikelihood: 0.42 }))
+    expect(vocalType).toBe('mostly-vocal')
+  })
+
+  it('vocalLikelihood 0.41 → instrumental (below mostly-vocal threshold)', () => {
+    const { vocalType } = deriveSemanticTags(makeProfile({ vocalLikelihood: 0.41 }))
+    expect(vocalType).toBe('instrumental')
+  })
+
+  it('genre overrides vocalLikelihood: vocal genre wins even with low vocalLikelihood', () => {
+    const { vocalType } = deriveSemanticTags(makeProfile({ genres: ['Soul'], vocalLikelihood: 0.10 }))
+    expect(vocalType).toBe('vocal')
+  })
+})
+
+describe('deriveSemanticTags — output constraints', () => {
+  it('vibeTags capped at 3 entries', () => {
+    // High energy + high BPM major triggers many vibe tags
+    const { vibeTags } = deriveSemanticTags(makeProfile({ bpm: 140, energy: 0.9, camelot: '8B' }))
+    expect(vibeTags.length).toBeLessThanOrEqual(3)
+  })
+
+  it('moodTags capped at 3 entries', () => {
+    const { moodTags } = deriveSemanticTags(makeProfile({ bpm: 128, energy: 0.75, camelot: '2A' }))
+    expect(moodTags.length).toBeLessThanOrEqual(3)
+  })
+
+  it('no duplicate tags in any array', () => {
+    const tags = deriveSemanticTags(makeProfile({ bpm: 128, energy: 0.7, camelot: '8B' }))
+    const hasDup = (arr: string[]) => arr.length !== new Set(arr).size
+    expect(hasDup(tags.vibeTags)).toBe(false)
+    expect(hasDup(tags.moodTags)).toBe(false)
+    expect(hasDup(tags.venueTags)).toBe(false)
+    expect(hasDup(tags.timeOfNightTags)).toBe(false)
   })
 })

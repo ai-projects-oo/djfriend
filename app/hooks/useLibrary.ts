@@ -347,7 +347,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   }, []);
 
   const runRekordboxImport = useCallback(async (tracks: Array<{ path: string; title: string; artist: string; bpm: number; tonality: string; duration: number }>) => {
-    if (tracks.length === 0) return;
+    if (tracks.length === 0) { setError('No valid tracks found in the Rekordbox XML. The file may be empty or use an unsupported format.'); return; }
     setIsAnalyzing(true);
     setAnalysisProgress({ completed: 0, total: 0 });
     setError(null);

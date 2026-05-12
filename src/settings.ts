@@ -23,6 +23,12 @@ export interface Settings {
   energyCheckThreshold?: number // 0–1, minimum delta to flag an energy mismatch (default 0.12)
   shareTelemetry?: boolean      // opt-in: send anonymous transition vectors to community server
   tipConfig?: { help: boolean; info: boolean; ai: boolean }
+  discogsConsumerKey?:        string
+  discogsConsumerSecret?:     string
+  discogsRequestTokenSecret?: string
+  discogsAccessToken?:        string
+  discogsAccessTokenSecret?:  string
+  discogsUsername?:           string
 }
 
 export function readSettings(): Partial<Settings> {
@@ -31,6 +37,8 @@ export function readSettings(): Partial<Settings> {
     ...(process.env.SPOTIFY_CLIENT_ID ? { spotifyClientId: process.env.SPOTIFY_CLIENT_ID } : {}),
     ...(process.env.SPOTIFY_CLIENT_SECRET ? { spotifyClientSecret: process.env.SPOTIFY_CLIENT_SECRET } : {}),
     ...(process.env.SONGS_FOLDER ? { musicFolder: process.env.SONGS_FOLDER } : {}),
+    ...(process.env.DISCOGS_CONSUMER_KEY ? { discogsConsumerKey: process.env.DISCOGS_CONSUMER_KEY } : {}),
+    ...(process.env.DISCOGS_CONSUMER_SECRET ? { discogsConsumerSecret: process.env.DISCOGS_CONSUMER_SECRET } : {}),
   }
   try {
     if (!fs.existsSync(SETTINGS_PATH)) return fromEnv

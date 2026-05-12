@@ -47,6 +47,8 @@ export interface Song {
   comment?: string;            // ID3 comment tag (first COMM frame)
   semanticTags?: SemanticTags;
   energyProfile?: EnergyProfile;
+  discogsReleaseId?: number;
+  discogsFromAPI?:   boolean;
 }
 
 export interface SetTrack extends Song {
@@ -123,6 +125,47 @@ export interface ScoringWeights {
   bpmWeight:        number; // default 0.22
   transitionWeight: number; // default 0.08
   energyWeight:     number; // default 0.25
+  discogsBonus?:    number; // 0–1; absent = off (Crates first mode)
+}
+
+export type DiscogsMode = 'library' | 'crates' | 'crates-first';
+
+export type ChannelKind = 'vinyl' | 'digital';
+
+export interface DJSystem {
+  channels: ChannelKind[]; // 2–4 entries; index = channel number
+}
+
+export const DEFAULT_DJ_SYSTEM: DJSystem = { channels: ['digital', 'digital'] };
+
+export function vinylDeckCount(sys: DJSystem): number {
+  return sys.channels.filter(c => c === 'vinyl').length;
+}
+
+export interface DiscogsRelease {
+  releaseId:        number;
+  title:            string;
+  artist:           string;
+  year?:            number;
+  formats:          string[];
+  genres:           string[];
+  styles:           string[];
+  inLibrary:        boolean;
+  matchConfidence?: 'exact' | 'fuzzy';
+  manualMatchFile?: string;
+  matchedFile?:     string;
+  thumb?:           string;
+  bpm?:             number;
+  camelot?:         string;
+  energy?:          number;
+}
+
+export interface DiscogsCollectionEntry {
+  id:             'discogs-collection';
+  username:       string;
+  syncedAt:       number;
+  totalReleases:  number;
+  releases:       DiscogsRelease[];
 }
 
 export interface SetPlan {
@@ -145,6 +188,7 @@ export interface HistoryEntry {
   tracks: SetTrack[];
   prefs: DJPreferences;
   curve: CurvePoint[];
+  rating?: 1 | 2 | 3 | 4 | 5;
 }
 
 export interface ImportTrack {

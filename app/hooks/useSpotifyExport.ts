@@ -158,6 +158,16 @@ export function useSpotifyExport({
     );
   }, [setHistory]);
 
+  const handleRateEntry = useCallback((id: string, rating: 1 | 2 | 3 | 4 | 5 | null) => {
+    setHistory((prev) =>
+      prev.map((e) => {
+        if (e.id !== id) return e;
+        if (rating === null) { const { rating: _r, ...rest } = e; void _r; return rest as typeof e; }
+        return { ...e, rating };
+      }),
+    );
+  }, [setHistory]);
+
   return {
     spotifyExportStatus,
     setSpotifyExportStatus,
@@ -167,6 +177,7 @@ export function useSpotifyExport({
     handleToggleSpotifyMatch,
     handleConfirmSpotifyExport,
     handleRenameEntry,
+    handleRateEntry,
   };
 }
 

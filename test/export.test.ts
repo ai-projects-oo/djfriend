@@ -170,6 +170,22 @@ describe('generateM3U', () => {
     expect(m3u).toContain('#EXTINF:0,')
   })
 
+  it('clamps negative duration to 0', () => {
+    const t = makeTrack({ duration: -30 })
+    const m3u = generateM3U([t])
+    expect(m3u).toContain('#EXTINF:0,')
+  })
+
+  it('produces only the header line for an empty track list', () => {
+    expect(generateM3U([])).toBe('#EXTM3U')
+  })
+
+  it('handles empty title and artist without crashing', () => {
+    const t = makeTrack({ title: '', artist: '', duration: 180 })
+    const m3u = generateM3U([t])
+    expect(m3u).toContain('#EXTINF:180, - ')
+  })
+
   it('generates correct entry order: EXTINF then path', () => {
     const t = makeTrack({ filePath: '/Users/dj/Music/track.mp3', duration: 180 })
     const lines = generateM3U([t]).split('\r\n').filter(Boolean)
@@ -251,5 +267,37 @@ describe('generateRekordboxXml', () => {
   it('sets Entries count matching track count', () => {
     const xml = generateRekordboxXml([makeTrack(), makeTrack()], 'Set')
     expect(xml).toContain('Entries="2"')
+  })
+
+  it('unknown camelot key produces empty Tonality attribute', () => {
+    const t = makeTrack({ camelot: 'X9' })
+    expect(generateRekordboxXml([t])).toContain('Tonality=""')
+  })
+
+  it('empty camelot string produces empty Tonality attribute', () => {
+    const t = makeTrack({ camelot: '' })
+    expect(generateRekordboxXml([t])).toContain('Tonality=""')
+  })
+
+  it('undefined camelot produces empty Tonality attribute without crashing', () => {
+    const t = makeTrack({ camelot: undefined as unknown as string })
+    expect(() => generateRekordboxXml([t])).not.toThrow()
+    expect(generateRekordboxXml([t])).toContain('Tonality=""')
+  })
+
+  it('BPM of 0 produces AverageBpm="0.00"', () => {
+    const t = makeTrack({ bpm: 0 })
+    expect(generateRekordboxXml([t])).toContain('AverageBpm="0.00"')
+  })
+
+  it('XML-escapes playlist name with special characters', () => {
+    const xml = generateRekordboxXml([makeTrack()], '<My Set & Yours>')
+    expect(xml).toContain('Name="&lt;My Set &amp; Yours&gt;"')
+  })
+
+  it('empty track list produces Entries="0" with no TRACK nodes in collection', () => {
+    const xml = generateRekordboxXml([])
+    expect(xml).toContain('Entries="0"')
+    expect(xml).not.toContain('<TRACK ')
   })
 })

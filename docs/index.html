@@ -361,6 +361,55 @@
         gap: 1.5rem;
       }
 
+      .crates-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 1.25rem;
+      }
+      .crate-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        transition: border-color 0.2s;
+      }
+      .crate-card:hover {
+        border-color: rgba(124, 58, 237, 0.5);
+      }
+      .crate-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: rgba(124, 58, 237, 0.12);
+        border: 1px solid rgba(124, 58, 237, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--purple-lt);
+        flex-shrink: 0;
+      }
+      .crate-card h3 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .crate-card p {
+        font-size: 0.85rem;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      .crate-card p em {
+        color: var(--purple-lt);
+        font-style: normal;
+        font-weight: 600;
+      }
+      .crate-card p strong {
+        color: var(--text);
+      }
+
       .platform-card {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -457,6 +506,7 @@
       <ul class="nav-links">
         <li><a href="#install">Download</a></li>
         <li><a href="#features">Features</a></li>
+        <li><a href="#crates">Discogs</a></li>
         <li><a href="#platforms">Platforms</a></li>
         <li><a href="guide.html">Guide</a></li>
         <li><a href="about.html">About</a></li>
@@ -607,7 +657,110 @@
             </svg>
             Smart swap suggestions — top 5 replacements scored by harmonic, energy &amp; BPM
           </li>
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="4" y1="6" x2="20" y2="6"></line>
+              <line x1="4" y1="12" x2="14" y2="12"></line>
+              <line x1="4" y1="18" x2="17" y2="18"></line>
+            </svg>
+            Scoring weight sliders — tune harmonic, BPM, energy &amp; transition balance per set
+          </li>
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="17 1 21 5 17 9"></polyline>
+              <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+              <polyline points="7 23 3 19 7 15"></polyline>
+              <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+            </svg>
+            Ranked generator — best set shown first, cycle through 10 quality-ranked alternatives
+          </li>
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            Set history with star ratings — sort by rating to find your best sets
+          </li>
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
+            </svg>
+            Discogs Crates — browse your vinyl collection with album art, BPM &amp; key
+          </li>
         </ul>
+      </section>
+
+      <hr />
+
+      <section id="crates">
+        <h2>Discogs Crates</h2>
+        <p class="section-intro">Connect your Discogs account to browse your vinyl collection alongside your digital library — and generate sets that blend both worlds.</p>
+        <div class="crates-grid">
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
+              </svg>
+            </div>
+            <h3>One-click connect</h3>
+            <p>OAuth sign-in — no copy-pasting tokens. Click <em>Connect Discogs</em>, approve in your browser, done. Your full collection syncs automatically.</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+            </div>
+            <h3>Album art grid</h3>
+            <p>Browse your collection as a visual grid with cover art, artist, title, year, and genre. Filter by <em>+Digital</em> (matched in your library) or <em>Vinyl only</em>.</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M9 18V5l12-2v13"/>
+                <circle cx="6" cy="18" r="3"/>
+                <circle cx="18" cy="16" r="3"/>
+              </svg>
+            </div>
+            <h3>BPM &amp; key per record</h3>
+            <p>Vinyl not in your digital library? Manually enter BPM and Camelot key per record — saved locally. Or jump to Beatport, Traxsource, or Discogs to look it up.</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <h3>Crates mode for set generation</h3>
+            <p>Three modes: <strong>Library</strong> (digital only), <strong>Crates first</strong> (vinyl gets a scoring bonus), or <strong>Crates</strong> (vinyl-matched tracks only).</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <h3>Notes &amp; sticker printing</h3>
+            <p>Add personal notes to any record. Print a 3.5″ × 2″ sticker with cover art, BPM, key, and notes — perfect for vinyl sleeve labels.</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </div>
+            <h3>Search &amp; sort</h3>
+            <p>Full-text search across artist, title, genre, and style. Sort by artist, title, or year. Green ring = exact match, amber = fuzzy match.</p>
+          </div>
+        </div>
       </section>
 
       <hr />
@@ -789,6 +942,10 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 Library organizer with inline audio preview
               </li>
+              <li class="platform-item platform-item--yes">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Discogs Crates — vinyl collection browser &amp; set generation
+              </li>
             </ul>
           </div>
 
@@ -831,6 +988,10 @@
               <li class="platform-item platform-item--yes">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 Library organizer with inline audio preview
+              </li>
+              <li class="platform-item platform-item--yes">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Discogs Crates — vinyl collection browser &amp; set generation
               </li>
             </ul>
           </div>

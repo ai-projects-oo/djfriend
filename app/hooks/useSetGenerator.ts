@@ -20,7 +20,7 @@ export interface SwapBreakdown {
   hasSemanticTags: boolean;      // whether candidate has AI tags at all
 }
 
-export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<React.SetStateAction<Song[]>>, playlistFilterFiles?: Set<string>, history?: HistoryEntry[], mlWeights?: import('../lib/mlModel').ModelWeights | null) {
+export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<React.SetStateAction<Song[]>>, playlistFilterFiles?: Set<string>, history?: HistoryEntry[], mlWeights?: import('../lib/mlModel').ModelWeights | null, discogsBonusFiles?: Set<string>, discogsBonusValue?: number, vinylFiles?: Set<string>, turntables?: 1 | 2) {
   const [prefs, setPrefs] = useState<DJPreferences>(DEFAULT_PREFS);
   const [curve, setCurve] = useState<CurvePoint[]>(DEFAULT_CURVE);
   const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
@@ -114,25 +114,46 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   // How many tracks fit in the current set duration given the filtered pool
   const filteredTrackCount = useMemo(() => {
-    const filtered = library.filter(s => matchesGenrePrefs(s, prefs.genres));
-    const pool = filtered.length > 0 ? filtered : library;
+    let base = library;
+    if (playlistFilterFiles?.size) {
+      const playlistMatched = library.filter(s => playlistFilterFiles.has(s.file) || playlistFilterFiles.has(s.filePath ?? ''));
+      if (playlistMatched.length > 0) base = playlistMatched;
+    }
+    const filtered = base.filter(s => matchesGenrePrefs(s, prefs.genres));
+    const pool = filtered.length > 0 ? filtered : base;
     if (pool.length === 0) return 0;
     const avgDur = pool.reduce((sum, s) => sum + (s.duration ?? FALLBACK_DURATION), 0) / pool.length;
     if (prefs.setDuration === null) return pool.length;
     return Math.max(1, Math.floor((prefs.setDuration * 60) / (avgDur + GAP_SECONDS)));
-  }, [library, prefs.genres, prefs.setDuration]);
+  }, [library, playlistFilterFiles, prefs.genres, prefs.setDuration]);
 
   const canGenerateNew = library.length > 0 &&
     generatedSet.length > 0 &&
     prefs.genres.length > 0 &&
     library.filter(s => matchesGenrePrefs(s, prefs.genres)).length > filteredTrackCount;
 
+  const setScore = useMemo(() => computeSetScore(generatedSet), [generatedSet]);
+
+  const canAppendTracks = useMemo(() => {
+    if (library.length === 0 || generatedSet.length === 0) return false;
+    if (prefs.setDuration === null) return true; // unlimited budget always allows append
+    const FALLBACK_DURATION = 210;
+    const GAP = 10;
+    const currentSeconds = generatedSet.reduce((s, t) => s + (t.duration ?? FALLBACK_DURATION) + GAP, 0);
+    return currentSeconds < prefs.setDuration * 60;
+  }, [library.length, generatedSet, prefs.setDuration]);
+
+  const effectiveWeights = useMemo<import('../types').ScoringWeights | undefined>(() => {
+    if (!discogsBonusFiles || !discogsBonusValue) return scoringWeights;
+    return { ...(scoringWeights ?? { harmonicWeight: 0.45, bpmWeight: 0.22, transitionWeight: 0.08, energyWeight: 0.25 }), discogsBonus: discogsBonusValue };
+  }, [scoringWeights, discogsBonusFiles, discogsBonusValue]);
+
   const runGenerate = useCallback(
     (songs: Song[], p: DJPreferences, c: CurvePoint[], extraOpts?: { jitter?: number; excludeFiles?: Set<string> }) => {
       if (songs.length === 0) return;
-      setGeneratedSet(generateSet(songs, p, c, { ...extraOpts, playlistFilterFiles, weights: scoringWeights, history, mlWeights }));
+      setGeneratedSet(generateSet(songs, p, c, { ...extraOpts, playlistFilterFiles, weights: effectiveWeights, discogsBonusFiles, history, mlWeights, vinylFiles, turntables }));
     },
-    [playlistFilterFiles, scoringWeights, history, mlWeights],
+    [playlistFilterFiles, effectiveWeights, discogsBonusFiles, history, mlWeights, vinylFiles, turntables],
   );
 
   /**
@@ -165,11 +186,11 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   const handleGenerate = useCallback(() => {
     const MAX_PASSES = 10;
-    const baseOpts = { playlistFilterFiles, weights: scoringWeights, history, mlWeights };
+    const baseOpts = { playlistFilterFiles, weights: effectiveWeights, discogsBonusFiles, history, mlWeights, vinylFiles, turntables };
     const cache = candidateCacheRef.current;
 
     // Cache key — rebuild when anything that affects generation changes
-    const key = `${library.length}|${JSON.stringify(prefs)}|${JSON.stringify(curve)}|${scoringWeights ? JSON.stringify(scoringWeights) : ''}`;
+    const key = `${library.length}|${JSON.stringify(prefs)}|${JSON.stringify(curve)}|${effectiveWeights ? JSON.stringify(effectiveWeights) : ''}`;
 
     if (key !== cache.key || cache.idx >= cache.list.length) {
       // Use escalating variation so passes naturally diverge:
@@ -207,13 +228,13 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     cache.idx++;
 
     setGeneratedSet(mergeWithLocked(pick));
-  }, [library, prefs, curve, mergeWithLocked, playlistFilterFiles, scoringWeights, history, mlWeights]);
+  }, [library, prefs, curve, mergeWithLocked, playlistFilterFiles, effectiveWeights, discogsBonusFiles, history, mlWeights, vinylFiles, turntables]);
 
   const handleGenerateNew = useCallback(() => {
     if (library.length === 0) return;
     const excludeFiles = new Set(generatedSet.map(t => t.file));
-    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15, playlistFilterFiles, weights: scoringWeights, history, mlWeights }));
-  }, [library, prefs, curve, generatedSet, playlistFilterFiles, scoringWeights, history, mlWeights]);
+    setGeneratedSet(generateSet(library, prefs, curve, { excludeFiles, jitter: 0.15, playlistFilterFiles, weights: effectiveWeights, discogsBonusFiles, history, mlWeights, vinylFiles, turntables }));
+  }, [library, prefs, curve, generatedSet, playlistFilterFiles, effectiveWeights, discogsBonusFiles, history, mlWeights, vinylFiles, turntables]);
 
   const selectGenre = useCallback((genre: string) => {
     if (genre === 'Any') {
@@ -417,9 +438,12 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
       jitter: 0.15,
       playlistFilterFiles,
       maxDurationSeconds: remainingSeconds,
-      weights: scoringWeights,
+      weights: effectiveWeights,
+      discogsBonusFiles,
       history,
       mlWeights,
+      vinylFiles,
+      turntables,
     });
     if (appended.length === 0) return;
     setGeneratedSet(prev => {
@@ -432,7 +456,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
         harmonicWarning: i > 0 ? isHarmonicWarning(combined[i - 1].camelot, track.camelot) : false,
       }));
     });
-  }, [library, prefs, curve, generatedSet, playlistFilterFiles, scoringWeights, history, mlWeights]);
+  }, [library, prefs, curve, generatedSet, playlistFilterFiles, effectiveWeights, discogsBonusFiles, history, mlWeights, vinylFiles, turntables]);
 
   const handleToggleLock = useCallback((index: number) => {
     setGeneratedSet(prev => prev.map((t, i) => i === index ? { ...t, locked: !t.locked } : t));
@@ -493,6 +517,70 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     }
   }, [generatedSet, setLibrary]);
 
+  // Suggestions strip — top candidates excluded only by duration budget
+  const setSuggestions = useMemo<SetTrack[]>(() => {
+    if (generatedSet.length === 0 || prefs.setDuration === null) return [];
+    const excludeFiles = new Set(generatedSet.map(t => t.file));
+    const suggestPrefs: DJPreferences = { ...prefs, setDuration: null };
+    const candidates = generateSet(library, suggestPrefs, curve, {
+      excludeFiles,
+      playlistFilterFiles,
+      weights: effectiveWeights,
+      discogsBonusFiles,
+      history,
+      mlWeights,
+      vinylFiles,
+      turntables,
+    });
+    return candidates.slice(0, 8);
+  }, [generatedSet, prefs, library, curve, playlistFilterFiles, effectiveWeights, discogsBonusFiles, history, mlWeights, vinylFiles, turntables]);
+
+  const insertSuggestion = useCallback((track: SetTrack) => {
+    setGeneratedSet(prev => {
+      if (prev.length === 0) return prev;
+
+      let bestPos = prev.length; // default: append
+      let bestScore = -Infinity;
+
+      for (let i = 1; i <= prev.length; i++) {
+        const before = prev[i - 1];
+        const after = i < prev.length ? prev[i] : null;
+
+        // Skip positions adjacent to locked tracks (both sides)
+        if (before.locked) continue;
+        if (after?.locked) continue;
+
+        const newN = prev.length + 1;
+        const curvePos = i / (newN - 1);
+        const curveTarget = sampleCurve(curve, newN > 1 ? curvePos : 0.5);
+
+        const harmonicIn  = camelotHarmonyScore(before.camelot, track.camelot);
+        const harmonicOut = after ? camelotHarmonyScore(track.camelot, after.camelot) : 1.0;
+        const energyFit   = 1 - Math.abs(track.energy - curveTarget);
+        const bpmBefore   = 1 - clamp(Math.abs(track.bpm - before.bpm) / 20, 0, 1);
+        const bpmAfter    = after ? 1 - clamp(Math.abs(track.bpm - after.bpm) / 20, 0, 1) : 1.0;
+        const bpmSmooth   = (bpmBefore + bpmAfter) / 2;
+        // Cost of breaking the existing gap between before and after
+        const gapCost     = after ? camelotHarmonyScore(before.camelot, after.camelot) : 0;
+
+        const posScore = harmonicIn + harmonicOut + energyFit + bpmSmooth - gapCost;
+        if (posScore > bestScore) {
+          bestScore = posScore;
+          bestPos = i;
+        }
+      }
+
+      const next = [...prev.slice(0, bestPos), { ...track }, ...prev.slice(bestPos)];
+      const n = next.length;
+      return next.map((t, i) => ({
+        ...t,
+        slot: i,
+        targetEnergy: n > 1 ? sampleCurve(curve, i / (n - 1)) : sampleCurve(curve, 0.5),
+        harmonicWarning: i > 0 ? isHarmonicWarning(next[i - 1].camelot, t.camelot) : false,
+      }));
+    });
+  }, [curve]);
+
   return {
     prefs,
     setPrefs,
@@ -510,7 +598,9 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     availableTags,
     TAG_GROUPS,
     filteredTrackCount,
+    setScore,
     canGenerateNew,
+    canAppendTracks,
     runGenerate,
     handleGenerate,
     handleGenerateNew,
@@ -525,5 +615,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     handleUpdateTrack,
     handleLoadToSet,
     handleAppendTracks,
+    setSuggestions,
+    insertSuggestion,
   };
 }

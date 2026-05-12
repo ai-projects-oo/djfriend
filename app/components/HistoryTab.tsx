@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { HistoryEntry, SetTrack, CurvePoint } from "../types";
 import { camelotColor } from "../lib/camelotColors";
 import { buildSvgPath } from "../lib/curveInterpolation";
@@ -7,6 +8,8 @@ import { computeSetScore, SCORE_THRESHOLDS } from "../lib/setScore";
 
 import { SpotifyIcon, RekordboxIcon, M3UIcon } from "./Icons";
 import { ARC_PRESETS } from "./EnergyCurveEditor";
+
+type SortOrder = 'newest' | 'best-rated';
 
 interface HistoryTabProps {
   history: HistoryEntry[];
@@ -20,6 +23,7 @@ interface HistoryTabProps {
   showRekordboxExport?: boolean;
   startSpotifyExport?: (tracks: SetTrack[], playlistName: string) => Promise<void>;
   handleRenameEntry: (id: string, newName: string) => void;
+  handleRateEntry: (id: string, rating: 1 | 2 | 3 | 4 | 5 | null) => void;
   onLoadEntry: (entry: HistoryEntry) => void;
 }
 
@@ -45,23 +49,45 @@ export default function HistoryTab({
   showRekordboxExport,
   startSpotifyExport,
   handleRenameEntry,
+  handleRateEntry,
   onLoadEntry,
 }: HistoryTabProps) {
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+
   if (history.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-[#475569] gap-3">
         <span className="text-4xl">📋</span>
         <p className="text-sm">
-          No playlists exported yet. Generate a set and click Export as
-          M3U.
+          No playlists exported yet. Generate a set and click Export as M3U.
         </p>
       </div>
     );
   }
 
+  const sortedHistory = sortOrder === 'best-rated'
+    ? [...history].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+    : history;
+
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex justify-end mb-2">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex gap-1 rounded-md border border-[#1e1e2e] overflow-hidden">
+          {([['newest', 'Newest first'], ['best-rated', 'Best rated']] as [SortOrder, string][]).map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => setSortOrder(val)}
+              className="px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer"
+              style={{
+                backgroundColor: sortOrder === val ? '#7c3aed' : 'transparent',
+                color: sortOrder === val ? '#fff' : '#64748b',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <button
           onClick={() => {
             if (confirm("Clear all history? This cannot be undone.")) {
@@ -73,10 +99,10 @@ export default function HistoryTab({
           }}
           className="text-xs text-[#475569] hover:text-[#ef4444] transition-colors cursor-pointer"
         >
-          Clear all history
+          Clear all
         </button>
       </div>
-      {history.map((entry) => {
+      {sortedHistory.map((entry) => {
         const isExpanded = expandedHistoryId === entry.id;
         const date = new Date(entry.timestamp);
         const label =
@@ -115,15 +141,51 @@ export default function HistoryTab({
             key={entry.id}
             className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden"
           >
-            {/* Editable name */}
-            <div className="px-5 pt-4 pb-2">
+            {/* Editable name + star rating */}
+            <div className="px-5 pt-4 pb-2 flex items-center gap-3">
               <input
                 value={entry.name}
                 onChange={(e) =>
                   handleRenameEntry(entry.id, e.target.value)
                 }
-                className="w-full bg-transparent text-sm font-semibold text-[#e2e8f0] border-b border-transparent hover:border-[#2a2a3a] focus:border-[#7c3aed] focus:outline-none pb-0.5 transition-colors"
+                className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-[#e2e8f0] border-b border-transparent hover:border-[#2a2a3a] focus:border-[#7c3aed] focus:outline-none pb-0.5 transition-colors"
               />
+              <div className="flex items-center gap-0.5 shrink-0 group/stars">
+                {([1, 2, 3, 4, 5] as const).map((star) => {
+                  const filled = entry.rating != null && star <= entry.rating;
+                  return (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => handleRateEntry(entry.id, star)}
+                      className="cursor-pointer transition-all hover:scale-125 focus:outline-none"
+                      aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24"
+                        fill={filled ? '#a78bfa' : 'none'}
+                        stroke={filled ? '#7c3aed' : '#2a2a3a'}
+                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                        className="transition-colors group-hover/stars:[&]:stroke-[#4c1d95]"
+                      >
+                        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+                      </svg>
+                    </button>
+                  );
+                })}
+                {entry.rating != null && (
+                  <button
+                    type="button"
+                    onClick={() => handleRateEntry(entry.id, null)}
+                    className="ml-0.5 text-[#2a2a3a] hover:text-[#ef4444] transition-colors cursor-pointer opacity-0 group-hover/stars:opacity-100 focus:outline-none"
+                    title="Clear rating"
+                    aria-label="Clear rating"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
             {/* Tags + mini curve (always visible) */}
             <div className="px-5 pt-1 pb-3 flex items-stretch gap-4">
@@ -217,11 +279,11 @@ export default function HistoryTab({
                   {isExpanded ? "▲" : "▼"}
                 </span>
               </button>
-              {/* Load into generator */}
+              {/* Load into generator — primary action */}
               <button
                 onClick={() => onLoadEntry(entry)}
-                title="Load into generator"
-                className="border-l border-[#1e1e2e] shrink-0 flex items-center gap-1.5 px-4 py-3 text-xs text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                title="Load into Set Generator"
+                className="border-l border-[#1e1e2e] shrink-0 flex items-center gap-1.5 px-4 py-3 text-xs font-semibold text-[#a78bfa] hover:text-white hover:bg-[#7c3aed] transition-colors cursor-pointer"
               >
                 ↩ Load
               </button>
@@ -241,7 +303,8 @@ export default function HistoryTab({
                         : entry.id,
                     )
                   }
-                  className="flex items-center gap-1.5 px-4 py-3 text-xs text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                  disabled={entry.tracks.length === 0}
+                  className="flex items-center gap-1.5 px-4 py-3 text-xs text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#0d0d14] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Export <span className="text-[9px]">▾</span>
                 </button>

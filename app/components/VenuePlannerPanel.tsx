@@ -4,12 +4,13 @@ import type { VenueType, SetPhase, SetPlan } from '../types';
 
 interface Props {
   onApply: (plan: SetPlan) => void;
-  onClose: () => void;
+  venue: VenueType;
+  phase: SetPhase;
+  onVenueChange: (v: VenueType) => void;
+  onPhaseChange: (p: SetPhase) => void;
 }
 
-export default function VenuePlannerPanel({ onApply, onClose }: Props) {
-  const [venue, setVenue] = useState<VenueType>('Club');
-  const [phase, setPhase] = useState<SetPhase>('Peak time');
+export default function VenuePlannerPanel({ onApply, venue, phase, onVenueChange, onPhaseChange }: Props) {
   const [applied, setApplied] = useState(false);
 
   const plan = getSetPlan(venue, phase);
@@ -26,28 +27,13 @@ export default function VenuePlannerPanel({ onApply, onClose }: Props) {
   return (
     <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#7c3aed]">
-          Venue Planner
-        </span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-[#4b5568] hover:text-[#94a3b8] text-xs leading-none"
-          aria-label="Close venue planner"
-        >
-          ✕
-        </button>
-      </div>
-
       {/* Selectors */}
       <div className="flex gap-2">
         <div className="flex-1 flex flex-col gap-1">
           <span className="text-[9px] uppercase tracking-widest text-[#4b5568]">Venue</span>
           <select
             value={venue}
-            onChange={e => { setVenue(e.target.value as VenueType); setApplied(false); }}
+            onChange={e => { onVenueChange(e.target.value as VenueType); setApplied(false); }}
             className={selectClass}
           >
             {VENUE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
@@ -57,7 +43,7 @@ export default function VenuePlannerPanel({ onApply, onClose }: Props) {
           <span className="text-[9px] uppercase tracking-widest text-[#4b5568]">Phase</span>
           <select
             value={phase}
-            onChange={e => { setPhase(e.target.value as SetPhase); setApplied(false); }}
+            onChange={e => { onPhaseChange(e.target.value as SetPhase); setApplied(false); }}
             className={selectClass}
           >
             {SET_PHASES.map(p => <option key={p} value={p}>{p}</option>)}

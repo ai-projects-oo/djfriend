@@ -59,6 +59,38 @@ describe('parseRekordboxLocation', () => {
   it('returns empty string for empty input', () => {
     expect(parseRekordboxLocation('')).toBe('')
   })
+
+  it('preserves + signs in path (not decoded to space)', () => {
+    expect(parseRekordboxLocation('file://localhost/Users/DJ+User/track.mp3'))
+      .toBe('/Users/DJ+User/track.mp3')
+  })
+
+  it('decodes %2B to literal + in path', () => {
+    expect(parseRekordboxLocation('file://localhost/Users/dj/Track%2BRemix.mp3'))
+      .toBe('/Users/dj/Track+Remix.mp3')
+  })
+
+  it('decodes double-encoded path one level only (%2520 → literal %20, not space)', () => {
+    expect(parseRekordboxLocation('file://localhost/Users/dj/%2520track.mp3'))
+      .toBe('/Users/dj/%20track.mp3')
+  })
+
+  it('handles UNC-style network path by stripping file:// prefix only', () => {
+    const p = parseRekordboxLocation('file://server/share/Music/track.mp3')
+    expect(p).toBe('server/share/Music/track.mp3')
+  })
+
+  it('preserves trailing slash on directory path (does not crash)', () => {
+    const p = parseRekordboxLocation('file://localhost/Users/dj/Music/')
+    expect(p).toBe('/Users/dj/Music/')
+  })
+
+  it('decodes double-encoded slash (%252F → literal %2F, not /)', () => {
+    // %252F = %25 + 2F = % + 2F, one decode gives literal %2F (not a path separator)
+    const p = parseRekordboxLocation('file://localhost/Users/dj/%252Ftrack.mp3')
+    expect(p).toBe('/Users/dj/%2Ftrack.mp3')
+    expect(p).not.toContain('//')
+  })
 })
 
 // ─── parseRekordboxXml ────────────────────────────────────────────────────────
@@ -170,6 +202,114 @@ describe('parseRekordboxXml', () => {
     const { tracks, playlists } = parseRekordboxXml(xmlNoPlaylists)
     expect(tracks).toHaveLength(1)
     expect(playlists).toHaveLength(0)
+  })
+
+  it('playlist key with no matching COLLECTION track resolves to undefined via trackById', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS>
+  <COLLECTION Entries="1">
+    <TRACK TrackID="1" Name="T" Artist="A" AverageBpm="128.00" TotalTime="300" Tonality="8B" Location="file://localhost/Users/dj/track.mp3"/>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE Type="0" Name="ROOT" Count="1">
+      <NODE Type="1" Name="Test" Entries="2">
+        <TRACK Key="1"/>
+        <TRACK Key="99"/>
+      </NODE>
+    </NODE>
+  </PLAYLISTS>
+</DJ_PLAYLISTS>`
+    const { playlists, trackById } = parseRekordboxXml(xml)
+    expect(trackById.get(99)).toBeUndefined()
+    expect(playlists[0].trackKeys).toContain(99)
+  })
+
+  it('same track appearing in two playlists has an entry in each', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS>
+  <COLLECTION Entries="2">
+    <TRACK TrackID="1" Name="A" Artist="X" AverageBpm="128.00" TotalTime="300" Tonality="8B" Location="file://localhost/Users/dj/a.mp3"/>
+    <TRACK TrackID="2" Name="B" Artist="X" AverageBpm="130.00" TotalTime="300" Tonality="5A" Location="file://localhost/Users/dj/b.mp3"/>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE Type="0" Name="ROOT" Count="2">
+      <NODE Type="1" Name="Playlist A" Entries="1"><TRACK Key="1"/></NODE>
+      <NODE Type="1" Name="Playlist B" Entries="2"><TRACK Key="1"/><TRACK Key="2"/></NODE>
+    </NODE>
+  </PLAYLISTS>
+</DJ_PLAYLISTS>`
+    const { playlists } = parseRekordboxXml(xml)
+    const both = playlists.filter(p => p.trackKeys.includes(1))
+    expect(both).toHaveLength(2)
+  })
+
+  it('handles 3-level deep folder hierarchy with correct breadcrumbs', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS>
+  <COLLECTION Entries="1">
+    <TRACK TrackID="1" Name="T" Artist="A" AverageBpm="128.00" TotalTime="300" Tonality="8B" Location="file://localhost/Users/dj/track.mp3"/>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE Type="0" Name="ROOT" Count="1">
+      <NODE Type="0" Name="Level1" Count="1">
+        <NODE Type="0" Name="Level2" Count="1">
+          <NODE Type="1" Name="Deep Set" Entries="1">
+            <TRACK Key="1"/>
+          </NODE>
+        </NODE>
+      </NODE>
+    </NODE>
+  </PLAYLISTS>
+</DJ_PLAYLISTS>`
+    const { playlists } = parseRekordboxXml(xml)
+    const deep = playlists.find(p => p.name === 'Deep Set')
+    expect(deep).toBeDefined()
+    expect(deep?.path).toEqual(['Level1', 'Level2'])
+    expect(deep?.trackKeys).toEqual([1])
+  })
+
+  it('skips TRACK elements with no Location attribute', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS>
+  <COLLECTION Entries="2">
+    <TRACK TrackID="1" Name="No Location" Artist="A" AverageBpm="128.00" TotalTime="300" Tonality="8B"/>
+    <TRACK TrackID="2" Name="Has Location" Artist="B" AverageBpm="130.00" TotalTime="300" Tonality="5A" Location="file://localhost/Users/dj/track.mp3"/>
+  </COLLECTION>
+  <PLAYLISTS><NODE Type="0" Name="ROOT" Count="0"/></PLAYLISTS>
+</DJ_PLAYLISTS>`
+    const { tracks } = parseRekordboxXml(xml)
+    expect(tracks).toHaveLength(1)
+    expect(tracks[0].title).toBe('Has Location')
+  })
+
+  it('empty ROOT node returns empty playlists array', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS>
+  <COLLECTION Entries="1">
+    <TRACK TrackID="1" Name="T" Artist="A" AverageBpm="128.00" TotalTime="300" Tonality="8B" Location="file://localhost/Users/dj/track.mp3"/>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE Type="0" Name="ROOT" Count="0"/>
+  </PLAYLISTS>
+</DJ_PLAYLISTS>`
+    const { playlists } = parseRekordboxXml(xml)
+    expect(playlists).toHaveLength(0)
+  })
+
+  it('playlist with no tracks has empty trackKeys array', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS>
+  <COLLECTION Entries="0"></COLLECTION>
+  <PLAYLISTS>
+    <NODE Type="0" Name="ROOT" Count="1">
+      <NODE Type="1" Name="Empty Playlist" Entries="0"></NODE>
+    </NODE>
+  </PLAYLISTS>
+</DJ_PLAYLISTS>`
+    const { playlists } = parseRekordboxXml(xml)
+    const empty = playlists.find(p => p.name === 'Empty Playlist')
+    expect(empty).toBeDefined()
+    expect(empty?.trackKeys).toHaveLength(0)
   })
 
   it('handles Windows paths inside XML (file:///C:/...)', () => {

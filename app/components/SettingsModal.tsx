@@ -98,9 +98,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [hasDiscogsConsumerKey, setHasDiscogsConsumerKey] = useState(false)
   const [discogsConnectedAs, setDiscogsConnectedAs] = useState('')
 
-  const [groqApiKey, setGroqApiKey] = useState('')
   const [hasGroqKey, setHasGroqKey] = useState(false)
-  const [savingGroq, setSavingGroq] = useState(false)
   const [learnGenre, setLearnGenre] = useState('')
   const [learnPhase, setLearnPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [learnMessage, setLearnMessage] = useState('')
@@ -180,20 +178,6 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
   function triggerSync() {
     if (onSyncDiscogs) onSyncDiscogs()
-  }
-
-  async function saveGroqKey() {
-    if (!groqApiKey.trim()) return
-    setSavingGroq(true)
-    try {
-      await apiFetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groqApiKey: groqApiKey.trim() }),
-      })
-      setHasGroqKey(true)
-      setGroqApiKey('')
-    } catch { /* ignore */ } finally { setSavingGroq(false) }
   }
 
   async function learnMixcloud() {
@@ -513,51 +497,21 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           </div>
         </div>
 
-        {/* ── AI (Groq + Mixcloud) ─────────────────────────────────── */}
-        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">AI Set Planner</h3>
-
-          {/* Groq API key */}
-          <div className="space-y-2 mb-4">
-            <label className="block text-xs text-[#64748b]">
-              Groq API Key
-              {hasGroqKey && <span className="ml-2 text-[#22c55e]">● Configured</span>}
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={groqApiKey}
-                onChange={e => setGroqApiKey(e.target.value)}
-                placeholder={hasGroqKey ? '••••••••••••••••' : 'gsk_…'}
-                className="flex-1 rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
-              />
-              <button
-                type="button"
-                onClick={saveGroqKey}
-                disabled={savingGroq || !groqApiKey.trim()}
-                className="px-3 py-1.5 text-xs font-medium rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              >
-                {savingGroq ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-            <p className="text-[11px] text-[#334155]">
-              Free at <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-[#7c3aed] hover:underline">console.groq.com</a>
-            </p>
-          </div>
-
-          {/* Learn from Mixcloud */}
-          {hasGroqKey && (
+        {/* ── AI (Mixcloud learning — only shown when server has Groq key) ── */}
+        {hasGroqKey && (
+          <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">
+              AI Set Planner
+              {hasMixcloudPatterns && <span className="ml-2 normal-case tracking-normal font-normal text-[#22c55e]">● Active</span>}
+            </h3>
             <div className="space-y-2">
-              <label className="block text-xs text-[#64748b]">
-                Learn from Mixcloud
-                {hasMixcloudPatterns && <span className="ml-2 text-[#22c55e]">● Patterns stored</span>}
-              </label>
+              <label className="block text-xs text-[#64748b]">Teach AI a genre from Mixcloud</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={learnGenre}
                   onChange={e => setLearnGenre(e.target.value)}
-                  placeholder="Genre (e.g. techno, house, drum and bass)"
+                  placeholder="e.g. techno, house, drum and bass"
                   disabled={learnPhase === 'running'}
                   className="flex-1 rounded-md border border-[#2a2a3a] bg-[#0d0d14] px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors disabled:opacity-50"
                   onKeyDown={e => { if (e.key === 'Enter') void learnMixcloud() }}
@@ -576,10 +530,10 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                   {learnMessage}
                 </p>
               )}
-              <p className="text-[11px] text-[#334155]">Analyzes real DJ sets on Mixcloud to learn genre-specific patterns for better set planning.</p>
+              <p className="text-[11px] text-[#334155]">Analyzes real DJ sets to auto-tune energy curves and scoring weights on Generate.</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* ── Danger Zone (both platforms) ─────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#1e1e2e]">

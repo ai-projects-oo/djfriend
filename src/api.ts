@@ -807,7 +807,6 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (typeof body.energyCheckThreshold === 'number') updates.energyCheckThreshold = Math.max(0.12, Math.min(1, body.energyCheckThreshold))
       if (typeof body.shareTelemetry === 'boolean') updates.shareTelemetry = body.shareTelemetry
       if (body.tipConfig && typeof body.tipConfig === 'object') updates.tipConfig = body.tipConfig as { help: boolean; info: boolean; ai: boolean }
-      if (typeof body.groqApiKey === 'string') updates.groqApiKey = body.groqApiKey.trim() || undefined
       writeSettings(updates)
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))

@@ -15,6 +15,7 @@ import { readSettings, writeSettings, getSettingsDir } from './settings.js'
 import { deriveSemanticTags } from './ai.js'
 import { initWeights, trainOnVectors, isValidModelWeights } from './mlTrain.js'
 import type { ModelWeights } from './mlTrain.js'
+import { upstashEnabled, redisGet, redisSet } from './upstash.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -76,6 +77,10 @@ function persistVectors() {
   try {
     fs.writeFileSync(TELEMETRY_VECTORS_PATH, communityVectors.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8')
   } catch { /* non-fatal */ }
+  if (upstashEnabled) {
+    // Persist latest 5k to Redis (keeps payload under ~700KB)
+    redisSet('djfriend:vectors', JSON.stringify(communityVectors.slice(-5000))).catch(() => {})
+  }
 }
 
 function maybeTrain() {
@@ -84,10 +89,43 @@ function maybeTrain() {
   const sample = communityVectors.slice(-5000)
   setImmediate(() => {
     communityModel = trainOnVectors(communityModel, sample, 2, 0.004)
+    const json = JSON.stringify(communityModel)
     console.log(`[telemetry] community model updated — v${communityModel.version}, ${communityModel.trainedSamples} total samples`)
-    try { fs.writeFileSync(COMMUNITY_MODEL_PATH, JSON.stringify(communityModel), 'utf-8') } catch { /* non-fatal */ }
+    try { fs.writeFileSync(COMMUNITY_MODEL_PATH, json, 'utf-8') } catch { /* non-fatal */ }
+    if (upstashEnabled) redisSet('djfriend:community-model', json).catch(() => {})
   })
 }
+
+// On startup: sync from Redis in background (Redis wins if it has more data than local files)
+async function loadFromRedis() {
+  if (!upstashEnabled) return
+  try {
+    const [modelJson, vectorsJson] = await Promise.all([
+      redisGet('djfriend:community-model'),
+      redisGet('djfriend:vectors'),
+    ])
+    if (vectorsJson) {
+      const parsed = JSON.parse(vectorsJson) as unknown
+      if (Array.isArray(parsed) && parsed.length > communityVectors.length) {
+        const valid = (parsed as unknown[]).filter(v => Array.isArray(v) && (v as number[]).length === 18) as number[][]
+        communityVectors.splice(0, communityVectors.length, ...valid)
+        console.log(`[telemetry] Redis: synced ${communityVectors.length} vectors`)
+        try { fs.writeFileSync(TELEMETRY_VECTORS_PATH, communityVectors.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { }
+      }
+    }
+    if (modelJson) {
+      const parsed = JSON.parse(modelJson) as unknown
+      if (isValidModelWeights(parsed) && (!communityModel || parsed.trainedSamples > communityModel.trainedSamples)) {
+        communityModel = parsed
+        console.log(`[telemetry] Redis: synced model v${communityModel.version} (${communityModel.trainedSamples} samples)`)
+        try { fs.writeFileSync(COMMUNITY_MODEL_PATH, modelJson, 'utf-8') } catch { }
+      }
+    }
+  } catch (e) {
+    console.log('[telemetry] Redis sync skipped:', e instanceof Error ? e.message : String(e))
+  }
+}
+loadFromRedis().catch(() => {})
 
 export interface AppSong {
   filePath: string

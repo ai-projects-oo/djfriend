@@ -362,7 +362,7 @@ export default function CratesTab({
         {releases.length === 0 && (
           <p className="text-center text-[#475569] text-sm pt-16">No releases match your filter.</p>
         )}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {releases.map(release => {
             const manual  = manualData.get(release.releaseId);
             const comment = manual?.comment;
@@ -370,7 +370,6 @@ export default function CratesTab({
             const isEditComment = editingComment === release.releaseId;
             const isLinking     = linking === release.releaseId;
 
-            // Effective match: auto-matched OR manually linked
             const manualLinkedSong = manual?.matchedFile
               ? library.find(s => s.file === manual.matchedFile)
               : null;
@@ -380,116 +379,140 @@ export default function CratesTab({
             const camelot = release.camelot ?? manualLinkedSong?.camelot ?? manual?.camelot;
             const energy  = release.energy  ?? manualLinkedSong?.energy;
             const isManualLink = !release.inLibrary && !!manualLinkedSong;
-
             const canEdit = !effectivelyMatched;
-
-            const meta = [release.year, ...release.genres.slice(0,1), ...release.styles.slice(0,1)]
-                           .filter(Boolean).join(' · ');
+            const q = encodeURIComponent(`${release.artist} ${release.title}`);
 
             return (
               <div key={release.releaseId}
-                className="group flex gap-3 bg-[#12121a] rounded-lg p-2.5 border border-[#1a1a2a] hover:border-[#2a2a3a] transition-colors relative">
+                className="group flex flex-col bg-[#12121a] rounded-lg border border-[#1a1a2a] hover:border-[#2a2a3a] transition-colors overflow-hidden relative">
 
-                {/* Thumb — 80×80 */}
-                <div className="flex-shrink-0 w-20 h-20 rounded-md overflow-hidden">
+                {/* Album art — full width square */}
+                <div className="w-full aspect-square">
                   <AlbumArt release={release} thumbSrc={thumb} effectivelyMatched={effectivelyMatched} />
                 </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0 flex flex-col gap-1 py-0.5 relative">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-[#e2e8f0] truncate leading-tight">{release.artist}</p>
-                    <p className="text-[11px] text-[#64748b] truncate leading-tight mt-0.5">{release.title}</p>
+                {/* Info below art */}
+                <div className="flex flex-col gap-1.5 p-2 relative">
+
+                  {/* Artist + title */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-[#e2e8f0] truncate leading-tight">{release.artist}</p>
+                    <p className="text-[10px] text-[#64748b] truncate leading-tight mt-0.5">{release.title}</p>
+                    {release.year && <p className="text-[9px] text-[#334155] mt-0.5">{release.year}</p>}
                   </div>
 
-                  {/* BPM + Key */}
+                  {/* BPM + Key row */}
                   {canEdit ? (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       <input
                         type="number" placeholder="BPM"
                         defaultValue={manual?.bpm ?? ''}
                         onBlur={e => saveField(release.releaseId, 'bpm', e.target.value)}
-                        className="w-16 rounded px-1.5 py-0.5 text-[11px] font-medium bg-[#0d0d14] border border-[#2a2a3a] text-[#94a3b8] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] focus:text-[#e2e8f0] transition-colors tabular-nums"
+                        className="w-14 rounded px-1.5 py-0.5 text-[10px] font-medium bg-[#0d0d14] border border-[#2a2a3a] text-[#94a3b8] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] transition-colors tabular-nums"
                       />
                       <input
                         type="text" placeholder="Key"
                         defaultValue={manual?.camelot ?? ''}
                         onBlur={e => saveField(release.releaseId, 'camelot', e.target.value)}
-                        className="w-12 rounded px-1.5 py-0.5 text-[11px] font-medium bg-[#0d0d14] border border-[#2a2a3a] text-[#a78bfa] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] focus:text-[#e2e8f0] transition-colors uppercase"
+                        className="w-10 rounded px-1.5 py-0.5 text-[10px] font-medium bg-[#0d0d14] border border-[#2a2a3a] text-[#a78bfa] placeholder-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] transition-colors uppercase"
                       />
                     </div>
                   ) : (
-                    /* Matched / linked file info */
-                    <div className="flex items-start justify-between gap-1">
-                      <div className="min-w-0 flex-1">
-                        {effectiveMatchedFile && (
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                              isManualLink ? 'bg-[#7c3aed]' :
-                              release.matchConfidence === 'fuzzy' ? 'bg-[#f59e0b]' : 'bg-[#22c55e]'
-                            }`} />
-                            <p className="text-[10px] text-[#64748b] truncate font-mono leading-tight">
-                              {effectiveMatchedFile.split(/[\\/]/).pop()}
-                            </p>
+                    <div className="space-y-0.5">
+                      {effectiveMatchedFile && (
+                        <div className="flex items-center gap-1">
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                            isManualLink ? 'bg-[#7c3aed]' :
+                            release.matchConfidence === 'fuzzy' ? 'bg-[#f59e0b]' : 'bg-[#22c55e]'
+                          }`} />
+                          <p className="text-[9px] text-[#475569] truncate font-mono leading-tight flex-1">
+                            {effectiveMatchedFile.split(/[\\/]/).pop()}
+                          </p>
+                          <button type="button"
+                            onClick={() => isManualLink ? unlinkFile(release.releaseId) : rejectMatch(release.releaseId)}
+                            className="flex-shrink-0 text-[#334155] hover:text-[#ef4444] transition-colors cursor-pointer"
+                            title={isManualLink ? 'Remove link' : 'Remove match'}>
+                            <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                              <line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/>
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5">
+                        {bpm && <span className="text-[10px] font-semibold text-[#94a3b8] tabular-nums">{bpm}</span>}
+                        {camelot && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-[#7c3aed22] text-[#a78bfa]">{camelot}</span>}
+                        {energy != null && (
+                          <div className="flex-1 h-1 rounded-full bg-[#1e1e2e] overflow-hidden" title={`Energy ${Math.round(energy * 100)}%`}>
+                            <div className="h-full rounded-full bg-[#7c3aed]" style={{ width: `${energy * 100}%` }} />
                           </div>
                         )}
-                        <div className="flex items-center gap-1.5">
-                          {bpm && <span className="text-[11px] font-semibold text-[#94a3b8] tabular-nums">{bpm}</span>}
-                          {camelot && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#7c3aed22] text-[#a78bfa]">{camelot}</span>}
-                          {energy != null && (
-                            <div className="flex-1 h-1 rounded-full bg-[#1e1e2e] overflow-hidden" title={`Energy ${Math.round(energy * 100)}%`}>
-                              <div className="h-full rounded-full bg-[#7c3aed]" style={{ width: `${energy * 100}%` }} />
-                            </div>
-                          )}
-                        </div>
                       </div>
-                      <button type="button"
-                        onClick={() => isManualLink ? unlinkFile(release.releaseId) : rejectMatch(release.releaseId)}
-                        className="flex-shrink-0 mt-0.5 text-[#334155] hover:text-[#ef4444] transition-colors cursor-pointer"
-                        title={isManualLink ? 'Remove manual link' : 'Remove match — move to Vinyl only'}>
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                          <line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/>
-                        </svg>
-                      </button>
                     </div>
                   )}
 
-                  {/* Store links + Link button */}
-                  <div className="flex items-center gap-2">
+                  {/* Comment (edit mode) */}
+                  {isEditComment && (
+                    <div className="flex flex-col gap-1">
+                      <textarea ref={commentRef} placeholder="Notes…" defaultValue={comment ?? ''} rows={2}
+                        className="w-full rounded px-1.5 py-1 text-[10px] bg-[#0d0d14] border border-[#2a2a3a] text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] resize-none" />
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => saveComment(release.releaseId)}
+                          className="text-[9px] px-2 py-0.5 rounded bg-[#7c3aed] text-white cursor-pointer">Save</button>
+                        <button type="button" onClick={() => setEditingComment(null)}
+                          className="text-[9px] px-2 py-0.5 rounded border border-[#2a2a3a] text-[#64748b] cursor-pointer">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                  {!isEditComment && comment && (
+                    <p className="text-[9px] text-[#475569] italic line-clamp-2 cursor-pointer hover:text-[#64748b]"
+                      onClick={() => setEditingComment(release.releaseId)}>{comment}</p>
+                  )}
+
+                  {/* Action row: store links + link + note + print */}
+                  <div className="flex items-center gap-1.5 pt-0.5">
                     <a href={`https://www.discogs.com/release/${release.releaseId}`} target="_blank" rel="noopener noreferrer"
                       className="text-[#475569] hover:text-white transition-colors cursor-pointer" title="Open on Discogs">
-                      <DiscogsIcon size={14} />
+                      <DiscogsIcon size={13} />
                     </a>
-                    {(() => {
-                      const q = encodeURIComponent(`${release.artist} ${release.title}`);
-                      return (<>
-                        <a href={`https://www.beatport.com/search/tracks?q=${q}`} target="_blank" rel="noopener noreferrer"
-                          className="text-[#475569] hover:text-[#01ff95] transition-colors cursor-pointer" title="Search on Beatport">
-                          <BeatportIcon size={14} />
-                        </a>
-                        <a href={`https://www.traxsource.com/search?term=${q}`} target="_blank" rel="noopener noreferrer"
-                          className="text-[#475569] hover:text-[#00aaff] transition-colors cursor-pointer" title="Search on Traxsource">
-                          <TraxsourceIcon size={14} />
-                        </a>
-                        {hasSpotify && (
-                          <a href={`https://open.spotify.com/search/${q}`} target="_blank" rel="noopener noreferrer"
-                            className="text-[#475569] hover:text-[#1db954] transition-colors cursor-pointer" title="Search on Spotify">
-                            <SpotifyIcon size={14} />
-                          </a>
-                        )}
-                      </>);
-                    })()}
-
-                    {/* Link digital file button */}
-                    <button type="button"
-                      onClick={() => setLinking(isLinking ? null : release.releaseId)}
-                      className={`ml-auto flex items-center gap-1 text-[10px] transition-colors cursor-pointer ${isLinking ? 'text-[#7c3aed]' : 'text-[#334155] hover:text-[#a78bfa]'}`}
-                      title={effectivelyMatched ? 'Change linked digital file' : 'Link to a digital file in your library'}>
-                      <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <path d="M7 9a3 3 0 0 0 4.243 0l2-2a3 3 0 0 0-4.243-4.243l-1 1"/>
-                        <path d="M9 7a3 3 0 0 0-4.243 0l-2 2a3 3 0 0 0 4.243 4.243l1-1"/>
-                      </svg>
-                    </button>
+                    <a href={`https://www.beatport.com/search/tracks?q=${q}`} target="_blank" rel="noopener noreferrer"
+                      className="text-[#475569] hover:text-[#01ff95] transition-colors cursor-pointer" title="Search on Beatport">
+                      <BeatportIcon size={13} />
+                    </a>
+                    <a href={`https://www.traxsource.com/search?term=${q}`} target="_blank" rel="noopener noreferrer"
+                      className="text-[#475569] hover:text-[#00aaff] transition-colors cursor-pointer" title="Search on Traxsource">
+                      <TraxsourceIcon size={13} />
+                    </a>
+                    {hasSpotify && (
+                      <a href={`https://open.spotify.com/search/${q}`} target="_blank" rel="noopener noreferrer"
+                        className="text-[#475569] hover:text-[#1db954] transition-colors cursor-pointer" title="Search on Spotify">
+                        <SpotifyIcon size={13} />
+                      </a>
+                    )}
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <button type="button"
+                        onClick={() => setLinking(isLinking ? null : release.releaseId)}
+                        className={`transition-colors cursor-pointer ${isLinking ? 'text-[#7c3aed]' : 'text-[#334155] hover:text-[#a78bfa]'}`}
+                        title="Link digital file">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                          <path d="M7 9a3 3 0 0 0 4.243 0l2-2a3 3 0 0 0-4.243-4.243l-1 1"/>
+                          <path d="M9 7a3 3 0 0 0-4.243 0l-2 2a3 3 0 0 0 4.243 4.243l1-1"/>
+                        </svg>
+                      </button>
+                      <button type="button" onClick={() => setEditingComment(release.releaseId)}
+                        className="text-[#334155] hover:text-[#a78bfa] transition-colors cursor-pointer" title="Add note">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+                          <path d="M2 2h12v9H9.5l-2 2.5L5.5 11H2V2zm1 1v7h2.9l1.6 2 1.6-2H13V3H3z"/>
+                        </svg>
+                      </button>
+                      <button type="button"
+                        onClick={() => printSticker({ artist: release.artist, title: release.title, year: release.year, bpm, camelot, genres: release.genres, styles: release.styles, comment, thumb })}
+                        className="text-[#334155] hover:text-[#94a3b8] transition-colors cursor-pointer" title="Print sticker">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+                          <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
+                          <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
+                        </svg>
+                      </button>
+                    </div>
                   </div>
 
                   {/* File picker dropdown */}
@@ -500,46 +523,6 @@ export default function CratesTab({
                       onClose={() => setLinking(null)}
                     />
                   )}
-
-                  {/* Meta + comment row */}
-                  <div className="flex items-start justify-between gap-1 mt-auto">
-                    <div className="min-w-0">
-                      {meta && <p className="text-[10px] text-[#334155] truncate">{meta}</p>}
-                      {isEditComment ? (
-                        <div className="flex flex-col gap-1 mt-1">
-                          <textarea ref={commentRef} placeholder="Notes…" defaultValue={comment ?? ''} rows={2}
-                            className="w-full rounded px-1.5 py-1 text-[10px] bg-[#0d0d14] border border-[#2a2a3a] text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] resize-none" />
-                          <div className="flex gap-1">
-                            <button type="button" onClick={() => saveComment(release.releaseId)}
-                              className="text-[9px] px-2 py-0.5 rounded bg-[#7c3aed] text-white cursor-pointer">Save</button>
-                            <button type="button" onClick={() => setEditingComment(null)}
-                              className="text-[9px] px-2 py-0.5 rounded border border-[#2a2a3a] text-[#64748b] cursor-pointer">Cancel</button>
-                          </div>
-                        </div>
-                      ) : comment ? (
-                        <p className="text-[10px] text-[#475569] italic line-clamp-1 cursor-pointer hover:text-[#64748b]"
-                          onClick={() => setEditingComment(release.releaseId)}>{comment}</p>
-                      ) : null}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button type="button" onClick={() => setEditingComment(release.releaseId)}
-                        className="text-[#475569] hover:text-[#a78bfa] transition-colors cursor-pointer" title="Add note">
-                        <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor">
-                          <path d="M2 2h12v9H9.5l-2 2.5L5.5 11H2V2zm1 1v7h2.9l1.6 2 1.6-2H13V3H3z"/>
-                        </svg>
-                      </button>
-                      <button type="button"
-                        onClick={() => printSticker({ artist: release.artist, title: release.title, year: release.year, bpm, camelot, genres: release.genres, styles: release.styles, comment, thumb })}
-                        className="text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer" title="Print sticker">
-                        <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor">
-                          <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
-                          <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </div>
             );

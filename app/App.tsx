@@ -1659,16 +1659,11 @@ function AppInner() {
                       ))}
                     </div>
 
-                    {/* Summary */}
-                    {djVinylDecks > 0 ? (
+                    {/* Eligible vinyl count — only when vinyl channels exist */}
+                    {djVinylDecks > 0 && vinylFiles && (
                       <p className="text-[10px] text-[#64748b]">
-                        {djVinylDecks === 1
-                          ? 'Vinyl and digital alternate — no two vinyl in a row'
-                          : 'Vinyl-to-vinyl transitions allowed'}
-                        {vinylFiles ? <span> · <span className="text-[#a78bfa] font-medium">{vinylFiles.size}</span> eligible</span> : null}
+                        <span className="text-[#a78bfa] font-medium">{vinylFiles.size}</span> vinyl eligible
                       </p>
-                    ) : (
-                      <p className="text-[10px] text-[#334155]">Digital only — vinyl tracks excluded from set</p>
                     )}
                   </div>
                 </div>

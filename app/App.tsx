@@ -536,13 +536,16 @@ function AppInner() {
     [generatedSet, energyCheckThreshold],
   );
   const libraryEnergyRange = useMemo(() => {
-    if (library.length === 0) return null;
+    const pool = effectiveFilterFiles
+      ? library.filter(s => effectiveFilterFiles.has(s.file))
+      : library;
+    if (pool.length === 0) return null;
     let min = Infinity, max = -Infinity;
-    for (const s of library) {
+    for (const s of pool) {
       if (s.energy > 0) { min = Math.min(min, s.energy); max = Math.max(max, s.energy); }
     }
     return min < max ? { min: Math.round(min * 100) / 100, max: Math.round(max * 100) / 100 } : null;
-  }, [library]);
+  }, [library, effectiveFilterFiles]);
 
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
 
@@ -1492,55 +1495,93 @@ function AppInner() {
               {/* Discogs filter — visible only when a collection has been synced */}
               {discogsCollection && (
                 <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Crates</span>
-                    <div className="flex items-center gap-2">
-                      {discogsDaysSince !== null && (
-                        <span className={`text-[10px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#334155]'}`}>
-                          {discogsDaysSince === 0 ? 'Synced today' : `Synced ${discogsDaysSince}d ago`}
-                          {discogsDaysSince >= 30 && ' ⚠'}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        title="Re-sync Discogs collection"
-                        onClick={() => void syncDiscogsCollection()}
-                        disabled={discogsSyncStatus.phase === 'syncing'}
-                        className="text-[10px] text-[#475569] hover:text-[#a78bfa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                        aria-label="Re-sync Discogs collection"
-                      >
-                        {discogsSyncStatus.phase === 'syncing' ? '…' : '↺'}
-                      </button>
-                    </div>
-                  </div>
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Media</span>
                   <div className="flex rounded-lg border border-[#2a2a3a] overflow-hidden text-xs font-medium">
                     {(['library', 'crates-first', 'crates'] as DiscogsMode[]).map((mode) => {
-                      const labels: Record<DiscogsMode, string> = { library: 'Library', 'crates-first': 'Crates first', crates: 'Crates' };
+                      const labels: Record<DiscogsMode, string> = { library: 'Library', 'crates-first': 'Mixed', crates: 'Vinyl' };
+                      const titles: Record<DiscogsMode, string> = { library: 'Digital library only', 'crates-first': 'Vinyl + digital — vinyl scores higher', crates: 'Vinyl only' };
                       const active = discogsMode === mode;
+                      const isLibraryLoading = mode === 'library' && isInitializing;
+                      const icon = mode === 'library' ? (
+                        isInitializing ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none">
+                              <circle cx="12" cy="12" r="10" stroke="#2a2a3a" strokeWidth="3"/>
+                              <path d="M12 2a10 10 0 0 1 10 10" stroke="#7c3aed" strokeWidth="3" strokeLinecap="round"/>
+                            </svg>
+                          </div>
+                        ) : (
+                          <img src="/icons/cdj.png" style={{ height: 48, width: 'auto' }} alt="CDJ" />
+                        )
+                      ) : mode === 'crates-first' ? (
+                        <div className="flex items-center gap-1">
+                          <img src="/icons/cdj.png" style={{ height: 36, width: 'auto' }} alt="CDJ" />
+                          <img src="/icons/turntable.png" style={{ height: 36, width: 'auto' }} alt="Turntable" />
+                        </div>
+                      ) : (
+                        <img src="/icons/turntable.png" style={{ height: 48, width: 'auto' }} alt="Turntable" />
+                      );
                       return (
                         <button
                           key={mode}
                           type="button"
                           onClick={() => setDiscogsMode(mode)}
-                          className="flex-1 px-2 py-1.5 transition-colors cursor-pointer text-center"
-                          style={{
-                            backgroundColor: active ? '#7c3aed' : 'transparent',
-                            color: active ? '#fff' : '#64748b',
-                          }}
-                          title={mode === 'library' ? 'All tracks' : mode === 'crates-first' ? 'Vinyl tracks score +0.12 bonus' : 'Vinyl-only set'}
+                          className="flex-1 cursor-pointer flex flex-col items-center transition-opacity"
+                          style={{ backgroundColor: 'transparent', opacity: active ? 1 : 0.3, borderBottom: active ? '2px solid #7c3aed' : '2px solid transparent', minHeight: 100 }}
+                          title={titles[mode]}
                           aria-label={labels[mode]}
+                          onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.7'; }}
+                          onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.3'; }}
                         >
-                          {labels[mode]}
+                          <div className="flex-1 flex items-center justify-center">{icon}</div>
+                          <span className="text-[9px] font-medium pb-2" style={{ color: active ? '#e2e8f0' : '#64748b' }}>
+                            {isLibraryLoading ? 'Loading…' : labels[mode]}
+                          </span>
                         </button>
                       );
                     })}
                   </div>
-                  {discogsMode === 'crates' && discogsCrateFiles && discogsCrateFiles.size === 0 && (
-                    <p className="text-[11px] text-[#ef4444]">No library tracks matched your collection. Re-sync in Settings.</p>
-                  )}
-                  {discogsMode !== 'library' && discogsCrateFiles && discogsCrateFiles.size > 0 && (
+                  {discogsMode === 'library' && (
                     <p className="text-[11px] text-[#64748b]">
-                      <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> tracks matched
+                      {isInitializing
+                        ? <span className="text-[#475569]">Loading library…</span>
+                        : <><span className="text-[#94a3b8] font-medium">{library.length}</span> tracks</>
+                      }
+                    </p>
+                  )}
+                  {discogsMode === 'crates' && (
+                    <div className="flex items-center justify-between">
+                      {discogsCrateFiles && discogsCrateFiles.size === 0 && (
+                        <p className="text-[11px] text-[#ef4444]">No library tracks matched. Re-sync in Settings.</p>
+                      )}
+                      <p className="text-[11px] text-[#64748b]">
+                        <span className="text-[#94a3b8] font-medium">{discogsCollection.totalReleases}</span> vinyl
+                      </p>
+                      <div className="flex items-center gap-2 ml-auto">
+                        {discogsDaysSince !== null && (
+                          <span className={`text-[10px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#334155]'}`}>
+                            {discogsDaysSince === 0 ? 'Synced today' : `Synced ${discogsDaysSince}d ago`}
+                            {discogsDaysSince >= 30 && ' ⚠'}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          title="Re-sync Discogs collection"
+                          onClick={() => void syncDiscogsCollection()}
+                          disabled={discogsSyncStatus.phase === 'syncing'}
+                          className="text-[10px] text-[#475569] hover:text-[#a78bfa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          aria-label="Re-sync Discogs collection"
+                        >
+                          {discogsSyncStatus.phase === 'syncing' ? '…' : '↺'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {discogsMode === 'crates-first' && (
+                    <p className="text-[11px] text-[#64748b]">
+                      <span className="text-[#94a3b8] font-medium">{discogsCollection.totalReleases}</span> vinyl
+                      {' · '}
+                      <span className="text-[#94a3b8] font-medium">{library.length}</span> digital
                     </p>
                   )}
 
@@ -1586,10 +1627,18 @@ function AppInner() {
                                     next[i] = k;
                                     handleSetDjSystem({ channels: next });
                                   }}
-                                  className="px-2.5 py-1 transition-colors cursor-pointer capitalize"
-                                  style={{ backgroundColor: active ? (k === 'vinyl' ? '#f59e0b22' : '#7c3aed') : 'transparent', color: active ? (k === 'vinyl' ? '#f59e0b' : '#fff') : '#64748b' }}
+                                  className="px-2 py-1 cursor-pointer flex items-center justify-center transition-opacity"
+                                  style={{ backgroundColor: 'transparent', opacity: active ? 1 : 0.35 }}
+                                  title={k === 'digital' ? 'CDJ / Digital player' : 'Turntable / Vinyl'}
+                                  aria-label={k}
+                                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.75'; }}
+                                  onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.35'; }}
                                 >
-                                  {k}
+                                  {k === 'digital' ? (
+                                    <img src="/icons/cdj.png" style={{ height: 36, width: 'auto' }} alt="CDJ" />
+                                  ) : (
+                                    <img src="/icons/turntable.png" style={{ height: 36, width: 'auto' }} alt="Turntable" />
+                                  )}
                                 </button>
                               );
                             })}
@@ -1598,17 +1647,6 @@ function AppInner() {
                       ))}
                     </div>
 
-                    {/* Summary */}
-                    {djVinylDecks > 0 ? (
-                      <p className="text-[10px] text-[#64748b]">
-                        {djVinylDecks === 1
-                          ? 'Vinyl and digital alternate — no two vinyl in a row'
-                          : 'Vinyl-to-vinyl transitions allowed'}
-                        {vinylFiles ? <span> · <span className="text-[#a78bfa] font-medium">{vinylFiles.size}</span> eligible</span> : null}
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-[#334155]">Digital only — vinyl tracks excluded from set</p>
-                    )}
                   </div>
                 </div>
               )}

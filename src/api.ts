@@ -131,7 +131,7 @@ async function loadFromRedis() {
         const valid = (parsed as unknown[]).filter(v => Array.isArray(v) && (v as number[]).length === 18) as number[][]
         communityVectors.splice(0, communityVectors.length, ...valid)
         console.log(`[telemetry] Redis: synced ${communityVectors.length} vectors`)
-        try { fs.writeFileSync(TELEMETRY_VECTORS_PATH, communityVectors.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { }
+        try { fs.writeFileSync(TELEMETRY_VECTORS_PATH, communityVectors.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { /* ignore */ }
       }
     }
     if (negativesJson) {
@@ -140,7 +140,7 @@ async function loadFromRedis() {
         const valid = (parsed as unknown[]).filter(v => Array.isArray(v) && (v as number[]).length === 18) as number[][]
         communityNegatives.splice(0, communityNegatives.length, ...valid)
         console.log(`[telemetry] Redis: synced ${communityNegatives.length} negatives`)
-        try { fs.writeFileSync(TELEMETRY_NEGATIVES_PATH, communityNegatives.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { }
+        try { fs.writeFileSync(TELEMETRY_NEGATIVES_PATH, communityNegatives.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { /* ignore */ }
       }
     }
     if (modelJson) {
@@ -148,7 +148,7 @@ async function loadFromRedis() {
       if (isValidModelWeights(parsed) && (!communityModel || parsed.trainedSamples > communityModel.trainedSamples)) {
         communityModel = parsed
         console.log(`[telemetry] Redis: synced model v${communityModel.version} (${communityModel.trainedSamples} samples)`)
-        try { fs.writeFileSync(COMMUNITY_MODEL_PATH, modelJson, 'utf-8') } catch { }
+        try { fs.writeFileSync(COMMUNITY_MODEL_PATH, modelJson, 'utf-8') } catch { /* ignore */ }
       }
     }
   } catch (e) {
@@ -752,6 +752,20 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method !== 'GET') { next(); return }
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ vectors: communityVectors, count: communityVectors.length }))
+  })
+
+  middlewares.use('/api/telemetry/stats', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    if (req.method !== 'GET') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({
+      vectorCount:    communityVectors.length,
+      negativeCount:  communityNegatives.length,
+      modelVersion:   communityModel?.version ?? 0,
+      trainedSamples: communityModel?.trainedSamples ?? 0,
+      lastTrainedAt:  communityModel?.trainedOn ?? null,
+      nextTrainIn:    Math.max(0, RETRAIN_EVERY - vectorsSinceLastTrain),
+    }))
   })
 
   // Serve the current community model (auto-updated after each RETRAIN_EVERY batch).

@@ -98,6 +98,8 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [hasDiscogsConsumerKey, setHasDiscogsConsumerKey] = useState(false)
   const [discogsConnectedAs, setDiscogsConnectedAs] = useState('')
 
+  const [mlStats, setMlStats] = useState<{ vectorCount: number; negativeCount: number; trainedSamples: number; modelVersion: number } | null>(null)
+
   async function checkPath(folderPath: string, setStatus: (s: PathStatus) => void) {
     if (!folderPath.trim()) { setStatus('idle'); return }
     setStatus('checking')
@@ -134,6 +136,10 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         setHasDiscogsConsumerKey(d.hasDiscogsConsumerKey ?? false)
         setDiscogsConnectedAs(d.discogsUsername ?? '')
       })
+      .catch(() => {})
+    fetch('https://djfriend.onrender.com/api/telemetry/stats')
+      .then(r => r.ok ? r.json() : null)
+      .then((s: { vectorCount: number; negativeCount: number; trainedSamples: number; modelVersion: number } | null) => { if (s) setMlStats(s) })
       .catch(() => {})
   }, [open])
 
@@ -396,6 +402,24 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               </span>
             </div>
           </label>
+          {mlStats && (
+            <div className="mt-3 rounded-lg bg-[#0d0d14] border border-[#1e1e2e] px-3 py-2.5 flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] text-[#475569]">Community model</span>
+                <span className="text-[10px] text-[#334155]">v{mlStats.modelVersion} · {mlStats.trainedSamples.toLocaleString()} transitions learned</span>
+              </div>
+              <div className="flex gap-3 text-right">
+                <div className="flex flex-col items-end">
+                  <span className="text-xs font-semibold text-[#a78bfa] tabular-nums">{mlStats.vectorCount.toLocaleString()}</span>
+                  <span className="text-[10px] text-[#334155]">positive</span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs font-semibold text-[#f87171] tabular-nums">{mlStats.negativeCount.toLocaleString()}</span>
+                  <span className="text-[10px] text-[#334155]">rejected</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Discogs ──────────────────────────────────────────────── */}

@@ -161,12 +161,15 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
   const [editYear, setEditYear] = useState('');
   const [editComment, setEditComment] = useState('');
   const [saving, setSaving] = useState(false);
+  // Snapshots original BPMs so ×2/÷2 can be previewed live and Cancel can revert
+  const originalBpmsRef = useRef<Map<number, number>>(new Map());
   const exportDropdownRef = useRef<HTMLDivElement>(null);
   const columnsDropdownRef = useRef<HTMLDivElement>(null);
   const actionsDropdownRef = useRef<HTMLDivElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
   function openGlobalEdit() {
+    originalBpmsRef.current = new Map(tracks.map((t, i) => [i, t.bpm]));
     setSelectedIndices(new Set(tracks.map((_, i) => i)));
     setEditArtist(''); setEditTitle(''); setEditGenre('');
     setEditBpm(''); setEditCamelot(''); setEditYear(''); setEditComment('');
@@ -175,14 +178,36 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
   }
 
   function closeGlobalEdit() {
+    // Revert any live BPM changes made by ×2/÷2 without saving
+    for (const [idx, origBpm] of originalBpmsRef.current) {
+      if (tracks[idx] && tracks[idx].bpm !== origBpm) {
+        onUpdateTrack(idx, { bpm: origBpm });
+      }
+    }
+    originalBpmsRef.current = new Map();
     setGlobalEditMode(false);
     setSelectedIndices(new Set());
   }
 
+  function applyBpmMultiplier(multiplier: 2 | 0.5) {
+    if (editBpm) {
+      // Field has a value — just halve/double the field
+      const v = parseFloat(editBpm);
+      if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v * multiplier * 10) / 10));
+    } else {
+      // Apply to each selected track in real time
+      for (const idx of selectedIndices) {
+        const t = tracks[idx];
+        if (!t || !(t.bpm > 0)) continue;
+        onUpdateTrack(idx, { bpm: Math.round(t.bpm * multiplier * 10) / 10 });
+      }
+    }
+  }
+
   async function saveGlobalEdit() {
-    if (selectedIndices.size === 0) { closeGlobalEdit(); return; }
+    if (selectedIndices.size === 0) { originalBpmsRef.current = new Map(); setGlobalEditMode(false); setSelectedIndices(new Set()); return; }
     setSaving(true);
-    const bpmVal = parseFloat(editBpm);
+    const fieldBpm = parseFloat(editBpm);
     const yearVal = parseInt(editYear, 10);
     const normalizedCamelot = editCamelot.trim().toUpperCase();
     const parsedCamelot = normalizedCamelot ? parseCamelot(normalizedCamelot) : null;
@@ -194,7 +219,13 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
       if (editTitle.trim()) patch.title = editTitle.trim();
       if (editArtist.trim()) patch.artist = editArtist.trim();
       if (editGenre.trim()) patch.genres = editGenre.split(',').map(g => g.trim()).filter(Boolean);
-      if (!isNaN(bpmVal) && bpmVal > 0) patch.bpm = bpmVal;
+      // BPM: field value overrides; otherwise persist any live ×2/÷2 change
+      if (!isNaN(fieldBpm) && fieldBpm > 0) {
+        patch.bpm = fieldBpm;
+      } else {
+        const origBpm = originalBpmsRef.current.get(idx);
+        if (origBpm !== undefined && track.bpm !== origBpm) patch.bpm = track.bpm;
+      }
       if (normalizedCamelot && parsedCamelot) { patch.camelot = normalizedCamelot; patch.key = CAMELOT_TO_KEY[normalizedCamelot.toLowerCase()] ?? ''; }
       if (!isNaN(yearVal) && yearVal > 0) patch.year = yearVal;
       if (editComment.trim()) patch.comment = editComment.trim();
@@ -205,13 +236,15 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
           ...(patch.title ? { title: patch.title as string } : {}),
           ...(patch.artist ? { artist: patch.artist as string } : {}),
           ...(patch.genres ? { genre: (patch.genres as string[]).join(', ') } : {}),
-          ...(patch.bpm ? { bpm: patch.bpm as number } : {}),
+          ...(patch.bpm != null ? { bpm: patch.bpm as number } : {}),
           ...(patch.camelot ? { camelot: patch.camelot as string, key: patch.key as string } : {}),
         });
       } catch { /* ignore individual failures */ }
     }
     setSaving(false);
-    closeGlobalEdit();
+    originalBpmsRef.current = new Map();
+    setGlobalEditMode(false);
+    setSelectedIndices(new Set());
   }
 
   function toggleColumn(key: ColumnKey) {
@@ -364,28 +397,6 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
             )}
           </div>
 
-          {/* Three-dots actions menu */}
-          <div className="relative" ref={actionsDropdownRef}>
-            <button
-              onClick={() => setActionsOpen((o) => !o)}
-              className={`flex items-center justify-center w-8 h-8 rounded-md border transition-colors cursor-pointer ${actionsOpen || globalEditMode ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'bg-[#12121a] border-[#2a2a3a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
-              title="More actions"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-            </button>
-            {actionsOpen && (
-              <div className="absolute right-0 top-full mt-1 z-20 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden py-1">
-                <button
-                  onClick={openGlobalEdit}
-                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  Edit
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* Export */}
           <div className="relative" ref={exportDropdownRef}>
             <button
@@ -441,6 +452,28 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
               </div>
             )}
           </div>
+
+          {/* Three-dots actions menu */}
+          <div className="relative" ref={actionsDropdownRef}>
+            <button
+              onClick={() => setActionsOpen((o) => !o)}
+              className={`flex items-center justify-center w-8 h-8 rounded-md border transition-colors cursor-pointer ${actionsOpen || globalEditMode ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'bg-[#12121a] border-[#2a2a3a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
+              title="More actions"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            </button>
+            {actionsOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden py-1">
+                <button
+                  onClick={openGlobalEdit}
+                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -481,9 +514,9 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
               <div className="flex items-center gap-1">
                 <input type="number" value={editBpm} onChange={e => setEditBpm(e.target.value)} placeholder="Keep"
                   className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-16 placeholder:text-[#2a2a3a]" />
-                <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v * 2))); }}
+                <button type="button" onClick={() => applyBpmMultiplier(2)}
                   className="px-1.5 py-1 text-[10px] rounded border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">×2</button>
-                <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v / 2))); }}
+                <button type="button" onClick={() => applyBpmMultiplier(0.5)}
                   className="px-1.5 py-1 text-[10px] rounded border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">÷2</button>
               </div>
             </div>

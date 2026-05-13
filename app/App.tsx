@@ -210,6 +210,7 @@ function AppInner() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [plannerOpen, setPlannerOpen] = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(true);
   const [plannerVenue, setPlannerVenue] = useState<import('./types').VenueType>('Club');
   const [plannerPhase, setPlannerPhase] = useState<import('./types').SetPhase>('Peak time');
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
@@ -551,12 +552,39 @@ function AppInner() {
 
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
 
+  // Clamp curve points into the library energy range whenever it changes.
+  // Without this, default y=0.3 or y=0.9 values render outside the SVG viewport
+  // when the library's actual energy is a narrow band like 0.50–0.73.
+  useEffect(() => {
+    if (!libraryEnergyRange) return;
+    const { min, max } = libraryEnergyRange;
+    setCurve(pts => {
+      if (pts.every(p => p.y >= min && p.y <= max)) return pts; // already in range
+      return pts.map(p => ({ ...p, y: Math.max(min, Math.min(max, p.y)) }));
+    });
+  }, [libraryEnergyRange, setCurve]);
+
   // Wire setGeneratedSet into the bridge ref so useLibrary can reset the set on new analysis
   useEffect(() => {
     onNewAnalysisRef.current = () => {
       setGeneratedSet([]);
     };
   }, [setGeneratedSet]);
+
+  // Clear generated set when anything that defines the source pool or set shape changes
+  useEffect(() => {
+    setGeneratedSet([]);
+  }, [
+    playlistFilterIds,   // playlist filter changed
+    discogsMode,         // library/mixed/vinyl mode changed
+    prefs.genres,        // genre filter changed → different pool
+    prefs.bpmMin,        // BPM floor changed → different pool
+    prefs.bpmMax,        // BPM ceiling changed → different pool
+    prefs.setDuration,   // duration changed → wrong number of tracks
+    djSystem,            // vinyl channel constraints changed → different eligibility
+    librarySelection,    // library tab selection changed → different pool
+    setGeneratedSet,
+  ]);
 
   // Auto-select the min viable duration pill when playlist mode activates or playlist changes
   useEffect(() => {
@@ -1495,8 +1523,18 @@ function AppInner() {
 
               {/* Discogs filter — visible only when a collection has been synced */}
               {discogsCollection && (
-                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-2.5">
-                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Media</span>
+                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setMediaOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                  >
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Media</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`text-[#475569] transition-transform duration-150 ${mediaOpen ? 'rotate-180' : ''}`}>
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {mediaOpen && <div className="border-t border-[#1e1e2e] p-4 flex flex-col gap-2.5">
                   <div className="flex rounded-lg border border-[#2a2a3a] overflow-hidden text-xs font-medium">
                     {(['library', 'crates-first', 'crates'] as DiscogsMode[]).map((mode) => {
                       const labels: Record<DiscogsMode, string> = { library: 'Library', 'crates-first': 'Mixed', crates: 'Vinyl' };
@@ -1649,6 +1687,7 @@ function AppInner() {
                     </div>
 
                   </div>
+                  </div>}
                 </div>
               )}
 
@@ -2406,7 +2445,6 @@ function AppInner() {
                   points={curve}
                   onChange={handleCurveChange}
                   setTracks={generatedSet.length > 0 ? generatedSet : undefined}
-                  setLength={generatedSet.length}
                   libraryEnergyRange={libraryEnergyRange}
                   tipConfig={tipConfig}
                 />

@@ -27,17 +27,8 @@ interface Props {
   points: CurvePoint[];
   onChange: (points: CurvePoint[]) => void;
   setTracks?: SetTrack[]; // overlay actual track energies as dots
-  setLength?: number;     // number of tracks — used to cap max control points
   libraryEnergyRange?: { min: number; max: number } | null; // real energy range of filtered library
   tipConfig?: import('../types').TipConfig;
-}
-
-/** Max control points recommended for a given set length */
-function maxPointsForSetLength(n: number): number {
-  if (n <= 6)  return 3;
-  if (n <= 12) return 5;
-  if (n <= 20) return 7;
-  return 9;
 }
 
 /** Resample current curve to a new number of evenly-spaced control points */
@@ -49,7 +40,7 @@ function resampleCurve(points: CurvePoint[], newCount: number): CurvePoint[] {
   });
 }
 
-export default function EnergyCurveEditor({ points, onChange, setTracks, setLength = 0, libraryEnergyRange, tipConfig }: Props) {
+export default function EnergyCurveEditor({ points, onChange, setTracks, libraryEnergyRange, tipConfig }: Props) {
   const showInfoTips = tipConfig?.info !== false;
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgWidth, setSvgWidth] = useState(600);
@@ -135,10 +126,8 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
   const applyPreset = useCallback(
     (preset: ArcPreset) => {
       const yValues = ARC_PRESETS[preset];
-      const updated = points.map((p, i) => ({
-        ...p,
-        y: yValues[i] ?? p.y,
-      }));
+      const presetPoints: CurvePoint[] = yValues.map((y, i) => ({ x: i / (yValues.length - 1), y }));
+      const updated = points.map(p => ({ ...p, y: sampleCurve(presetPoints, p.x) }));
       setActivePreset(preset);
       onChange(updated);
     },
@@ -151,7 +140,6 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
     return `${pathD} L ${(svgWidth - PADDING.right).toFixed(2)} ${SVG_HEIGHT} L ${PADDING.left} ${SVG_HEIGHT} Z`;
   }, [pathD, svgWidth]);
 
-  const maxPoints = setLength > 0 ? maxPointsForSetLength(setLength) : 9;
   const currentCount = points.length;
 
   return (
@@ -351,18 +339,14 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
         <span className="text-[10px] text-[#334155] uppercase tracking-wider flex-shrink-0">Points</span>
         {[2, 3, 4, 5, 6, 7, 8, 9].map(n => {
           const isActive = currentCount === n;
-          const isDisabled = n > maxPoints;
           return (
             <button
               key={n}
-              onClick={() => { if (!isDisabled && !isActive) { setActivePreset(null); onChange(resampleCurve(points, n)); } }}
-              disabled={isDisabled}
-              title={isDisabled ? `Max ${maxPoints} for ${setLength} tracks` : `${n} control points`}
+              onClick={() => { if (!isActive) { setActivePreset(null); onChange(resampleCurve(points, n)); } }}
+              title={`${n} control points`}
               className={`w-7 h-6 text-xs rounded border transition-colors flex-shrink-0 ${
                 isActive
                   ? 'border-[#7c3aed] bg-[#7c3aed]/20 text-[#e2e8f0] cursor-default'
-                  : isDisabled
-                  ? 'border-[#1e1e2e] bg-transparent text-[#2a2a3a] cursor-not-allowed'
                   : 'border-[#2a2a3a] bg-[#12121a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0] cursor-pointer'
               }`}
             >

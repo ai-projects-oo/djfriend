@@ -711,28 +711,49 @@ function AppInner() {
       .catch(() => {});
   }, []);
 
-  // Fire-and-forget: send anonymous transition vectors when a set is generated (opt-in only)
-  const prevGeneratedSetRef = useRef<typeof generatedSet>([]);
+  // Fire-and-forget: send anonymous transition vectors when a set is generated (opt-in only).
+  // If the user regenerates within 20s the previous set is treated as rejected (negative label).
+  const prevGeneratedSetRef = useRef<{ set: typeof generatedSet; time: number } | null>(null);
   useEffect(() => {
     if (!shareTelemetry) return;
     if (generatedSet.length < 2) return;
-    if (generatedSet === prevGeneratedSetRef.current) return;
-    prevGeneratedSetRef.current = generatedSet;
-    // Extract one 18-feature vector per consecutive pair (= each transition the DJ accepted)
-    const vectors: number[][] = [];
-    const n = generatedSet.length;
-    for (let i = 1; i < n; i++) {
-      const a = generatedSet[i - 1];
-      const b = generatedSet[i];
-      if (!a.bpm || !b.bpm || !a.camelot || !b.camelot) continue;
-      vectors.push(transitionFeatures(a, b, b.targetEnergy, i / (n - 1)));
+    if (generatedSet === prevGeneratedSetRef.current?.set) return;
+
+    const now = Date.now();
+    const prev = prevGeneratedSetRef.current;
+
+    function extractVectors(set: typeof generatedSet): number[][] {
+      const vecs: number[][] = [];
+      const n = set.length;
+      for (let i = 1; i < n; i++) {
+        const a = set[i - 1], b = set[i];
+        if (!a.bpm || !b.bpm || !a.camelot || !b.camelot) continue;
+        vecs.push(transitionFeatures(a, b, b.targetEnergy, i / (n - 1)));
+      }
+      return vecs;
     }
+
+    // Previous set was rejected if user regenerated within 20 seconds
+    if (prev && now - prev.time < 20_000) {
+      const negVectors = extractVectors(prev.set);
+      if (negVectors.length > 0) {
+        fetch('https://djfriend.onrender.com/api/telemetry/transitions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vectors: negVectors, negative: true }),
+        }).catch(() => {});
+      }
+    }
+
+    // Current set is a positive example
+    const vectors = extractVectors(generatedSet);
+    prevGeneratedSetRef.current = { set: generatedSet, time: now };
     if (vectors.length === 0) return;
     fetch('https://djfriend.onrender.com/api/telemetry/transitions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vectors }),
-    }).catch(() => {});  // fire-and-forget — never blocks the UI
+    }).catch(() => {});
   }, [generatedSet, shareTelemetry]);
 
   // Check for app updates once on mount

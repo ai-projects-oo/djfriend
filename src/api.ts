@@ -37,12 +37,15 @@ export const HISTORY_PATH = path.join(os.homedir(), 'Music', 'djfriend-history.j
 
 // Community telemetry — persisted to disk so data survives server restarts
 const TELEMETRY_DIR = getSettingsDir()
-const TELEMETRY_VECTORS_PATH = path.join(TELEMETRY_DIR, 'telemetry-vectors.jsonl')
-const COMMUNITY_MODEL_PATH   = path.join(TELEMETRY_DIR, 'community-model.json')
+const TELEMETRY_VECTORS_PATH   = path.join(TELEMETRY_DIR, 'telemetry-vectors.jsonl')
+const TELEMETRY_NEGATIVES_PATH = path.join(TELEMETRY_DIR, 'telemetry-negatives.jsonl')
+const COMMUNITY_MODEL_PATH     = path.join(TELEMETRY_DIR, 'community-model.json')
 const RETRAIN_EVERY = 50
 const MAX_VECTORS   = 10_000
+const MAX_NEGATIVES = 2_000
 
 let communityVectors: number[][] = []
+let communityNegatives: number[][] = []
 let communityModel: ModelWeights | null = null
 let vectorsSinceLastTrain = 0
 
@@ -62,6 +65,21 @@ try {
   }
 } catch { /* non-fatal */ }
 
+// Load persisted negatives on startup
+try {
+  if (fs.existsSync(TELEMETRY_NEGATIVES_PATH)) {
+    const lines = fs.readFileSync(TELEMETRY_NEGATIVES_PATH, 'utf-8').split('\n').filter(Boolean)
+    for (const line of lines) {
+      try {
+        const v = JSON.parse(line) as unknown
+        if (Array.isArray(v) && v.length === 18 && (v as number[]).every(n => typeof n === 'number')) communityNegatives.push(v as number[])
+      } catch { /* skip */ }
+    }
+    if (communityNegatives.length > MAX_NEGATIVES) communityNegatives = communityNegatives.slice(-MAX_NEGATIVES)
+    console.log(`[telemetry] loaded ${communityNegatives.length} persisted negatives`)
+  }
+} catch { /* non-fatal */ }
+
 // Load persisted community model on startup
 try {
   if (fs.existsSync(COMMUNITY_MODEL_PATH)) {
@@ -76,21 +94,23 @@ try {
 function persistVectors() {
   try {
     fs.writeFileSync(TELEMETRY_VECTORS_PATH, communityVectors.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8')
+    fs.writeFileSync(TELEMETRY_NEGATIVES_PATH, communityNegatives.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8')
   } catch { /* non-fatal */ }
   if (upstashEnabled) {
-    // Persist latest 5k to Redis (keeps payload under ~700KB)
     redisSet('djfriend:vectors', JSON.stringify(communityVectors.slice(-5000))).catch(() => {})
+    redisSet('djfriend:negatives', JSON.stringify(communityNegatives.slice(-1000))).catch(() => {})
   }
 }
 
 function maybeTrain() {
   if (vectorsSinceLastTrain < RETRAIN_EVERY) return
   vectorsSinceLastTrain = 0
-  const sample = communityVectors.slice(-5000)
+  const positives = communityVectors.slice(-5000)
+  const negatives = communityNegatives.slice(-1000)
   setImmediate(() => {
-    communityModel = trainOnVectors(communityModel, sample, 2, 0.004)
+    communityModel = trainOnVectors(communityModel, positives, negatives, 2, 0.004)
     const json = JSON.stringify(communityModel)
-    console.log(`[telemetry] community model updated — v${communityModel.version}, ${communityModel.trainedSamples} total samples`)
+    console.log(`[telemetry] model updated — v${communityModel.version}, ${communityModel.trainedSamples} samples, ${negatives.length} real negatives`)
     try { fs.writeFileSync(COMMUNITY_MODEL_PATH, json, 'utf-8') } catch { /* non-fatal */ }
     if (upstashEnabled) redisSet('djfriend:community-model', json).catch(() => {})
   })
@@ -100,9 +120,10 @@ function maybeTrain() {
 async function loadFromRedis() {
   if (!upstashEnabled) return
   try {
-    const [modelJson, vectorsJson] = await Promise.all([
+    const [modelJson, vectorsJson, negativesJson] = await Promise.all([
       redisGet('djfriend:community-model'),
       redisGet('djfriend:vectors'),
+      redisGet('djfriend:negatives'),
     ])
     if (vectorsJson) {
       const parsed = JSON.parse(vectorsJson) as unknown
@@ -111,6 +132,15 @@ async function loadFromRedis() {
         communityVectors.splice(0, communityVectors.length, ...valid)
         console.log(`[telemetry] Redis: synced ${communityVectors.length} vectors`)
         try { fs.writeFileSync(TELEMETRY_VECTORS_PATH, communityVectors.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { }
+      }
+    }
+    if (negativesJson) {
+      const parsed = JSON.parse(negativesJson) as unknown
+      if (Array.isArray(parsed) && parsed.length > communityNegatives.length) {
+        const valid = (parsed as unknown[]).filter(v => Array.isArray(v) && (v as number[]).length === 18) as number[][]
+        communityNegatives.splice(0, communityNegatives.length, ...valid)
+        console.log(`[telemetry] Redis: synced ${communityNegatives.length} negatives`)
+        try { fs.writeFileSync(TELEMETRY_NEGATIVES_PATH, communityNegatives.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { }
       }
     }
     if (modelJson) {
@@ -693,18 +723,25 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     req.on('end', () => {
       if (telBytes > 1024 * 1024) { res.writeHead(413); res.end('{"error":"payload too large"}'); return }
       try {
-        const { vectors } = JSON.parse(Buffer.concat(chunks).toString('utf-8')) as { vectors: number[][] }
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf-8')) as { vectors: number[][], negative?: boolean }
+        const { vectors, negative } = body
         if (!Array.isArray(vectors) || vectors.length === 0) { res.writeHead(400); res.end('{"error":"no vectors"}'); return }
         if (vectors.length > 200) { res.writeHead(400); res.end('{"error":"too many vectors per request"}'); return }
         const valid = vectors.filter(v => Array.isArray(v) && v.length === 18 && v.every(n => typeof n === 'number' && isFinite(n)))
-        const overflow = communityVectors.length + valid.length - MAX_VECTORS
-        if (overflow > 0) communityVectors.splice(0, overflow)
-        communityVectors.push(...valid)
-        vectorsSinceLastTrain += valid.length
+        if (negative) {
+          const overflow = communityNegatives.length + valid.length - MAX_NEGATIVES
+          if (overflow > 0) communityNegatives.splice(0, overflow)
+          communityNegatives.push(...valid)
+        } else {
+          const overflow = communityVectors.length + valid.length - MAX_VECTORS
+          if (overflow > 0) communityVectors.splice(0, overflow)
+          communityVectors.push(...valid)
+          vectorsSinceLastTrain += valid.length
+        }
         setImmediate(persistVectors)
         maybeTrain()
         res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ ok: true, received: valid.length, total: communityVectors.length }))
+        res.end(JSON.stringify({ ok: true, received: valid.length, negative: !!negative, total: communityVectors.length, totalNegatives: communityNegatives.length }))
       } catch { res.writeHead(400); res.end('{"error":"invalid json"}') }
     })
   })

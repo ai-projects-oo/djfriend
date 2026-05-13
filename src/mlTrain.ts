@@ -49,27 +49,32 @@ export function mlpForward(x: number[], w: ModelWeights): number {
 }
 
 // Online SGD update using positive transition vectors (label=1) +
-// synthetic negatives created by shuffling features (label=0).
+// real rejected vectors (label=0) when available, otherwise synthetic shuffled negatives.
 export function trainOnVectors(
   weights: ModelWeights | null,
   vectors: number[][],
+  negatives: number[][] = [],
   epochs = 3,
   lr = 0.004,
 ): ModelWeights {
   const w = weights ?? initWeights()
   if (vectors.length === 0) return w
 
-  // Build dataset
+  // Use real negatives if we have them; fall back to synthetic shuffled ones
+  const negExamples: number[][] = negatives.length > 0
+    ? negatives
+    : vectors.map(v => {
+        const s = [...v]
+        for (let i = s.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [s[i], s[j]] = [s[j], s[i]]
+        }
+        return s
+      })
+
   const data: [number[], number][] = [
     ...vectors.map(v => [v, 1.0] as [number[], number]),
-    ...vectors.map(v => {
-      const s = [...v]
-      for (let i = s.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [s[i], s[j]] = [s[j], s[i]]
-      }
-      return [s, 0.0] as [number[], number]
-    }),
+    ...negExamples.map(v => [v, 0.0] as [number[], number]),
   ]
 
   for (let ep = 0; ep < epochs; ep++) {

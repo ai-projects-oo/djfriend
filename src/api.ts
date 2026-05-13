@@ -1895,7 +1895,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     try { body = JSON.parse(await new Promise<string>((resolve, reject) => { let d = ''; req.on('data', c => { d += c }); req.on('end', () => resolve(d)); req.on('error', reject) })) } catch { res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid JSON' })); return }
     const { file, patch } = body
     if (!file || !patch) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing file or patch' })); return }
-    const allowed: (keyof AppSong)[] = ['artist', 'title', 'genres', 'year', 'comment']
+    const allowed: (keyof AppSong)[] = ['artist', 'title', 'genres', 'year', 'comment', 'bpm']
     const safePatch: Partial<AppSong> = {}
     for (const k of allowed) { if (k in patch) (safePatch as Record<string, unknown>)[k] = patch[k] }
     if (Object.keys(safePatch).length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: 'No patchable fields' })); return }

@@ -118,6 +118,7 @@ interface Props {
   onExport?: () => void;
   onExportSpotify?: () => void;
   onBulkReanalyze?: (indices: number[], bpmHint?: { min: number; max: number }) => Promise<void>;
+  onBulkPatchBpm?: (indices: number[], multiplier: 2 | 0.5) => Promise<void>;
 }
 
 function totalDurationMinutes(tracks: SetTrack[]): number {
@@ -127,7 +128,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, onBulkReanalyze }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, onBulkReanalyze, onBulkPatchBpm }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadVisibleColumns);
@@ -348,6 +349,13 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
               className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151] transition-colors cursor-pointer disabled:opacity-50">
               {bulkProgress ? `Re-analyzing ${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
             </button>
+            {onBulkPatchBpm && ([2, 0.5] as const).map(mult => (
+              <button key={mult} type="button" disabled={!!bulkProgress}
+                onClick={() => void onBulkPatchBpm([...selectedIndices], mult)}
+                className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#a78bfa] hover:border-[#7c3aed]/40 transition-colors cursor-pointer disabled:opacity-50 tabular-nums">
+                {mult === 2 ? '×2 BPM' : '÷2 BPM'}
+              </button>
+            ))}
             <button type="button" onClick={() => setBulkBpmOpen(o => !o)}
               className={`text-xs px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${bulkBpmOpen ? 'border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10' : 'border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151]'}`}>
               Re-analyze BPM range…

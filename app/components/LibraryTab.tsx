@@ -429,6 +429,24 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
             >
               Re-analyze BPM range…
             </button>
+            {([2, 0.5] as const).map(mult => (
+              <button key={mult} type="button" disabled={!!bulkProgress}
+                onClick={async () => {
+                  const files = [...selected];
+                  for (const f of files) {
+                    const song = library.find(s => s.file === f);
+                    if (!song || !(song.bpm > 0)) continue;
+                    const newBpm = Math.round(song.bpm * mult * 10) / 10;
+                    try {
+                      await apiFetch('/api/track-meta', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: f, patch: { bpm: newBpm } }) });
+                      onReanalyzed?.(f, { bpm: newBpm, key: song.key ?? '', camelot: song.camelot ?? '', energy: song.energy ?? 0 });
+                    } catch { /* ignore */ }
+                  }
+                }}
+                className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#a78bfa] hover:border-[#7c3aed]/40 transition-colors cursor-pointer disabled:opacity-50 tabular-nums">
+                {mult === 2 ? '×2 BPM' : '÷2 BPM'}
+              </button>
+            ))}
             <button type="button" onClick={handleExportSelectedM3U} className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151] transition-colors cursor-pointer">
               Export M3U
             </button>

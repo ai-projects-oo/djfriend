@@ -214,10 +214,6 @@ function AppInner() {
   const [plannerPhase, setPlannerPhase] = useState<import('./types').SetPhase>('Peak time');
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
-  const [bpmReanalyzOpen, setBpmReanalyzOpen] = useState(false);
-  const [bpmReanalyzMin, setBpmReanalyzMin] = useState('');
-  const [bpmReanalyzMax, setBpmReanalyzMax] = useState('');
-  const [bpmReanalyzProgress, setBpmReanalyzProgress] = useState<{ done: number; total: number } | null>(null);
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
   const [hasDiscogsOAuth, setHasDiscogsOAuth] = useState(false);
@@ -2437,67 +2433,6 @@ function AppInner() {
                     );
                   })()}
                 </div>
-                {/* Bulk BPM Re-analyze */}
-                {generatedSet.length > 0 && (
-                  <div className="mb-3">
-                    {!bpmReanalyzOpen ? (
-                      <button
-                        type="button"
-                        onClick={() => setBpmReanalyzOpen(true)}
-                        className="text-[10px] text-[#475569] hover:text-[#a78bfa] transition-colors cursor-pointer flex items-center gap-1"
-                      >
-                        ⟳ Re-analyze set BPM with range
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] text-[#64748b]">BPM range</span>
-                        <input
-                          type="number" placeholder="Min" value={bpmReanalyzMin}
-                          onChange={e => setBpmReanalyzMin(e.target.value)}
-                          className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
-                        />
-                        <span className="text-[#4b5568] text-xs">–</span>
-                        <input
-                          type="number" placeholder="Max" value={bpmReanalyzMax}
-                          onChange={e => setBpmReanalyzMax(e.target.value)}
-                          className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
-                        />
-                        <button
-                          type="button"
-                          disabled={!!bpmReanalyzProgress}
-                          onClick={async () => {
-                            const min = parseFloat(bpmReanalyzMin);
-                            const max = parseFloat(bpmReanalyzMax);
-                            if (isNaN(min) || isNaN(max) || min >= max) return;
-                            setBpmReanalyzProgress({ done: 0, total: generatedSet.length });
-                            for (let i = 0; i < generatedSet.length; i++) {
-                              const t = generatedSet[i];
-                              try {
-                                const res = await apiFetch('/api/reanalyze-track', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ filePath: t.file, bpmMin: min, bpmMax: max }),
-                                });
-                                const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
-                                if (d.ok) handleUpdateTrack(i, { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
-                              } catch { /* ignore individual failures */ }
-                              setBpmReanalyzProgress({ done: i + 1, total: generatedSet.length });
-                            }
-                            setBpmReanalyzProgress(null);
-                            setBpmReanalyzOpen(false);
-                          }}
-                          className="px-2.5 py-1 text-[10px] rounded border border-[#7c3aed] text-[#a78bfa] hover:bg-[#7c3aed]/10 transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          {bpmReanalyzProgress ? `${bpmReanalyzProgress.done}/${bpmReanalyzProgress.total}…` : 'Re-analyze'}
-                        </button>
-                        {!bpmReanalyzProgress && (
-                          <button type="button" onClick={() => setBpmReanalyzOpen(false)} className="text-[10px] text-[#475569] hover:text-[#94a3b8] cursor-pointer">cancel</button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 <SetTracklist
                   tracks={generatedSet}
                   prefs={prefs}
@@ -2545,6 +2480,17 @@ function AppInner() {
                         const res = await apiFetch('/api/reanalyze-track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                         const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
                         if (d.ok) handleUpdateTrack(indices[n], { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
+                      } catch { /* ignore */ }
+                    }
+                  }}
+                  onBulkPatchBpm={async (indices, multiplier) => {
+                    for (const idx of indices) {
+                      const t = generatedSet[idx];
+                      if (!t || !(t.bpm > 0)) continue;
+                      const newBpm = Math.round(t.bpm * multiplier * 10) / 10;
+                      try {
+                        await apiFetch('/api/track-meta', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: t.file, patch: { bpm: newBpm } }) });
+                        handleUpdateTrack(idx, { bpm: newBpm });
                       } catch { /* ignore */ }
                     }
                   }}

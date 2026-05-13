@@ -818,15 +818,20 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (songsFolder) collect(path.join(songsFolder, 'results.json'))
     collect(APPLE_RESULTS_PATH)
 
-    // De-duplicate by filePath so we don't read the same file twice
+    // De-duplicate by resolved absolute path (filePath or file for Apple Music legacy entries)
     const seen = new Set<string>()
-    const unique = entries.filter(e => { const fp = e.song.filePath; if (!fp || seen.has(fp)) return false; seen.add(fp); return true })
+    const unique = entries.filter(e => {
+      const fp = e.song.filePath || (path.isAbsolute(e.song.file ?? '') ? e.song.file : null)
+      if (!fp || seen.has(fp)) return false
+      seen.add(fp)
+      return true
+    })
 
     // Dirty-tracking per results file
     const dirty = new Set<string>()
 
     for (const { resultsPath, song } of unique) {
-      const fp = song.filePath
+      const fp = song.filePath || (path.isAbsolute(song.file ?? '') ? song.file : null)
       if (!fp || !fs.existsSync(fp)) continue
       try {
         const patch: { comment?: string; year?: number; duration?: number; dateAdded?: number } = {}

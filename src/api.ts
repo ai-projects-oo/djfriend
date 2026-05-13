@@ -718,17 +718,17 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
   })
 
   // Serve the current community model (auto-updated after each RETRAIN_EVERY batch).
-  // Also initializes with a blank model if called before any data arrives.
+  // Returns 404 until at least one training cycle has completed — prevents clients
+  // from blending in an untrained random model during the Redis sync window.
   middlewares.use('/api/community-model', (req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     if (req.method !== 'GET') { next(); return }
-    res.setHeader('Content-Type', 'application/json')
-    if (!communityModel) {
-      // Return a freshly initialized model so clients always get something useful
-      const blank = initWeights()
-      res.end(JSON.stringify(blank))
+    if (!communityModel || communityModel.trainedSamples === 0) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'No trained model yet' }))
       return
     }
+    res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify(communityModel))
   })
 

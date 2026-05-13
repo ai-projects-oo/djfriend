@@ -1516,15 +1516,15 @@ function AppInner() {
                           key={mode}
                           type="button"
                           onClick={() => setDiscogsMode(mode)}
-                          className="flex-1 py-3 cursor-pointer flex flex-col items-center justify-center gap-1.5 transition-opacity"
-                          style={{ backgroundColor: 'transparent', opacity: active ? 1 : 0.3, borderBottom: active ? '2px solid #7c3aed' : '2px solid transparent' }}
+                          className="flex-1 cursor-pointer flex flex-col items-center transition-opacity"
+                          style={{ backgroundColor: 'transparent', opacity: active ? 1 : 0.3, borderBottom: active ? '2px solid #7c3aed' : '2px solid transparent', minHeight: 100 }}
                           title={titles[mode]}
                           aria-label={labels[mode]}
                           onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.7'; }}
                           onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.3'; }}
                         >
-                          {icon}
-                          <span className="text-[9px] font-medium leading-none" style={{ color: active ? '#e2e8f0' : '#64748b' }}>{labels[mode]}</span>
+                          <div className="flex-1 flex items-center justify-center">{icon}</div>
+                          <span className="text-[9px] font-medium pb-2" style={{ color: active ? '#e2e8f0' : '#64748b' }}>{labels[mode]}</span>
                         </button>
                       );
                     })}

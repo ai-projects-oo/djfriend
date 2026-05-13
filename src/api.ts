@@ -131,7 +131,7 @@ async function loadFromRedis() {
         const valid = (parsed as unknown[]).filter(v => Array.isArray(v) && (v as number[]).length === 18) as number[][]
         communityVectors.splice(0, communityVectors.length, ...valid)
         console.log(`[telemetry] Redis: synced ${communityVectors.length} vectors`)
-        try { fs.writeFileSync(TELEMETRY_VECTORS_PATH, communityVectors.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { }
+        try { fs.writeFileSync(TELEMETRY_VECTORS_PATH, communityVectors.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { /* ignore */ }
       }
     }
     if (negativesJson) {
@@ -140,7 +140,7 @@ async function loadFromRedis() {
         const valid = (parsed as unknown[]).filter(v => Array.isArray(v) && (v as number[]).length === 18) as number[][]
         communityNegatives.splice(0, communityNegatives.length, ...valid)
         console.log(`[telemetry] Redis: synced ${communityNegatives.length} negatives`)
-        try { fs.writeFileSync(TELEMETRY_NEGATIVES_PATH, communityNegatives.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { }
+        try { fs.writeFileSync(TELEMETRY_NEGATIVES_PATH, communityNegatives.map(v => JSON.stringify(v)).join('\n') + '\n', 'utf-8') } catch { /* ignore */ }
       }
     }
     if (modelJson) {
@@ -148,7 +148,7 @@ async function loadFromRedis() {
       if (isValidModelWeights(parsed) && (!communityModel || parsed.trainedSamples > communityModel.trainedSamples)) {
         communityModel = parsed
         console.log(`[telemetry] Redis: synced model v${communityModel.version} (${communityModel.trainedSamples} samples)`)
-        try { fs.writeFileSync(COMMUNITY_MODEL_PATH, modelJson, 'utf-8') } catch { }
+        try { fs.writeFileSync(COMMUNITY_MODEL_PATH, modelJson, 'utf-8') } catch { /* ignore */ }
       }
     }
   } catch (e) {

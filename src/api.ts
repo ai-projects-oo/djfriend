@@ -622,6 +622,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const url = req.url ?? ''
     if (!url.startsWith('/api/')) { next(); return }
     if (url.startsWith('/api/auth/check')) { next(); return }
+    if (url.startsWith('/api/telemetry/') || url.startsWith('/api/community-model')) { next(); return }
     const appPwd = process.env.APP_PASSWORD
     if (!appPwd) { next(); return }
     const provided = typeof req.headers['x-app-password'] === 'string' ? req.headers['x-app-password'] : ''

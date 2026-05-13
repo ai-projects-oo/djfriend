@@ -73,16 +73,20 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, setLeng
     (x: number) => PADDING.left + x * innerWidth,
     [innerWidth],
   );
+  const yMin = libraryEnergyRange ? libraryEnergyRange.min : 0;
+  const yMax = libraryEnergyRange ? libraryEnergyRange.max : 1;
+  const ySpan = yMax - yMin;
+
   const toSvgY = useCallback(
-    (y: number) => PADDING.top + (1 - y) * innerHeight,
-    [innerHeight],
+    (y: number) => PADDING.top + (1 - (y - yMin) / ySpan) * innerHeight,
+    [innerHeight, yMin, ySpan],
   );
   const fromSvgY = useCallback(
     (svgY: number) => {
-      const y = 1 - (svgY - PADDING.top) / innerHeight;
-      return Math.max(0, Math.min(1, y));
+      const normalized = 1 - (svgY - PADDING.top) / innerHeight;
+      return Math.max(yMin, Math.min(yMax, yMin + normalized * ySpan));
     },
-    [innerHeight],
+    [innerHeight, yMin, yMax, ySpan],
   );
 
   const pathD = useMemo(

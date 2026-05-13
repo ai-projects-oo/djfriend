@@ -754,6 +754,20 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     res.end(JSON.stringify({ vectors: communityVectors, count: communityVectors.length }))
   })
 
+  middlewares.use('/api/telemetry/stats', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    if (req.method !== 'GET') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({
+      vectorCount:    communityVectors.length,
+      negativeCount:  communityNegatives.length,
+      modelVersion:   communityModel?.version ?? 0,
+      trainedSamples: communityModel?.trainedSamples ?? 0,
+      lastTrainedAt:  communityModel?.trainedOn ?? null,
+      nextTrainIn:    Math.max(0, RETRAIN_EVERY - vectorsSinceLastTrain),
+    }))
+  })
+
   // Serve the current community model (auto-updated after each RETRAIN_EVERY batch).
   // Returns 404 until at least one training cycle has completed — prevents clients
   // from blending in an untrained random model during the Redis sync window.

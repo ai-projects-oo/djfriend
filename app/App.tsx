@@ -536,13 +536,16 @@ function AppInner() {
     [generatedSet, energyCheckThreshold],
   );
   const libraryEnergyRange = useMemo(() => {
-    if (library.length === 0) return null;
+    const pool = effectiveFilterFiles
+      ? library.filter(s => effectiveFilterFiles.has(s.file))
+      : library;
+    if (pool.length === 0) return null;
     let min = Infinity, max = -Infinity;
-    for (const s of library) {
+    for (const s of pool) {
       if (s.energy > 0) { min = Math.min(min, s.energy); max = Math.max(max, s.energy); }
     }
     return min < max ? { min: Math.round(min * 100) / 100, max: Math.round(max * 100) / 100 } : null;
-  }, [library]);
+  }, [library, effectiveFilterFiles]);
 
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
 

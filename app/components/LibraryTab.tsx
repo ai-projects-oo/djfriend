@@ -8,6 +8,58 @@ import { apiFetch } from "../lib/apiFetch";
 import { downloadM3U } from "../lib/m3uExport";
 import { patchTrackMeta } from "../lib/trackMeta";
 import type { SetTrack } from "../types";
+import { BEATPORT_UMBRELLAS } from "../lib/genreUtils";
+
+// BPM ranges by genre category — used as re-analyze hints
+const GENRE_BPM_PRESETS: Record<string, { min: number; max: number }> = {
+  'Afro House':             { min: 118, max: 126 },
+  'Amapiano':               { min: 110, max: 118 },
+  'Ambient / Experimental': { min:  60, max: 100 },
+  'Bass House':             { min: 124, max: 132 },
+  'Breaks / Breakbeat':     { min: 120, max: 140 },
+  'Deep House':             { min: 116, max: 126 },
+  'Downtempo':              { min:  70, max: 110 },
+  'Drum & Bass':            { min: 160, max: 180 },
+  'Dubstep':                { min: 138, max: 145 },
+  'Electro':                { min: 120, max: 135 },
+  'Funky House':            { min: 120, max: 130 },
+  'Hard Dance / Hardcore':  { min: 145, max: 170 },
+  'Hard Techno':            { min: 140, max: 155 },
+  'House':                  { min: 120, max: 132 },
+  'Indie Dance':            { min: 118, max: 128 },
+  'Jackin House':           { min: 122, max: 130 },
+  'Melodic House & Techno': { min: 120, max: 132 },
+  'Minimal / Deep Tech':    { min: 120, max: 132 },
+  'Nu Disco / Disco':       { min: 100, max: 125 },
+  'Organic House':          { min: 110, max: 122 },
+  'Progressive House':      { min: 126, max: 134 },
+  'Psy-Trance':             { min: 138, max: 150 },
+  'Tech House':             { min: 124, max: 134 },
+  'Techno':                 { min: 130, max: 148 },
+  'Trance':                 { min: 128, max: 142 },
+  'Trap / Future Bass':     { min:  60, max:  90 },
+  'UK Garage / Bassline':   { min: 130, max: 140 },
+  'Hip-Hop':                { min:  70, max: 110 },
+  'R&B':                    { min:  60, max: 100 },
+  'Latin':                  { min:  80, max: 110 },
+  'Afrobeats':              { min:  90, max: 115 },
+  'Pop':                    { min:  90, max: 130 },
+  'Rock':                   { min:  90, max: 140 },
+};
+
+function detectGenrePreset(selectedSongs: Song[]): { min: number; max: number } | null {
+  const counts: Record<string, number> = {};
+  for (const song of selectedSongs) {
+    for (const umbrella of BEATPORT_UMBRELLAS) {
+      if (song.genres.some(g => umbrella.phrases.some(p => g.toLowerCase().includes(p)))) {
+        counts[umbrella.label] = (counts[umbrella.label] ?? 0) + 1;
+      }
+    }
+  }
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (!top) return null;
+  return GENRE_BPM_PRESETS[top[0]] ?? null;
+}
 
 function toSetTrack(s: Song): SetTrack { return { ...s, slot: 0, targetEnergy: s.energy, harmonicWarning: false }; }
 
@@ -411,8 +463,12 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                   if (!song) { setBulkProgress({ done: i + 1, total: files.length }); continue; }
                   try {
                     const res = await apiFetch('/api/reanalyze-track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: song.filePath ?? song.file }) });
-                    const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
-                    if (d.ok && d.bpm != null && d.key != null && d.camelot != null && d.energy != null) onReanalyzed?.(song.file, { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
+                    if (res.ok) {
+                      const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
+                      if (d.ok && d.bpm != null && d.key != null && d.camelot != null && d.energy != null) {
+                        onReanalyzed?.(song.file, { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
+                      }
+                    }
                   } catch { /* ignore */ }
                   setBulkProgress({ done: i + 1, total: files.length });
                 }
@@ -424,7 +480,15 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
             </button>
             <button
               type="button"
-              onClick={() => setBulkBpmOpen(o => !o)}
+              onClick={() => {
+                if (!bulkBpmOpen) {
+                  // Auto-detect BPM range from selected tracks' genres
+                  const selectedSongs = [...selected].map(f => library.find(s => s.file === f)).filter((s): s is Song => s != null);
+                  const preset = detectGenrePreset(selectedSongs);
+                  if (preset) { setBulkBpmMin(String(preset.min)); setBulkBpmMax(String(preset.max)); }
+                }
+                setBulkBpmOpen(o => !o);
+              }}
               className={`text-xs px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${bulkBpmOpen ? 'border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10' : 'border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151]'}`}
             >
               Re-analyze BPM range…
@@ -453,38 +517,61 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
             <button type="button" onClick={() => { setSelected(new Set()); setBulkBpmOpen(false); }} className="ml-auto text-[10px] text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Clear</button>
           </div>
           {bulkBpmOpen && (
-            <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-[#7c3aed]/20">
-              <span className="text-[10px] text-[#64748b]">BPM range</span>
-              <input type="number" placeholder="Min" value={bulkBpmMin} onChange={e => setBulkBpmMin(e.target.value)}
-                className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
-              <span className="text-[#4b5568] text-xs">–</span>
-              <input type="number" placeholder="Max" value={bulkBpmMax} onChange={e => setBulkBpmMax(e.target.value)}
-                className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
-              <button
-                type="button"
-                disabled={!!bulkProgress}
-                onClick={async () => {
-                  const min = parseFloat(bulkBpmMin), max = parseFloat(bulkBpmMax);
-                  if (isNaN(min) || isNaN(max) || min >= max) return;
-                  const files = [...selected];
-                  setBulkProgress({ done: 0, total: files.length });
-                  for (let i = 0; i < files.length; i++) {
-                    const song = library.find(s => s.file === files[i]);
-                    if (!song) { setBulkProgress({ done: i + 1, total: files.length }); continue; }
-                    try {
-                      const res = await apiFetch('/api/reanalyze-track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: song.filePath ?? song.file, bpmMin: min, bpmMax: max }) });
-                      const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
-                      if (d.ok && d.bpm != null && d.key != null && d.camelot != null && d.energy != null) onReanalyzed?.(song.file, { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
-                    } catch { /* ignore */ }
-                    setBulkProgress({ done: i + 1, total: files.length });
-                  }
-                  setBulkProgress(null);
-                  setBulkBpmOpen(false);
-                }}
-                className="px-2.5 py-1 text-[10px] rounded border border-[#7c3aed] text-[#a78bfa] hover:bg-[#7c3aed]/10 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {bulkProgress ? `${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
-              </button>
+            <div className="flex flex-col gap-2 pt-2 border-t border-[#7c3aed]/20">
+              {/* Genre presets */}
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(GENRE_BPM_PRESETS).map(([label, range]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => { setBulkBpmMin(String(range.min)); setBulkBpmMax(String(range.max)); }}
+                    className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer
+                      ${bulkBpmMin === String(range.min) && bulkBpmMax === String(range.max)
+                        ? 'border-[#7c3aed] text-[#a78bfa] bg-[#7c3aed]/15'
+                        : 'border-[#2a2a3a] text-[#475569] hover:text-[#94a3b8] hover:border-[#374151]'}`}
+                  >
+                    {label} <span className="opacity-50">{range.min}–{range.max}</span>
+                  </button>
+                ))}
+              </div>
+              {/* Manual inputs + run */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] text-[#64748b]">BPM range</span>
+                <input type="number" placeholder="Min" value={bulkBpmMin} onChange={e => setBulkBpmMin(e.target.value)}
+                  className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
+                <span className="text-[#4b5568] text-xs">–</span>
+                <input type="number" placeholder="Max" value={bulkBpmMax} onChange={e => setBulkBpmMax(e.target.value)}
+                  className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
+                <button
+                  type="button"
+                  disabled={!!bulkProgress}
+                  onClick={async () => {
+                    const min = parseFloat(bulkBpmMin), max = parseFloat(bulkBpmMax);
+                    if (isNaN(min) || isNaN(max) || min >= max) return;
+                    const files = [...selected];
+                    setBulkProgress({ done: 0, total: files.length });
+                    for (let i = 0; i < files.length; i++) {
+                      const song = library.find(s => s.file === files[i]);
+                      if (!song) { setBulkProgress({ done: i + 1, total: files.length }); continue; }
+                      try {
+                        const res = await apiFetch('/api/reanalyze-track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: song.filePath ?? song.file, bpmMin: min, bpmMax: max }) });
+                        if (res.ok) {
+                          const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
+                          if (d.ok && d.bpm != null && d.key != null && d.camelot != null && d.energy != null) {
+                            onReanalyzed?.(song.file, { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
+                          }
+                        }
+                      } catch { /* ignore */ }
+                      setBulkProgress({ done: i + 1, total: files.length });
+                    }
+                    setBulkProgress(null);
+                    setBulkBpmOpen(false);
+                  }}
+                  className="px-2.5 py-1 text-[10px] rounded border border-[#7c3aed] text-[#a78bfa] hover:bg-[#7c3aed]/10 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {bulkProgress ? `${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
+                </button>
+              </div>
             </div>
           )}
         </div>

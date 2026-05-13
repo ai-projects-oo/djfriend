@@ -1539,12 +1539,9 @@ function AppInner() {
                       {discogsCrateFiles && discogsCrateFiles.size === 0 && (
                         <p className="text-[11px] text-[#ef4444]">No library tracks matched. Re-sync in Settings.</p>
                       )}
-                      {discogsCrateFiles && (
-                        <p className="text-[11px] text-[#64748b]">
-                          <span className="text-[#94a3b8] font-medium">{discogsCollection.totalReleases}</span> vinyl
-                          {discogsCrateFiles.size > 0 && <> · <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> matched</>}
-                        </p>
-                      )}
+                      <p className="text-[11px] text-[#64748b]">
+                        <span className="text-[#94a3b8] font-medium">{discogsCollection.totalReleases}</span> vinyl
+                      </p>
                       <div className="flex items-center gap-2 ml-auto">
                         {discogsDaysSince !== null && (
                           <span className={`text-[10px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#334155]'}`}>

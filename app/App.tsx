@@ -1496,7 +1496,7 @@ function AppInner() {
               {discogsCollection && (
                 <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Discogs</span>
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Media</span>
                     <div className="flex items-center gap-2">
                       {discogsDaysSince !== null && (
                         <span className={`text-[10px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#334155]'}`}>
@@ -1522,34 +1522,14 @@ function AppInner() {
                       const titles: Record<DiscogsMode, string> = { library: 'Digital library only', 'crates-first': 'Vinyl + digital — vinyl scores higher', crates: 'Vinyl only' };
                       const active = discogsMode === mode;
                       const icon = mode === 'library' ? (
-                        // Digital player / library icon
-                        <svg width="16" height="13" viewBox="0 0 16 13" fill="none">
-                          <rect x="0.65" y="0.65" width="14.7" height="9.2" rx="1.2" stroke="currentColor" strokeWidth="1.3"/>
-                          <rect x="2.5" y="2.3" width="11" height="5.5" rx="0.4" fill="currentColor" opacity="0.2"/>
-                          <path d="M4 5 Q8 3.5 12 5 Q8 6.5 4 5Z" fill="currentColor" opacity="0.75"/>
-                          <line x1="5" y1="11" x2="11" y2="11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                          <line x1="8" y1="9.85" x2="8" y2="11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                        </svg>
+                        <img src="/icons/cdj.png" width="28" height="20" style={{ objectFit: 'contain', opacity: active ? 1 : 0.45 }} alt="CDJ" />
                       ) : mode === 'crates-first' ? (
-                        // Mixed: half CDJ + half turntable
-                        <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
-                          <rect x="0.65" y="1.65" width="7.7" height="6.2" rx="1" stroke="currentColor" strokeWidth="1.2" opacity="0.9"/>
-                          <path d="M3 5 Q5 4 7 5 Q5 6 3 5Z" fill="currentColor" opacity="0.7"/>
-                          <circle cx="13" cy="7" r="5.3" stroke="currentColor" strokeWidth="1.2"/>
-                          <circle cx="13" cy="7" r="2.8" stroke="currentColor" strokeWidth="0.7" opacity="0.45"/>
-                          <circle cx="13" cy="7" r="0.85" fill="currentColor"/>
-                          <line x1="16.5" y1="2.5" x2="17.8" y2="1.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.65"/>
-                        </svg>
+                        <div className="flex items-center gap-0.5">
+                          <img src="/icons/cdj.png" width="18" height="13" style={{ objectFit: 'contain', opacity: active ? 1 : 0.45 }} alt="CDJ" />
+                          <img src="/icons/turntable.png" width="16" height="16" style={{ objectFit: 'contain', opacity: active ? 1 : 0.45 }} alt="Turntable" />
+                        </div>
                       ) : (
-                        // Turntable / vinyl only
-                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-                          <circle cx="7.5" cy="7.5" r="6.5" stroke="currentColor" strokeWidth="1.3"/>
-                          <circle cx="7.5" cy="7.5" r="4" stroke="currentColor" strokeWidth="0.8" opacity="0.45"/>
-                          <circle cx="7.5" cy="7.5" r="1.8" stroke="currentColor" strokeWidth="0.7" opacity="0.35"/>
-                          <circle cx="7.5" cy="7.5" r="0.9" fill="currentColor"/>
-                          <line x1="11.5" y1="2" x2="13.2" y2="1" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.65"/>
-                          <circle cx="13.2" cy="1" r="0.7" fill="currentColor" opacity="0.65"/>
-                        </svg>
+                        <img src="/icons/turntable.png" width="22" height="22" style={{ objectFit: 'contain', opacity: active ? 1 : 0.45 }} alt="Turntable" />
                       );
                       return (
                         <button
@@ -1567,19 +1547,24 @@ function AppInner() {
                       );
                     })}
                   </div>
+                  {discogsMode === 'library' && (
+                    <p className="text-[11px] text-[#64748b]">
+                      <span className="text-[#94a3b8] font-medium">{library.length}</span> tracks
+                    </p>
+                  )}
                   {discogsMode === 'crates' && discogsCrateFiles && discogsCrateFiles.size === 0 && (
                     <p className="text-[11px] text-[#ef4444]">No library tracks matched your collection. Re-sync in Settings.</p>
                   )}
                   {discogsMode === 'crates' && discogsCrateFiles && discogsCrateFiles.size > 0 && (
                     <p className="text-[11px] text-[#64748b]">
-                      <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> vinyl tracks matched
+                      <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> vinyl tracks
                     </p>
                   )}
-                  {discogsMode === 'crates-first' && discogsCrateFiles && discogsCrateFiles.size > 0 && (
+                  {discogsMode === 'crates-first' && discogsCrateFiles && (
                     <p className="text-[11px] text-[#64748b]">
                       <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> vinyl
                       {' · '}
-                      <span className="text-[#94a3b8] font-medium">{library.length - discogsCrateFiles.size}</span> digital
+                      <span className="text-[#94a3b8] font-medium">{library.length}</span> digital
                     </p>
                   )}
 
@@ -1631,25 +1616,9 @@ function AppInner() {
                                   aria-label={k}
                                 >
                                   {k === 'digital' ? (
-                                    /* CDJ screen icon */
-                                    <svg width="18" height="14" viewBox="0 0 18 14" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: active ? '#fff' : '#64748b' }}>
-                                      <rect x="1" y="1" width="16" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-                                      <rect x="3" y="3" width="12" height="6" rx="0.5" fill="currentColor" opacity="0.25"/>
-                                      <line x1="3" y1="3.8" x2="15" y2="3.8" stroke="currentColor" strokeWidth="0.8" opacity="0.6"/>
-                                      <path d="M5 5.5 Q9 4.5 13 5.5 Q9 6.5 5 5.5Z" fill="currentColor" opacity="0.7"/>
-                                      <line x1="6" y1="12" x2="12" y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                                      <line x1="9" y1="11" x2="9" y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                                    </svg>
+                                    <img src="/icons/cdj.png" width="22" height="16" style={{ objectFit: 'contain', opacity: active ? 1 : 0.4 }} alt="CDJ" />
                                   ) : (
-                                    /* Turntable platter icon */
-                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: active ? '#f59e0b' : '#64748b' }}>
-                                      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.3"/>
-                                      <circle cx="8" cy="8" r="4.5" stroke="currentColor" strokeWidth="0.8" opacity="0.5"/>
-                                      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="0.8" opacity="0.4"/>
-                                      <circle cx="8" cy="8" r="0.9" fill="currentColor"/>
-                                      <line x1="12" y1="2" x2="14" y2="1" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.7"/>
-                                      <circle cx="14" cy="1" r="0.8" fill="currentColor" opacity="0.7"/>
-                                    </svg>
+                                    <img src="/icons/turntable.png" width="18" height="18" style={{ objectFit: 'contain', opacity: active ? 1 : 0.4 }} alt="Turntable" />
                                   )}
                                 </button>
                               );
@@ -1659,12 +1628,6 @@ function AppInner() {
                       ))}
                     </div>
 
-                    {/* Eligible vinyl count — only when vinyl channels exist */}
-                    {djVinylDecks > 0 && vinylFiles && (
-                      <p className="text-[10px] text-[#64748b]">
-                        <span className="text-[#a78bfa] font-medium">{vinylFiles.size}</span> vinyl eligible
-                      </p>
-                    )}
                   </div>
                 </div>
               )}

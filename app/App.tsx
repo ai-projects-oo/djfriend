@@ -1541,9 +1541,16 @@ function AppInner() {
                   {discogsMode === 'crates' && discogsCrateFiles && discogsCrateFiles.size === 0 && (
                     <p className="text-[11px] text-[#ef4444]">No library tracks matched your collection. Re-sync in Settings.</p>
                   )}
-                  {discogsMode !== 'library' && discogsCrateFiles && discogsCrateFiles.size > 0 && (
+                  {discogsMode === 'crates' && discogsCrateFiles && discogsCrateFiles.size > 0 && (
                     <p className="text-[11px] text-[#64748b]">
-                      <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> tracks matched
+                      <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> vinyl tracks matched
+                    </p>
+                  )}
+                  {discogsMode === 'crates-first' && discogsCrateFiles && discogsCrateFiles.size > 0 && (
+                    <p className="text-[11px] text-[#64748b]">
+                      <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> vinyl
+                      {' · '}
+                      <span className="text-[#94a3b8] font-medium">{library.length - discogsCrateFiles.size}</span> digital
                     </p>
                   )}
 

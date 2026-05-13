@@ -238,13 +238,13 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
 
   const selectGenre = useCallback((genre: string) => {
     if (genre === 'Any') {
-      setPrefs(p => ({ ...p, genres: [], bpmMin: undefined, bpmMax: undefined, tagFilters: CLEARED_TAGS() }));
+      setPrefs(p => ({ ...p, genres: [], tagFilters: CLEARED_TAGS() }));
       return;
     }
     setPrefs(p => {
       const already = p.genres.includes(genre);
       const newGenres = already ? p.genres.filter(g => g !== genre) : [...p.genres, genre];
-      if (newGenres.length === 0) return { ...p, genres: [], bpmMin: undefined, bpmMax: undefined, tagFilters: CLEARED_TAGS() };
+      if (newGenres.length === 0) return { ...p, genres: [], tagFilters: CLEARED_TAGS() };
 
       // Suggest BPM range from the genres present in matching songs
       const matchingGenreStrings = library

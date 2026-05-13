@@ -1496,7 +1496,7 @@ function AppInner() {
               {discogsCollection && (
                 <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Crates</span>
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Discogs</span>
                     <div className="flex items-center gap-2">
                       {discogsDaysSince !== null && (
                         <span className={`text-[10px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#334155]'}`}>

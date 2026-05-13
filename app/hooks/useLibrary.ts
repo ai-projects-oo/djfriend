@@ -96,7 +96,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   // After library loads, stream missing comment/year from ID3 tags and merge into state
   const runBackfill = useCallback((loaded: Song[]) => {
     if (loaded.length === 0) return;
-    const hasMissing = loaded.some(s => !s.comment || s.year == null);
+    const hasMissing = loaded.some(s => !s.comment || s.year == null || s.dateAdded == null);
     if (!hasMissing) return;
     apiFetch("/api/backfill-meta")
       .then(r => {
@@ -109,10 +109,10 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
           buf += dec.decode(value, { stream: true });
           const lines = buf.split("\n");
           buf = lines.pop() ?? "";
-          const patches: Array<{ filePath: string; comment?: string; year?: number; duration?: number }> = [];
+          const patches: Array<{ filePath: string; comment?: string; year?: number; duration?: number; dateAdded?: number }> = [];
           for (const line of lines) {
             if (!line.trim()) continue;
-            try { patches.push(JSON.parse(line) as { filePath: string; comment?: string; year?: number; duration?: number }); } catch { /* skip */ }
+            try { patches.push(JSON.parse(line) as { filePath: string; comment?: string; year?: number; duration?: number; dateAdded?: number }); } catch { /* skip */ }
           }
           if (patches.length > 0) {
             setLibrary(prev => {
@@ -120,7 +120,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
               return prev.map(s => {
                 const p = map.get(s.filePath ?? s.file);
                 if (!p) return s;
-                return { ...s, ...(p.comment ? { comment: p.comment } : {}), ...(p.year != null ? { year: p.year } : {}), ...(p.duration != null ? { duration: p.duration } : {}) };
+                return { ...s, ...(p.comment ? { comment: p.comment } : {}), ...(p.year != null ? { year: p.year } : {}), ...(p.duration != null ? { duration: p.duration } : {}), ...(p.dateAdded != null ? { dateAdded: p.dateAdded } : {}) };
               });
             });
           }

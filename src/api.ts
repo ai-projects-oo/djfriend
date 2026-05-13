@@ -811,7 +811,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       try {
         const data = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
         for (const [key, song] of Object.entries(data)) {
-          if (!song.comment || song.year == null || song.duration == null) entries.push({ resultsPath, key, song })
+          if (!song.comment || song.year == null || song.duration == null || song.dateAdded == null) entries.push({ resultsPath, key, song })
         }
       } catch { /* ignore */ }
     }
@@ -829,24 +829,36 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const fp = song.filePath
       if (!fp || !fs.existsSync(fp)) continue
       try {
-        const needsDuration = song.duration == null
-        const meta = await mm.parseFile(fp, { skipCovers: true, duration: needsDuration })
-        const patch: { comment?: string; year?: number; duration?: number } = {}
-        // music-metadata returns IComment[] for ID3v2 (text field) or plain string[] for M4A — handle both
-        if (!song.comment) {
-          const raw = meta.common.comment
-          if (raw && raw.length > 0) {
-            const first = raw[0]
-            const text = typeof first === 'string' ? first : first.text
-            if (text && text.trim()) patch.comment = text.trim()
-          }
+        const patch: { comment?: string; year?: number; duration?: number; dateAdded?: number } = {}
+
+        // dateAdded: fast stat — no audio parsing needed
+        if (song.dateAdded == null) {
+          try {
+            const stat = fs.statSync(fp)
+            patch.dateAdded = Math.floor((stat.birthtimeMs || stat.mtimeMs) / 1000)
+          } catch { /* ignore */ }
         }
-        if (song.year == null && meta.common.year != null) patch.year = meta.common.year
-        if (needsDuration && meta.format.duration != null && meta.format.duration > 0) patch.duration = meta.format.duration
+
+        // comment / year / duration: need music-metadata parse
+        if (!song.comment || song.year == null || song.duration == null) {
+          const needsDuration = song.duration == null
+          const meta = await mm.parseFile(fp, { skipCovers: true, duration: needsDuration })
+          // music-metadata returns IComment[] for ID3v2 (text field) or plain string[] for M4A — handle both
+          if (!song.comment) {
+            const raw = meta.common.comment
+            if (raw && raw.length > 0) {
+              const first = raw[0]
+              const text = typeof first === 'string' ? first : first.text
+              if (text && text.trim()) patch.comment = text.trim()
+            }
+          }
+          if (song.year == null && meta.common.year != null) patch.year = meta.common.year
+          if (needsDuration && meta.format.duration != null && meta.format.duration > 0) patch.duration = meta.format.duration
+        }
+
         if (Object.keys(patch).length === 0) continue
         Object.assign(song, patch)
         dirty.add(resultsPath)
-        // Use filePath as the identifier — matches song.filePath in the frontend
         res.write(JSON.stringify({ filePath: fp, ...patch }) + '\n')
       } catch { /* skip */ }
     }
@@ -856,7 +868,12 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       try {
         const data = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
         for (const { key, song } of entries.filter(e => e.resultsPath === resultsPath)) {
-          if (data[key]) Object.assign(data[key], { ...(song.comment ? { comment: song.comment } : {}), ...(song.year != null ? { year: song.year } : {}), ...(song.duration != null ? { duration: song.duration } : {}) })
+          if (data[key]) Object.assign(data[key], {
+            ...(song.comment ? { comment: song.comment } : {}),
+            ...(song.year != null ? { year: song.year } : {}),
+            ...(song.duration != null ? { duration: song.duration } : {}),
+            ...(song.dateAdded != null ? { dateAdded: song.dateAdded } : {}),
+          })
         }
         fs.writeFileSync(resultsPath, JSON.stringify(data, null, 2), 'utf-8')
       } catch { /* ignore */ }

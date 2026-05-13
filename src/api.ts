@@ -472,7 +472,8 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
       // Merge optional fields from fresh track metadata into cached entry
       if (cached.duration == null && t.duration != null) cached.duration = t.duration
       else if (cached.duration == null) { try { const meta = await mm.parseFile(t.filePath, { duration: true }); if (meta.format.duration != null) cached.duration = meta.format.duration } catch { /* tag read non-fatal */ } }
-      if (t.dateAdded != null && cached.dateAdded == null) cached.dateAdded = t.dateAdded
+      const MIN_TS = 946684800
+      if (t.dateAdded != null && (cached.dateAdded == null || cached.dateAdded < MIN_TS)) cached.dateAdded = t.dateAdded
       resultsJson[key] = cached
       return
     }
@@ -810,8 +811,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (!fs.existsSync(resultsPath)) return
       try {
         const data = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+        const MIN_TS = 946684800
         for (const [key, song] of Object.entries(data)) {
-          if (!song.comment || song.year == null || song.duration == null || song.dateAdded == null) entries.push({ resultsPath, key, song })
+          if (!song.comment || song.year == null || song.duration == null || song.dateAdded == null || song.dateAdded < MIN_TS) entries.push({ resultsPath, key, song })
         }
       } catch { /* ignore */ }
     }
@@ -837,10 +839,15 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         const patch: { comment?: string; year?: number; duration?: number; dateAdded?: number } = {}
 
         // dateAdded: fast stat — no audio parsing needed
+        // MIN_TS = Jan 1, 2000; guards against HFS+ sentinel value (Jan 24, 1984 ≈ 443750400)
         if (song.dateAdded == null) {
           try {
+            const MIN_TS = 946684800 // Unix seconds for 2000-01-01
             const stat = fs.statSync(fp)
-            patch.dateAdded = Math.floor((stat.birthtimeMs || stat.mtimeMs) / 1000)
+            const birth = Math.floor(stat.birthtimeMs / 1000)
+            const mtime = Math.floor(stat.mtimeMs / 1000)
+            const ts = birth >= MIN_TS ? birth : mtime >= MIN_TS ? mtime : null
+            if (ts !== null) patch.dateAdded = ts
           } catch { /* ignore */ }
         }
 

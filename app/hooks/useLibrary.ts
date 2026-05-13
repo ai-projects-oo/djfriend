@@ -96,7 +96,8 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   // After library loads, stream missing comment/year from ID3 tags and merge into state
   const runBackfill = useCallback((loaded: Song[]) => {
     if (loaded.length === 0) return;
-    const hasMissing = loaded.some(s => !s.comment || s.year == null || s.dateAdded == null);
+    const MIN_TS = 946684800; // 2000-01-01
+    const hasMissing = loaded.some(s => !s.comment || s.year == null || s.dateAdded == null || s.dateAdded < MIN_TS);
     if (!hasMissing) return;
     apiFetch("/api/backfill-meta")
       .then(r => {

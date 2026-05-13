@@ -37,8 +37,11 @@ export async function scanFolder(folderPath: string): Promise<ScannedTrack[]> {
     }
 
     const stat = fs.statSync(filePath);
-    const dateAdded = Math.floor((stat.birthtimeMs || stat.mtimeMs) / 1000);
-    tracks.push({ file, filePath, artist, title, duration, localGenres, dateAdded });
+    const MIN_TS = 946684800; // 2000-01-01 — guards against HFS+ sentinel (Jan 24, 1984)
+    const birth = Math.floor(stat.birthtimeMs / 1000);
+    const mtime = Math.floor(stat.mtimeMs / 1000);
+    const dateAdded = birth >= MIN_TS ? birth : mtime >= MIN_TS ? mtime : undefined;
+    tracks.push({ file, filePath, artist, title, duration, localGenres, ...(dateAdded != null ? { dateAdded } : {}) });
   }
 
   return tracks;

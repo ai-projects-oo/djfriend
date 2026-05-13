@@ -1518,22 +1518,51 @@ function AppInner() {
                   </div>
                   <div className="flex rounded-lg border border-[#2a2a3a] overflow-hidden text-xs font-medium">
                     {(['library', 'crates-first', 'crates'] as DiscogsMode[]).map((mode) => {
-                      const labels: Record<DiscogsMode, string> = { library: 'Library', 'crates-first': 'Crates first', crates: 'Crates' };
+                      const labels: Record<DiscogsMode, string> = { library: 'Library', 'crates-first': 'Mixed', crates: 'Vinyl' };
+                      const titles: Record<DiscogsMode, string> = { library: 'Digital library only', 'crates-first': 'Vinyl + digital — vinyl scores higher', crates: 'Vinyl only' };
                       const active = discogsMode === mode;
+                      const icon = mode === 'library' ? (
+                        // Digital player / library icon
+                        <svg width="16" height="13" viewBox="0 0 16 13" fill="none">
+                          <rect x="0.65" y="0.65" width="14.7" height="9.2" rx="1.2" stroke="currentColor" strokeWidth="1.3"/>
+                          <rect x="2.5" y="2.3" width="11" height="5.5" rx="0.4" fill="currentColor" opacity="0.2"/>
+                          <path d="M4 5 Q8 3.5 12 5 Q8 6.5 4 5Z" fill="currentColor" opacity="0.75"/>
+                          <line x1="5" y1="11" x2="11" y2="11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                          <line x1="8" y1="9.85" x2="8" y2="11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                        </svg>
+                      ) : mode === 'crates-first' ? (
+                        // Mixed: half CDJ + half turntable
+                        <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
+                          <rect x="0.65" y="1.65" width="7.7" height="6.2" rx="1" stroke="currentColor" strokeWidth="1.2" opacity="0.9"/>
+                          <path d="M3 5 Q5 4 7 5 Q5 6 3 5Z" fill="currentColor" opacity="0.7"/>
+                          <circle cx="13" cy="7" r="5.3" stroke="currentColor" strokeWidth="1.2"/>
+                          <circle cx="13" cy="7" r="2.8" stroke="currentColor" strokeWidth="0.7" opacity="0.45"/>
+                          <circle cx="13" cy="7" r="0.85" fill="currentColor"/>
+                          <line x1="16.5" y1="2.5" x2="17.8" y2="1.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.65"/>
+                        </svg>
+                      ) : (
+                        // Turntable / vinyl only
+                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                          <circle cx="7.5" cy="7.5" r="6.5" stroke="currentColor" strokeWidth="1.3"/>
+                          <circle cx="7.5" cy="7.5" r="4" stroke="currentColor" strokeWidth="0.8" opacity="0.45"/>
+                          <circle cx="7.5" cy="7.5" r="1.8" stroke="currentColor" strokeWidth="0.7" opacity="0.35"/>
+                          <circle cx="7.5" cy="7.5" r="0.9" fill="currentColor"/>
+                          <line x1="11.5" y1="2" x2="13.2" y2="1" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.65"/>
+                          <circle cx="13.2" cy="1" r="0.7" fill="currentColor" opacity="0.65"/>
+                        </svg>
+                      );
                       return (
                         <button
                           key={mode}
                           type="button"
                           onClick={() => setDiscogsMode(mode)}
-                          className="flex-1 px-2 py-1.5 transition-colors cursor-pointer text-center"
-                          style={{
-                            backgroundColor: active ? '#7c3aed' : 'transparent',
-                            color: active ? '#fff' : '#64748b',
-                          }}
-                          title={mode === 'library' ? 'All tracks' : mode === 'crates-first' ? 'Vinyl tracks score +0.12 bonus' : 'Vinyl-only set'}
+                          className="flex-1 py-1.5 transition-colors cursor-pointer flex flex-col items-center gap-0.5"
+                          style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#64748b' }}
+                          title={titles[mode]}
                           aria-label={labels[mode]}
                         >
-                          {labels[mode]}
+                          {icon}
+                          <span className="text-[9px] font-medium leading-none">{labels[mode]}</span>
                         </button>
                       );
                     })}

@@ -26,6 +26,8 @@ interface Props {
   onDragOver?: (e: React.DragEvent) => void;
   onDrop?: (e: React.DragEvent) => void;
   isDragOver?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
 const KEY_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B']
@@ -92,7 +94,7 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, totalTracks = 20, tipConfig, isPreviewPlaying = false, onPreview, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver }: Props) {
+export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, totalTracks = 20, tipConfig, isPreviewPlaying = false, onPreview, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver, isSelected, onSelect }: Props) {
   const tc = tipConfig ?? { help: true, info: true, ai: true };
   // Open popups downward for top-half rows, upward for bottom-half rows
   const openDown = index < totalTracks / 2;
@@ -233,7 +235,7 @@ async function handleReanalyze() {
   return (
     <>
       <tr
-        className={`border-b border-[#1e1e2e] group ${swapFlash ? 'bg-green-900/20' : track.locked ? 'bg-[#f59e0b08]' : 'hover:bg-[#12121a]'} ${isDragOver ? 'border-t-2 border-t-[#7c3aed]' : ''}`}
+        className={`border-b border-[#1e1e2e] group ${isSelected ? 'bg-[#7c3aed]/10' : swapFlash ? 'bg-green-900/20' : track.locked ? 'bg-[#f59e0b08]' : 'hover:bg-[#12121a]'} ${isDragOver ? 'border-t-2 border-t-[#7c3aed]' : ''}`}
         style={rowStyle}
         data-fit={fitInfo && fitInfo.level !== 'good' ? fitInfo.level : undefined}
         draggable={!editing}
@@ -242,6 +244,12 @@ async function handleReanalyze() {
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
+        {onSelect && (
+          <td className="pl-3 pr-1 w-6" onClick={e => { e.stopPropagation(); onSelect(); }}>
+            <input type="checkbox" checked={!!isSelected} onChange={onSelect} onClick={e => e.stopPropagation()}
+              className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer" />
+          </td>
+        )}
         {/* # */}
         <td className="py-3 pl-4 pr-2 w-10">
           <div className="relative w-5 h-4 flex items-center justify-center">

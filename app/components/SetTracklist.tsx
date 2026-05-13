@@ -117,6 +117,7 @@ interface Props {
   onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => void;
   onExport?: () => void;
   onExportSpotify?: () => void;
+  onBulkReanalyze?: (indices: number[], bpmHint?: { min: number; max: number }) => Promise<void>;
 }
 
 function totalDurationMinutes(tracks: SetTrack[]): number {
@@ -126,12 +127,17 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, onBulkReanalyze }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadVisibleColumns);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const [bulkBpmOpen, setBulkBpmOpen] = useState(false);
+  const [bulkBpmMin, setBulkBpmMin] = useState('');
+  const [bulkBpmMax, setBulkBpmMax] = useState('');
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
   const columnsDropdownRef = useRef<HTMLDivElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -332,12 +338,59 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
         </div>
       </div>
 
+      {/* Bulk selection toolbar */}
+      {selectedIndices.size > 0 && onBulkReanalyze && (
+        <div className="flex flex-col gap-2 px-3 py-2 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/30 mb-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-[#a78bfa]">{selectedIndices.size} track{selectedIndices.size > 1 ? 's' : ''} selected</span>
+            <button type="button" disabled={!!bulkProgress}
+              onClick={async () => { setBulkProgress({ done: 0, total: selectedIndices.size }); await onBulkReanalyze([...selectedIndices], undefined); setBulkProgress(null); setSelectedIndices(new Set()); }}
+              className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151] transition-colors cursor-pointer disabled:opacity-50">
+              {bulkProgress ? `Re-analyzing ${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
+            </button>
+            <button type="button" onClick={() => setBulkBpmOpen(o => !o)}
+              className={`text-xs px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${bulkBpmOpen ? 'border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10' : 'border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151]'}`}>
+              Re-analyze BPM range…
+            </button>
+            <button type="button" onClick={() => { setSelectedIndices(new Set()); setBulkBpmOpen(false); }} className="ml-auto text-[10px] text-[#6b7280] hover:text-[#94a3b8] cursor-pointer">Clear</button>
+          </div>
+          {bulkBpmOpen && (
+            <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-[#7c3aed]/20">
+              <span className="text-[10px] text-[#64748b]">BPM range</span>
+              <input type="number" placeholder="Min" value={bulkBpmMin} onChange={e => setBulkBpmMin(e.target.value)}
+                className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
+              <span className="text-[#4b5568] text-xs">–</span>
+              <input type="number" placeholder="Max" value={bulkBpmMax} onChange={e => setBulkBpmMax(e.target.value)}
+                className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
+              <button type="button" disabled={!!bulkProgress}
+                onClick={async () => {
+                  const min = parseFloat(bulkBpmMin), max = parseFloat(bulkBpmMax);
+                  if (isNaN(min) || isNaN(max) || min >= max) return;
+                  setBulkProgress({ done: 0, total: selectedIndices.size });
+                  await onBulkReanalyze([...selectedIndices], { min, max });
+                  setBulkProgress(null); setSelectedIndices(new Set()); setBulkBpmOpen(false);
+                }}
+                className="px-2.5 py-1 text-[10px] rounded border border-[#7c3aed] text-[#a78bfa] hover:bg-[#7c3aed]/10 transition-colors cursor-pointer disabled:opacity-50">
+                {bulkProgress ? `${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div className="rounded-lg border border-[#1e1e2e] overflow-hidden" ref={tableContainerRef}>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-[#0d0d14] border-b border-[#1e1e2e]">
+                {onBulkReanalyze && (
+                  <th className="py-2 pl-3 pr-1 w-6">
+                    <input type="checkbox" className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer"
+                      checked={selectedIndices.size === tracks.length && tracks.length > 0}
+                      onChange={e => setSelectedIndices(e.target.checked ? new Set(tracks.map((_, i) => i)) : new Set())} />
+                  </th>
+                )}
                 <th className="py-2 pl-4 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">#</th>
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Track</th>
                 {visibleColumns.has('time') && (
@@ -383,6 +436,8 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                     key={track.file}
                     track={track}
                     index={idx}
+                    isSelected={selectedIndices.has(idx)}
+                    onSelect={onBulkReanalyze ? () => setSelectedIndices(prev => { const n = new Set(prev); if (n.has(idx)) n.delete(idx); else n.add(idx); return n; }) : undefined}
                     fitInfo={computeFit(track, energyCheckThreshold)}
                     transition={transition}
                     visibleColumns={visibleColumns}

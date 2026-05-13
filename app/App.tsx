@@ -2535,6 +2535,19 @@ function AppInner() {
                         }
                       : undefined
                   }
+                  onBulkReanalyze={async (indices, bpmHint) => {
+                    for (let n = 0; n < indices.length; n++) {
+                      const t = generatedSet[indices[n]];
+                      if (!t) continue;
+                      try {
+                        const body: Record<string, unknown> = { filePath: t.file };
+                        if (bpmHint) { body.bpmMin = bpmHint.min; body.bpmMax = bpmHint.max; }
+                        const res = await apiFetch('/api/reanalyze-track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                        const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
+                        if (d.ok) handleUpdateTrack(indices[n], { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
+                      } catch { /* ignore */ }
+                    }
+                  }}
                 />
 
                 {generatedSet.length > 0 && (

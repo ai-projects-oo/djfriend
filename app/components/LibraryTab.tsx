@@ -167,6 +167,10 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   const [deleting, setDeleting]         = useState(false);
   const [dupSelections, setDupSelections] = useState<Record<string, Set<string>>>({});
   const [selected, setSelected]         = useState<Set<string>>(new Set());
+  const [bulkBpmOpen, setBulkBpmOpen]   = useState(false);
+  const [bulkBpmMin, setBulkBpmMin]     = useState('');
+  const [bulkBpmMax, setBulkBpmMax]     = useState('');
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [infoSong, setInfoSong]         = useState<Song | null>(null);
   const [contextMenu, setContextMenu]   = useState<ContextMenu | null>(null);
   const [nowPlaying, setNowPlaying]     = useState<Song | null>(null);
@@ -386,17 +390,85 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
       {/* Selection toolbar */}
       {selected.size > 0 && (
-        <div className="flex-shrink-0 mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/30 flex-wrap">
-          <span className="text-xs font-semibold text-[#a78bfa]">{selected.size} track{selected.size > 1 ? "s" : ""} selected</span>
-          {onSendToGenerator && (
-            <button type="button" onClick={() => { onSendToGenerator([...selected]); setSelected(new Set()); }} className="text-xs px-2.5 py-1 rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] transition-colors cursor-pointer">
-              Use in Set Generator
+        <div className="flex-shrink-0 mx-4 mt-2 flex flex-col gap-2 px-3 py-2 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/30">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-[#a78bfa]">{selected.size} track{selected.size > 1 ? "s" : ""} selected</span>
+            {onSendToGenerator && (
+              <button type="button" onClick={() => { onSendToGenerator([...selected]); setSelected(new Set()); }} className="text-xs px-2.5 py-1 rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] transition-colors cursor-pointer">
+                Use in Set Generator
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={!!bulkProgress}
+              onClick={async () => {
+                if (bulkBpmOpen) { setBulkBpmOpen(false); return; }
+                // Re-analyze without BPM range
+                const files = [...selected];
+                setBulkProgress({ done: 0, total: files.length });
+                for (let i = 0; i < files.length; i++) {
+                  const song = library.find(s => s.file === files[i]);
+                  if (!song) { setBulkProgress({ done: i + 1, total: files.length }); continue; }
+                  try {
+                    const res = await apiFetch('/api/reanalyze-track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: song.filePath ?? song.file }) });
+                    const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
+                    if (d.ok && d.bpm != null && d.key != null && d.camelot != null && d.energy != null) onReanalyzed?.(song.file, { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
+                  } catch { /* ignore */ }
+                  setBulkProgress({ done: i + 1, total: files.length });
+                }
+                setBulkProgress(null);
+              }}
+              className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {bulkProgress ? `Re-analyzing ${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
             </button>
+            <button
+              type="button"
+              onClick={() => setBulkBpmOpen(o => !o)}
+              className={`text-xs px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${bulkBpmOpen ? 'border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10' : 'border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151]'}`}
+            >
+              Re-analyze BPM range…
+            </button>
+            <button type="button" onClick={handleExportSelectedM3U} className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151] transition-colors cursor-pointer">
+              Export M3U
+            </button>
+            <button type="button" onClick={() => { setSelected(new Set()); setBulkBpmOpen(false); }} className="ml-auto text-[10px] text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Clear</button>
+          </div>
+          {bulkBpmOpen && (
+            <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-[#7c3aed]/20">
+              <span className="text-[10px] text-[#64748b]">BPM range</span>
+              <input type="number" placeholder="Min" value={bulkBpmMin} onChange={e => setBulkBpmMin(e.target.value)}
+                className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
+              <span className="text-[#4b5568] text-xs">–</span>
+              <input type="number" placeholder="Max" value={bulkBpmMax} onChange={e => setBulkBpmMax(e.target.value)}
+                className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
+              <button
+                type="button"
+                disabled={!!bulkProgress}
+                onClick={async () => {
+                  const min = parseFloat(bulkBpmMin), max = parseFloat(bulkBpmMax);
+                  if (isNaN(min) || isNaN(max) || min >= max) return;
+                  const files = [...selected];
+                  setBulkProgress({ done: 0, total: files.length });
+                  for (let i = 0; i < files.length; i++) {
+                    const song = library.find(s => s.file === files[i]);
+                    if (!song) { setBulkProgress({ done: i + 1, total: files.length }); continue; }
+                    try {
+                      const res = await apiFetch('/api/reanalyze-track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: song.filePath ?? song.file, bpmMin: min, bpmMax: max }) });
+                      const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
+                      if (d.ok && d.bpm != null && d.key != null && d.camelot != null && d.energy != null) onReanalyzed?.(song.file, { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
+                    } catch { /* ignore */ }
+                    setBulkProgress({ done: i + 1, total: files.length });
+                  }
+                  setBulkProgress(null);
+                  setBulkBpmOpen(false);
+                }}
+                className="px-2.5 py-1 text-[10px] rounded border border-[#7c3aed] text-[#a78bfa] hover:bg-[#7c3aed]/10 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {bulkProgress ? `${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
+              </button>
+            </div>
           )}
-          <button type="button" onClick={handleExportSelectedM3U} className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151] transition-colors cursor-pointer">
-            Export M3U
-          </button>
-          <button type="button" onClick={() => setSelected(new Set())} className="ml-auto text-[10px] text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Clear</button>
         </div>
       )}
 

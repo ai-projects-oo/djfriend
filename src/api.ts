@@ -591,6 +591,7 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
         artist: t.artist,
         title: t.title,
         ...(t.duration != null ? { duration: t.duration } : {}),
+        ...(t.dateAdded != null ? { dateAdded: t.dateAdded } : {}),
         localGenres: t.localGenres,
       })
     }

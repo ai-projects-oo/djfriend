@@ -190,7 +190,9 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     const cache = candidateCacheRef.current;
 
     // Cache key — rebuild when anything that affects generation changes
-    const key = `${library.length}|${JSON.stringify(prefs)}|${JSON.stringify(curve)}|${effectiveWeights ? JSON.stringify(effectiveWeights) : ''}`;
+    // libChecksum catches BPM/energy/key edits without expensive deep comparison
+    const libChecksum = library.reduce((sum, s) => sum + (s.bpm ?? 0) + (s.energy ?? 0), 0);
+    const key = `${library.length},${libChecksum}|${JSON.stringify(prefs)}|${JSON.stringify(curve)}|${effectiveWeights ? JSON.stringify(effectiveWeights) : ''}`;
 
     if (key !== cache.key || cache.idx >= cache.list.length) {
       // Use escalating variation so passes naturally diverge:

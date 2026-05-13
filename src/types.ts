@@ -5,6 +5,7 @@ export interface ScannedTrack {
   title: string;
   duration: number | null; // seconds
   localGenres: string[];   // genres from ID3 tags (empty if not tagged)
+  dateAdded?: number;      // Unix timestamp (seconds) from file birthtime
 }
 
 export interface SpotifyMatch {

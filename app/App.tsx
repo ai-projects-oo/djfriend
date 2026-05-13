@@ -337,8 +337,8 @@ function AppInner() {
     onNewAnalysis: () => onNewAnalysisRef.current?.(),
   });
 
-  // Playlist filter — which import entry restricts the generator pool
-  const [playlistFilterId, setPlaylistFilterId] = useState<string | null>(null);
+  // Playlist filter — which import entries restrict the generator pool (multi-select)
+  const [playlistFilterIds, setPlaylistFilterIds] = useState<string[]>([]);
   // Selection from Library tab — set when user taps "Use in Set Generator"
   const [librarySelection, setLibrarySelection] = useState<Set<string> | null>(null);
   // Controls visibility of the playlist picker select element in the Source card
@@ -435,42 +435,44 @@ function AppInner() {
     return files.size > 0 ? files : undefined;
   }, [djVinylDecks, discogsCollection, cratesRejected, cratesManualData, library]);
 
-  // Derive the file set for the active playlist filter
-  // playlistFilterId can be a Spotify import entry ID, "apple:<playlistName>", or "__selection__"
+  // Derive the file set for the active playlist filter (union across all selected IDs)
+  // IDs can be a Spotify import entry ID, "apple:<playlistName>", or "__selection__"
   const playlistFilterFiles = useMemo<Set<string> | undefined>(() => {
-    if (!playlistFilterId) return undefined;
-    // Library tab selection
-    if (playlistFilterId === "__selection__") return librarySelection ?? undefined;
-    // Apple Music playlist
-    if (playlistFilterId.startsWith("apple:")) {
-      const name = playlistFilterId.slice(6);
-      const files = applePlaylistFiles[name];
-      if (!files || files.length === 0) return undefined;
-      const fileSet = new Set(files);
-      // Match by full path (Apple Music library) OR filePath (Rekordbox library uses filePath, file=basename)
-      const inLib = library.filter(s => fileSet.has(s.file) || fileSet.has(s.filePath ?? ''));
-      return inLib.length > 0 ? new Set(inLib.map(s => s.file)) : undefined;
+    if (playlistFilterIds.length === 0) return undefined;
+    const combined = new Set<string>();
+    for (const id of playlistFilterIds) {
+      if (id === "__selection__") {
+        if (librarySelection) librarySelection.forEach(f => combined.add(f));
+        continue;
+      }
+      if (id.startsWith("apple:")) {
+        const name = id.slice(6);
+        const files = applePlaylistFiles[name];
+        if (files && files.length > 0) {
+          const fileSet = new Set(files);
+          library.filter(s => fileSet.has(s.file) || fileSet.has(s.filePath ?? '')).forEach(s => combined.add(s.file));
+        }
+        continue;
+      }
+      const entry = importHistory.find((e) => e.id === id);
+      if (entry) findSongsForImport(entry.tracks, library).forEach(s => combined.add(s.file));
     }
-    // Spotify import entry
-    const entry = importHistory.find((e) => e.id === playlistFilterId);
-    if (!entry) return undefined;
-    const songs = findSongsForImport(entry.tracks, library);
-    return songs.length > 0 ? new Set(songs.map((s) => s.file)) : undefined;
-  }, [playlistFilterId, importHistory, library, applePlaylistFiles, librarySelection]);
+    return combined.size > 0 ? combined : undefined;
+  }, [playlistFilterIds, importHistory, library, applePlaylistFiles, librarySelection]);
 
   const playlistTotalMinutes = useMemo<number>(() => {
-    if (!playlistFilterId || !playlistFilterFiles) return 0;
+    if (playlistFilterIds.length === 0 || !playlistFilterFiles) return 0;
     const songs = library.filter(s => playlistFilterFiles.has(s.file));
     return songs.reduce((s, t) => s + (t.duration ?? 210), 0) / 60;
-  }, [playlistFilterId, playlistFilterFiles, library]);
+  }, [playlistFilterIds, playlistFilterFiles, library]);
 
   // Moved outside to avoid lint dep warning — it's a constant
 
   // The only pill enabled in playlist mode: smallest duration that fits the playlist
   const minViablePill = useMemo<number | null>(() => {
-    if (!playlistFilterId || playlistTotalMinutes <= 0) return null;
+    if (playlistFilterIds.length === 0 || playlistTotalMinutes <= 0) return null;
     return SET_DURATIONS.find((d) => d >= playlistTotalMinutes) ?? 180;
-  }, [playlistFilterId, playlistTotalMinutes]);
+  }, [playlistFilterIds, playlistTotalMinutes]);
 
   // Discogs pool intersection — "crates" mode hard-filters the pool
   const discogsCrateFiles = useMemo<Set<string> | undefined>(() => {
@@ -642,10 +644,10 @@ function AppInner() {
       const songs = findSongsForImport(entry.tracks, library);
       if (songs.length === 0) return;
       handleLoadToSet(songs);
-      setPlaylistFilterId(entry.id);
+      setPlaylistFilterIds([entry.id]);
       setActiveTab("Set Generator");
     },
-    [library, handleLoadToSet, setPlaylistFilterId],
+    [library, handleLoadToSet, setPlaylistFilterIds],
   );
 
   const loadSettings = useCallback(() => {
@@ -1392,14 +1394,14 @@ function AppInner() {
                       <button
                         type="button"
                         onClick={() => {
-                          setPlaylistFilterId(null);
+                          setPlaylistFilterIds([]);
                           setSourceDropdownOpen(false);
                         }}
                         className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
                         style={{
-                          backgroundColor: !playlistFilterId ? "#7c3aed" : "transparent",
-                          color: !playlistFilterId ? "#fff" : "#64748b",
-                          borderColor: !playlistFilterId ? "#7c3aed" : "#2a2a3a",
+                          backgroundColor: playlistFilterIds.length === 0 ? "#7c3aed" : "transparent",
+                          color: playlistFilterIds.length === 0 ? "#fff" : "#64748b",
+                          borderColor: playlistFilterIds.length === 0 ? "#7c3aed" : "#2a2a3a",
                         }}
                       >
                         Full Library
@@ -1410,28 +1412,21 @@ function AppInner() {
                           onClick={() => setSourceDropdownOpen((v) => !v)}
                           className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border truncate max-w-[200px] flex items-center gap-1"
                           style={{
-                            backgroundColor: playlistFilterId ? "#7c3aed" : "transparent",
-                            color: playlistFilterId ? "#fff" : "#64748b",
-                            borderColor: playlistFilterId ? "#7c3aed" : "#2a2a3a",
+                            backgroundColor: playlistFilterIds.length > 0 ? "#7c3aed" : "transparent",
+                            color: playlistFilterIds.length > 0 ? "#fff" : "#64748b",
+                            borderColor: playlistFilterIds.length > 0 ? "#7c3aed" : "#2a2a3a",
                           }}
-                          title={
-                            playlistFilterId
-                              ? (playlistFilterId === "__selection__"
-                                  ? `Library Selection (${librarySelection?.size ?? 0})`
-                                  : playlistFilterId.startsWith("apple:")
-                                  ? playlistFilterId.slice(6)
-                                  : importHistory.find((e) => e.id === playlistFilterId)?.name ?? "Playlist")
-                              : "Generate from a playlist"
-                          }
                         >
                           <span className="truncate max-w-[160px]">
-                            {playlistFilterId
-                              ? (playlistFilterId === "__selection__"
+                            {playlistFilterIds.length === 0
+                              ? "From Playlist"
+                              : playlistFilterIds.length === 1
+                              ? (playlistFilterIds[0] === "__selection__"
                                   ? `Selection (${librarySelection?.size ?? 0})`
-                                  : playlistFilterId.startsWith("apple:")
-                                  ? playlistFilterId.slice(6)
-                                  : importHistory.find((e) => e.id === playlistFilterId)?.name ?? "Playlist")
-                              : "From Playlist"}
+                                  : playlistFilterIds[0].startsWith("apple:")
+                                  ? playlistFilterIds[0].slice(6)
+                                  : importHistory.find((e) => e.id === playlistFilterIds[0])?.name ?? "Playlist")
+                              : `${playlistFilterIds.length} playlists`}
                           </span>
                           <svg className="w-3 h-3 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -1442,39 +1437,45 @@ function AppInner() {
                             <button
                               type="button"
                               className="w-full text-left px-3 py-2 text-xs text-[#64748b] hover:bg-[#1e1e2e] transition-colors cursor-pointer"
-                              onClick={() => { setPlaylistFilterId(null); setSourceDropdownOpen(false); }}
+                              onClick={() => { setPlaylistFilterIds([]); setSourceDropdownOpen(false); }}
                             >
                               — Full Library (no filter) —
                             </button>
                             {Object.entries(applePlaylistFiles).map(([name, files]) => {
                               const id = `apple:${name}`;
                               const inLib = files.filter(f => library.some(s => s.file === f || s.filePath === f)).length;
-                              const isSelected = playlistFilterId === id;
+                              const isSelected = playlistFilterIds.includes(id);
                               return (
                                 <button
                                   key={id}
                                   type="button"
-                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center gap-2 cursor-pointer"
                                   style={{ color: isSelected ? "#a78bfa" : "#e2e8f0", backgroundColor: isSelected ? "#1e1a2e" : undefined }}
-                                  onClick={() => { setPlaylistFilterId(id); setSourceDropdownOpen(false); }}
+                                  onClick={() => setPlaylistFilterIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
                                 >
-                                  <span className="truncate">{name}</span>
+                                  <span className={`w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center ${isSelected ? "bg-[#7c3aed] border-[#7c3aed]" : "border-[#3a3a4a]"}`}>
+                                    {isSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                                  </span>
+                                  <span className="truncate flex-1">{name}</span>
                                   <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">{inLib} tracks</span>
                                 </button>
                               );
                             })}
                             {importHistory.map((entry) => {
                               const inLib = entry.tracks.filter((t) => t.inLibrary).length;
-                              const isSelected = playlistFilterId === entry.id;
+                              const isSelected = playlistFilterIds.includes(entry.id);
                               return (
                                 <button
                                   key={entry.id}
                                   type="button"
-                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center gap-2 cursor-pointer"
                                   style={{ color: isSelected ? "#a78bfa" : "#e2e8f0", backgroundColor: isSelected ? "#1e1a2e" : undefined }}
-                                  onClick={() => { setPlaylistFilterId(entry.id); setSourceDropdownOpen(false); }}
+                                  onClick={() => setPlaylistFilterIds(prev => prev.includes(entry.id) ? prev.filter(x => x !== entry.id) : [...prev, entry.id])}
                                 >
-                                  <span className="truncate">{entry.name}</span>
+                                  <span className={`w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center ${isSelected ? "bg-[#7c3aed] border-[#7c3aed]" : "border-[#3a3a4a]"}`}>
+                                    {isSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                                  </span>
+                                  <span className="truncate flex-1">{entry.name}</span>
                                   <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">{inLib}/{entry.tracks.length}</span>
                                 </button>
                               );
@@ -1484,7 +1485,7 @@ function AppInner() {
                       </div>
                     </div>
                   </div>
-                  {playlistFilterId && playlistFilterFiles && (
+                  {playlistFilterIds.length > 0 && playlistFilterFiles && (
                     <p className="text-[11px] text-[#64748b]">
                       <span className="text-[#94a3b8] font-medium">{playlistFilterFiles.size}</span> tracks in playlist
                     </p>
@@ -1731,8 +1732,8 @@ function AppInner() {
                     <button
                       type="button"
                       onClick={() => setPrefs((p) => ({ ...p, setDuration: null }))}
-                      disabled={minViablePill !== null && !playlistFilterId}
-                      title={playlistFilterId ? "Include all tracks from this playlist" : undefined}
+                      disabled={minViablePill !== null && playlistFilterIds.length === 0}
+                      title={playlistFilterIds.length > 0 ? "Include all tracks from selected playlists" : undefined}
                       className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border disabled:opacity-30 disabled:cursor-not-allowed"
                       style={{
                         backgroundColor: prefs.setDuration === null ? "#7c3aed" : "transparent",
@@ -1740,7 +1741,7 @@ function AppInner() {
                         borderColor: prefs.setDuration === null ? "#7c3aed" : "#2a2a3a",
                       }}
                     >
-                      {playlistFilterId ? "Max" : "Any"}
+                      {playlistFilterIds.length > 0 ? "Max" : "Any"}
                     </button>
                     {SET_DURATIONS.map((min) => {
                       const active = prefs.setDuration === min;
@@ -2323,8 +2324,8 @@ function AppInner() {
                         }}
                         disabled={
                           isInitializing || library.length === 0 || isGenerating ||
-                          (prefs.genres.length === 0 && !playlistFilterId) ||
-                          (!!playlistFilterId && playlistFilterFiles === undefined)
+                          (prefs.genres.length === 0 && playlistFilterIds.length === 0) ||
+                          (playlistFilterIds.length > 0 && playlistFilterFiles === undefined)
                         }
                         aria-label="Generate set"
                         className="w-full flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg cursor-pointer transition-all duration-200"
@@ -2350,12 +2351,12 @@ function AppInner() {
                           </>
                         )}
                       </button>
-                      {prefs.genres.length === 0 && !playlistFilterId && tipConfig.help && (
+                      {prefs.genres.length === 0 && playlistFilterIds.length === 0 && tipConfig.help && (
                         <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
                           Pick a genre first to generate a set
                         </div>
                       )}
-                      {!!playlistFilterId && playlistFilterFiles === undefined && (
+                      {playlistFilterIds.length > 0 && playlistFilterFiles === undefined && (
                         <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
                           None of these playlist tracks are in your library
                         </div>
@@ -2365,7 +2366,7 @@ function AppInner() {
                       <div className="relative group">
                         <button
                           onClick={handleAppendTracks}
-                          disabled={isInitializing || library.length === 0 || !canAppendTracks || (prefs.genres.length === 0 && !playlistFilterId) || (!!playlistFilterId && playlistFilterFiles === undefined)}
+                          disabled={isInitializing || library.length === 0 || !canAppendTracks || (prefs.genres.length === 0 && playlistFilterIds.length === 0) || (playlistFilterIds.length > 0 && playlistFilterFiles === undefined)}
                           className="w-full flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#a78bfa] text-sm font-medium py-2 rounded-md transition-colors cursor-pointer"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -2606,7 +2607,7 @@ function AppInner() {
             }}
             onSendToGenerator={(files) => {
               setLibrarySelection(new Set(files));
-              setPlaylistFilterId("__selection__");
+              setPlaylistFilterIds(["__selection__"]);
               setActiveTab("Set Generator");
             }}
           />
@@ -3852,7 +3853,7 @@ function AppInner() {
           setLibrary([]);
           setGeneratedSet([]);
           setImportHistory([]);
-          setPlaylistFilterId(null);
+          setPlaylistFilterIds([]);
           setHistory([]);
           localStorage.removeItem("djfriend-history");
           apiFetch('/api/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '[]' }).catch(() => {});

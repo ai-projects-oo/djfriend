@@ -36,7 +36,9 @@ export async function scanFolder(folderPath: string): Promise<ScannedTrack[]> {
       title = parsed.title;
     }
 
-    tracks.push({ file, filePath, artist, title, duration, localGenres });
+    const stat = fs.statSync(filePath);
+    const dateAdded = Math.floor((stat.birthtimeMs || stat.mtimeMs) / 1000);
+    tracks.push({ file, filePath, artist, title, duration, localGenres, dateAdded });
   }
 
   return tracks;

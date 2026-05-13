@@ -4,6 +4,16 @@ import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
 import { downloadRekordboxXml } from '../lib/rekordboxExport';
 import { SpotifyIcon, RekordboxIcon, M3UIcon, CopyIcon } from './Icons';
+import { parseCamelot } from '../lib/camelot';
+
+const CAMELOT_TO_KEY: Record<string, string> = {
+  '1a': 'Ab minor', '1b': 'B major', '2a': 'Eb minor', '2b': 'F# major',
+  '3a': 'Bb minor', '3b': 'Db major', '4a': 'F minor', '4b': 'Ab major',
+  '5a': 'C minor', '5b': 'Eb major', '6a': 'G minor', '6b': 'Bb major',
+  '7a': 'D minor', '7b': 'F major', '8a': 'A minor', '8b': 'C major',
+  '9a': 'E minor', '9b': 'G major', '10a': 'B minor', '10b': 'D major',
+  '11a': 'F# minor', '11b': 'A major', '12a': 'C# minor', '12b': 'E major',
+};
 
 export type FitLevel = 'good' | 'warn' | 'bad';
 
@@ -121,6 +131,11 @@ interface Props {
   onBulkPatchBpm?: (indices: number[], multiplier: 2 | 0.5) => Promise<void>;
 }
 
+async function apiFetch(url: string, options?: RequestInit) {
+  const res = await fetch(url, options);
+  return res.json();
+}
+
 function totalDurationMinutes(tracks: SetTrack[]): number {
   const totalSecs = tracks.reduce((s, t) => s + (t.duration ?? 0), 0);
   return Math.round(totalSecs / 60);
@@ -128,20 +143,76 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, onBulkReanalyze, onBulkPatchBpm }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadVisibleColumns);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
-  const [bulkBpmOpen, setBulkBpmOpen] = useState(false);
-  const [bulkBpmMin, setBulkBpmMin] = useState('');
-  const [bulkBpmMax, setBulkBpmMax] = useState('');
-  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  // Global edit mode
+  const [globalEditMode, setGlobalEditMode] = useState(false);
+  const [editArtist, setEditArtist] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [editGenre, setEditGenre] = useState('');
+  const [editBpm, setEditBpm] = useState('');
+  const [editCamelot, setEditCamelot] = useState('');
+  const [editYear, setEditYear] = useState('');
+  const [editComment, setEditComment] = useState('');
+  const [saving, setSaving] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
   const columnsDropdownRef = useRef<HTMLDivElement>(null);
+  const actionsDropdownRef = useRef<HTMLDivElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  function openGlobalEdit() {
+    setSelectedIndices(new Set(tracks.map((_, i) => i)));
+    setEditArtist(''); setEditTitle(''); setEditGenre('');
+    setEditBpm(''); setEditCamelot(''); setEditYear(''); setEditComment('');
+    setGlobalEditMode(true);
+    setActionsOpen(false);
+  }
+
+  function closeGlobalEdit() {
+    setGlobalEditMode(false);
+    setSelectedIndices(new Set());
+  }
+
+  async function saveGlobalEdit() {
+    if (selectedIndices.size === 0) { closeGlobalEdit(); return; }
+    setSaving(true);
+    const bpmVal = parseFloat(editBpm);
+    const yearVal = parseInt(editYear, 10);
+    const normalizedCamelot = editCamelot.trim().toUpperCase();
+    const parsedCamelot = normalizedCamelot ? parseCamelot(normalizedCamelot) : null;
+
+    for (const idx of selectedIndices) {
+      const track = tracks[idx];
+      if (!track) continue;
+      const patch: Record<string, unknown> = {};
+      if (editTitle.trim()) patch.title = editTitle.trim();
+      if (editArtist.trim()) patch.artist = editArtist.trim();
+      if (editGenre.trim()) patch.genres = editGenre.split(',').map(g => g.trim()).filter(Boolean);
+      if (!isNaN(bpmVal) && bpmVal > 0) patch.bpm = bpmVal;
+      if (normalizedCamelot && parsedCamelot) { patch.camelot = normalizedCamelot; patch.key = CAMELOT_TO_KEY[normalizedCamelot.toLowerCase()] ?? ''; }
+      if (!isNaN(yearVal) && yearVal > 0) patch.year = yearVal;
+      if (editComment.trim()) patch.comment = editComment.trim();
+      if (Object.keys(patch).length === 0) continue;
+      try {
+        await apiFetch('/api/track-meta', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: track.file, patch }) });
+        onUpdateTrack(idx, {
+          ...(patch.title ? { title: patch.title as string } : {}),
+          ...(patch.artist ? { artist: patch.artist as string } : {}),
+          ...(patch.genres ? { genre: (patch.genres as string[]).join(', ') } : {}),
+          ...(patch.bpm ? { bpm: patch.bpm as number } : {}),
+          ...(patch.camelot ? { camelot: patch.camelot as string, key: patch.key as string } : {}),
+        });
+      } catch { /* ignore individual failures */ }
+    }
+    setSaving(false);
+    closeGlobalEdit();
+  }
 
   function toggleColumn(key: ColumnKey) {
     setVisibleColumns(prev => {
@@ -176,6 +247,18 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
     return () => document.removeEventListener('mousedown', handleClick);
   }, [columnsOpen]);
 
+  // Close actions dropdown on outside click
+  useEffect(() => {
+    if (!actionsOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (actionsDropdownRef.current && !actionsDropdownRef.current.contains(e.target as Node)) {
+        setActionsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [actionsOpen]);
+
   if (tracks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
@@ -198,7 +281,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
   ).length;
 
   // Total column count for colSpan calculations
-  const totalCols = 7 + visibleColumns.size; // 7 mandatory (#, Track, BPM, Key, Energy, Transition, Actions) + optional
+  const totalCols = 7 + visibleColumns.size + (globalEditMode ? 1 : 0);
 
   function scrollToFirstBadFit() {
     const el = tableContainerRef.current?.querySelector('[data-fit="bad"]');
@@ -281,6 +364,28 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
             )}
           </div>
 
+          {/* Three-dots actions menu */}
+          <div className="relative" ref={actionsDropdownRef}>
+            <button
+              onClick={() => setActionsOpen((o) => !o)}
+              className={`flex items-center justify-center w-8 h-8 rounded-md border transition-colors cursor-pointer ${actionsOpen || globalEditMode ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'bg-[#12121a] border-[#2a2a3a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
+              title="More actions"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            </button>
+            {actionsOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden py-1">
+                <button
+                  onClick={openGlobalEdit}
+                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Export */}
           <div className="relative" ref={exportDropdownRef}>
             <button
@@ -339,50 +444,75 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
         </div>
       </div>
 
-      {/* Bulk selection toolbar */}
-      {selectedIndices.size > 0 && onBulkReanalyze && (
-        <div className="flex flex-col gap-2 px-3 py-2 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/30 mb-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-[#a78bfa]">{selectedIndices.size} track{selectedIndices.size > 1 ? 's' : ''} selected</span>
-            <button type="button" disabled={!!bulkProgress}
-              onClick={async () => { setBulkProgress({ done: 0, total: selectedIndices.size }); await onBulkReanalyze([...selectedIndices], undefined); setBulkProgress(null); setSelectedIndices(new Set()); }}
-              className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151] transition-colors cursor-pointer disabled:opacity-50">
-              {bulkProgress ? `Re-analyzing ${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
-            </button>
-            {onBulkPatchBpm && ([2, 0.5] as const).map(mult => (
-              <button key={mult} type="button" disabled={!!bulkProgress}
-                onClick={() => void onBulkPatchBpm([...selectedIndices], mult)}
-                className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#a78bfa] hover:border-[#7c3aed]/40 transition-colors cursor-pointer disabled:opacity-50 tabular-nums">
-                {mult === 2 ? '×2 BPM' : '÷2 BPM'}
-              </button>
-            ))}
-            <button type="button" onClick={() => setBulkBpmOpen(o => !o)}
-              className={`text-xs px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${bulkBpmOpen ? 'border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10' : 'border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151]'}`}>
-              Re-analyze BPM range…
-            </button>
-            <button type="button" onClick={() => { setSelectedIndices(new Set()); setBulkBpmOpen(false); }} className="ml-auto text-[10px] text-[#6b7280] hover:text-[#94a3b8] cursor-pointer">Clear</button>
+      {/* Global edit form */}
+      {globalEditMode && (
+        <div className="rounded-xl bg-[#0d0d14] border border-[#7c3aed]/40 px-4 py-3 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-[#a78bfa]">Edit selected tracks</span>
+              <span className="text-[10px] text-[#475569]">— leave fields empty to keep current values</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer"
+                checked={selectedIndices.size === tracks.length && tracks.length > 0}
+                onChange={e => setSelectedIndices(e.target.checked ? new Set(tracks.map((_, i) => i)) : new Set())}
+                title="Select all" />
+              <span className="text-[10px] text-[#64748b]">{selectedIndices.size}/{tracks.length}</span>
+            </div>
           </div>
-          {bulkBpmOpen && (
-            <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-[#7c3aed]/20">
-              <span className="text-[10px] text-[#64748b]">BPM range</span>
-              <input type="number" placeholder="Min" value={bulkBpmMin} onChange={e => setBulkBpmMin(e.target.value)}
-                className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
-              <span className="text-[#4b5568] text-xs">–</span>
-              <input type="number" placeholder="Max" value={bulkBpmMax} onChange={e => setBulkBpmMax(e.target.value)}
-                className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
-              <button type="button" disabled={!!bulkProgress}
-                onClick={async () => {
-                  const min = parseFloat(bulkBpmMin), max = parseFloat(bulkBpmMax);
-                  if (isNaN(min) || isNaN(max) || min >= max) return;
-                  setBulkProgress({ done: 0, total: selectedIndices.size });
-                  await onBulkReanalyze([...selectedIndices], { min, max });
-                  setBulkProgress(null); setSelectedIndices(new Set()); setBulkBpmOpen(false);
-                }}
-                className="px-2.5 py-1 text-[10px] rounded border border-[#7c3aed] text-[#a78bfa] hover:bg-[#7c3aed]/10 transition-colors cursor-pointer disabled:opacity-50">
-                {bulkProgress ? `${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1 min-w-[140px]">
+              <label className="text-[10px] text-[#475569] uppercase tracking-wider">Artist</label>
+              <input value={editArtist} onChange={e => setEditArtist(e.target.value)} placeholder="Keep current"
+                className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#2a2a3a]" />
+            </div>
+            <div className="flex flex-col gap-1 min-w-[140px]">
+              <label className="text-[10px] text-[#475569] uppercase tracking-wider">Title</label>
+              <input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Keep current"
+                className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#2a2a3a]" />
+            </div>
+            <div className="flex flex-col gap-1 min-w-[160px]">
+              <label className="text-[10px] text-[#475569] uppercase tracking-wider">Genre <span className="normal-case text-[#2a2a3a]">(comma-sep)</span></label>
+              <input value={editGenre} onChange={e => setEditGenre(e.target.value)} placeholder="e.g. house, deep house"
+                className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#2a2a3a]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-[#475569] uppercase tracking-wider">BPM</label>
+              <div className="flex items-center gap-1">
+                <input type="number" value={editBpm} onChange={e => setEditBpm(e.target.value)} placeholder="Keep"
+                  className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-16 placeholder:text-[#2a2a3a]" />
+                <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v * 2))); }}
+                  className="px-1.5 py-1 text-[10px] rounded border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">×2</button>
+                <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v / 2))); }}
+                  className="px-1.5 py-1 text-[10px] rounded border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">÷2</button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1 w-16">
+              <label className="text-[10px] text-[#475569] uppercase tracking-wider">Key</label>
+              <input value={editCamelot} onChange={e => setEditCamelot(e.target.value)} placeholder="e.g. 7A"
+                className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs font-mono text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#2a2a3a]" />
+            </div>
+            <div className="flex flex-col gap-1 w-16">
+              <label className="text-[10px] text-[#475569] uppercase tracking-wider">Year</label>
+              <input type="number" value={editYear} onChange={e => setEditYear(e.target.value)} placeholder="Keep"
+                className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#2a2a3a]" />
+            </div>
+            <div className="flex flex-col gap-1 min-w-[160px]">
+              <label className="text-[10px] text-[#475569] uppercase tracking-wider">Comment</label>
+              <input value={editComment} onChange={e => setEditComment(e.target.value)} placeholder="Keep current"
+                className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#2a2a3a]" />
+            </div>
+            <div className="flex items-end gap-2 pb-0.5">
+              <button onClick={() => void saveGlobalEdit()} disabled={saving || selectedIndices.size === 0}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#7c3aed] text-white text-xs font-medium hover:bg-[#6d28d9] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                {saving ? 'Saving…' : `Save ${selectedIndices.size > 0 ? `(${selectedIndices.size})` : ''}`}
+              </button>
+              <button onClick={closeGlobalEdit} disabled={saving}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-[#2a2a3a] text-[#94a3b8] text-xs hover:text-[#e2e8f0] hover:border-[#475569] disabled:opacity-50 transition-colors cursor-pointer">
+                Cancel
               </button>
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -392,7 +522,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-[#0d0d14] border-b border-[#1e1e2e]">
-                {onBulkReanalyze && (
+                {globalEditMode && (
                   <th className="py-2 pl-3 pr-1 w-6">
                     <input type="checkbox" className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer"
                       checked={selectedIndices.size === tracks.length && tracks.length > 0}
@@ -445,7 +575,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                     track={track}
                     index={idx}
                     isSelected={selectedIndices.has(idx)}
-                    onSelect={onBulkReanalyze ? () => setSelectedIndices(prev => { const n = new Set(prev); if (n.has(idx)) n.delete(idx); else n.add(idx); return n; }) : undefined}
+                    onSelect={globalEditMode ? () => setSelectedIndices(prev => { const n = new Set(prev); if (n.has(idx)) n.delete(idx); else n.add(idx); return n; }) : undefined}
                     fitInfo={computeFit(track, energyCheckThreshold)}
                     transition={transition}
                     visibleColumns={visibleColumns}

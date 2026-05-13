@@ -1539,9 +1539,10 @@ function AppInner() {
                       {discogsCrateFiles && discogsCrateFiles.size === 0 && (
                         <p className="text-[11px] text-[#ef4444]">No library tracks matched. Re-sync in Settings.</p>
                       )}
-                      {discogsCrateFiles && discogsCrateFiles.size > 0 && (
+                      {discogsCrateFiles && (
                         <p className="text-[11px] text-[#64748b]">
-                          <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> vinyl tracks
+                          <span className="text-[#94a3b8] font-medium">{discogsCollection.totalReleases}</span> vinyl
+                          {discogsCrateFiles.size > 0 && <> · <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> matched</>}
                         </p>
                       )}
                       <div className="flex items-center gap-2 ml-auto">
@@ -1564,9 +1565,9 @@ function AppInner() {
                       </div>
                     </div>
                   )}
-                  {discogsMode === 'crates-first' && discogsCrateFiles && (
+                  {discogsMode === 'crates-first' && (
                     <p className="text-[11px] text-[#64748b]">
-                      <span className="text-[#94a3b8] font-medium">{discogsCrateFiles.size}</span> vinyl
+                      <span className="text-[#94a3b8] font-medium">{discogsCollection.totalReleases}</span> vinyl
                       {' · '}
                       <span className="text-[#94a3b8] font-medium">{library.length}</span> digital
                     </p>

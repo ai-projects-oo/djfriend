@@ -1596,10 +1596,32 @@ function AppInner() {
                                     next[i] = k;
                                     handleSetDjSystem({ channels: next });
                                   }}
-                                  className="px-2.5 py-1 transition-colors cursor-pointer capitalize"
-                                  style={{ backgroundColor: active ? (k === 'vinyl' ? '#f59e0b22' : '#7c3aed') : 'transparent', color: active ? (k === 'vinyl' ? '#f59e0b' : '#fff') : '#64748b' }}
+                                  className="px-2.5 py-1.5 transition-colors cursor-pointer flex items-center justify-center"
+                                  style={{ backgroundColor: active ? (k === 'vinyl' ? '#f59e0b22' : '#7c3aed') : 'transparent' }}
+                                  title={k === 'digital' ? 'CDJ / Digital player' : 'Turntable / Vinyl'}
+                                  aria-label={k}
                                 >
-                                  {k}
+                                  {k === 'digital' ? (
+                                    /* CDJ screen icon */
+                                    <svg width="18" height="14" viewBox="0 0 18 14" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: active ? '#fff' : '#64748b' }}>
+                                      <rect x="1" y="1" width="16" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+                                      <rect x="3" y="3" width="12" height="6" rx="0.5" fill="currentColor" opacity="0.25"/>
+                                      <line x1="3" y1="3.8" x2="15" y2="3.8" stroke="currentColor" strokeWidth="0.8" opacity="0.6"/>
+                                      <path d="M5 5.5 Q9 4.5 13 5.5 Q9 6.5 5 5.5Z" fill="currentColor" opacity="0.7"/>
+                                      <line x1="6" y1="12" x2="12" y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                                      <line x1="9" y1="11" x2="9" y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                                    </svg>
+                                  ) : (
+                                    /* Turntable platter icon */
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: active ? '#f59e0b' : '#64748b' }}>
+                                      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.3"/>
+                                      <circle cx="8" cy="8" r="4.5" stroke="currentColor" strokeWidth="0.8" opacity="0.5"/>
+                                      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="0.8" opacity="0.4"/>
+                                      <circle cx="8" cy="8" r="0.9" fill="currentColor"/>
+                                      <line x1="12" y1="2" x2="14" y2="1" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.7"/>
+                                      <circle cx="14" cy="1" r="0.8" fill="currentColor" opacity="0.7"/>
+                                    </svg>
+                                  )}
                                 </button>
                               );
                             })}

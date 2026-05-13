@@ -110,6 +110,7 @@ export default function TrackRow({ track, index, fitInfo, transition, visibleCol
   const [menuOpen, setMenuOpen] = useState(false);
   const [reanalyzing, setReanalyzing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const bpmInputRef = useRef<HTMLInputElement>(null);
 
   const prevFileRef = useRef(track.file);
   useEffect(() => {
@@ -354,9 +355,15 @@ async function handleReanalyze() {
           </td>
         )}
 
-        {/* BPM */}
-        <td className="py-3 px-2 text-[#94a3b8] text-xs tabular-nums whitespace-nowrap text-right">
-          {track.bpm > 0 ? track.bpm.toFixed(0) : '—'}
+        {/* BPM — click to edit */}
+        <td className="py-3 px-2 text-xs tabular-nums whitespace-nowrap text-right">
+          <span
+            className="text-[#94a3b8] hover:text-[#a78bfa] hover:underline cursor-pointer transition-colors"
+            title="Click to edit BPM"
+            onClick={() => { if (!editing) openEdit(); setTimeout(() => bpmInputRef.current?.focus(), 50); }}
+          >
+            {track.bpm > 0 ? track.bpm.toFixed(0) : '—'}
+          </span>
         </td>
 
         {/* Camelot key */}
@@ -734,6 +741,7 @@ async function handleReanalyze() {
                 <label className="text-[10px] text-[#475569] uppercase tracking-wider">BPM</label>
                 <div className="flex items-center gap-1">
                   <input
+                    ref={bpmInputRef}
                     type="number"
                     value={editBpm}
                     onChange={e => setEditBpm(e.target.value)}

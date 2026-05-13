@@ -1769,7 +1769,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (!fs.existsSync(absolutePath)) { res.statusCode = 404; res.end(JSON.stringify({ error: 'File not found' })); return }
       if (!AUDIO_EXTENSIONS.has(path.extname(absolutePath).toLowerCase())) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Not an audio file' })); return }
 
-      const features = await analyzeAudio(absolutePath)
+      const bpmHint = (typeof body.bpmMin === 'number' && typeof body.bpmMax === 'number')
+        ? { min: body.bpmMin as number, max: body.bpmMax as number } : undefined
+      const features = await analyzeAudio(absolutePath, bpmHint)
       if (!features) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Audio analysis failed' })); return }
       const keyInfo = toCamelot(features.pitchClass, features.mode)
       if (!keyInfo) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Key detection failed' })); return }

@@ -1501,8 +1501,18 @@ function AppInner() {
                       const labels: Record<DiscogsMode, string> = { library: 'Library', 'crates-first': 'Mixed', crates: 'Vinyl' };
                       const titles: Record<DiscogsMode, string> = { library: 'Digital library only', 'crates-first': 'Vinyl + digital — vinyl scores higher', crates: 'Vinyl only' };
                       const active = discogsMode === mode;
+                      const isLibraryLoading = mode === 'library' && isInitializing;
                       const icon = mode === 'library' ? (
-                        <img src="/icons/cdj.png" style={{ height: 48, width: 'auto' }} alt="CDJ" />
+                        isInitializing ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none">
+                              <circle cx="12" cy="12" r="10" stroke="#2a2a3a" strokeWidth="3"/>
+                              <path d="M12 2a10 10 0 0 1 10 10" stroke="#7c3aed" strokeWidth="3" strokeLinecap="round"/>
+                            </svg>
+                          </div>
+                        ) : (
+                          <img src="/icons/cdj.png" style={{ height: 48, width: 'auto' }} alt="CDJ" />
+                        )
                       ) : mode === 'crates-first' ? (
                         <div className="flex items-center gap-1">
                           <img src="/icons/cdj.png" style={{ height: 36, width: 'auto' }} alt="CDJ" />
@@ -1524,14 +1534,19 @@ function AppInner() {
                           onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.3'; }}
                         >
                           <div className="flex-1 flex items-center justify-center">{icon}</div>
-                          <span className="text-[9px] font-medium pb-2" style={{ color: active ? '#e2e8f0' : '#64748b' }}>{labels[mode]}</span>
+                          <span className="text-[9px] font-medium pb-2" style={{ color: active ? '#e2e8f0' : '#64748b' }}>
+                            {isLibraryLoading ? 'Loading…' : labels[mode]}
+                          </span>
                         </button>
                       );
                     })}
                   </div>
                   {discogsMode === 'library' && (
                     <p className="text-[11px] text-[#64748b]">
-                      <span className="text-[#94a3b8] font-medium">{library.length}</span> tracks
+                      {isInitializing
+                        ? <span className="text-[#475569]">Loading library…</span>
+                        : <><span className="text-[#94a3b8] font-medium">{library.length}</span> tracks</>
+                      }
                     </p>
                   )}
                   {discogsMode === 'crates' && (

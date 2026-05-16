@@ -66,6 +66,16 @@ export function camelotHarmonyScore(from: string, to: string): number {
   }
 }
 
+const KEY_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B'];
+const CAMELOT_MAJOR = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B'];
+const CAMELOT_MINOR = ['5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A'];
+
+export const CAMELOT_TO_KEY: Record<string, string> = {};
+for (let i = 0; i < 12; i++) {
+  CAMELOT_TO_KEY[CAMELOT_MAJOR[i].toLowerCase()] = `${KEY_NAMES[i]} Major`;
+  CAMELOT_TO_KEY[CAMELOT_MINOR[i].toLowerCase()] = `${KEY_NAMES[i]} Minor`;
+}
+
 /** Only flag as a warning when there is zero harmonic relationship. */
 export function isHarmonicWarning(from: string, to: string): boolean {
   return getCamelotCompatibility(from, to) === 'incompatible';

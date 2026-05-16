@@ -79,12 +79,18 @@ const OPTIONAL_COLS: { key: OptionalCol; label: string; ai?: boolean }[] = [
 ];
 
 const LS_KEY = "djfriend:libraryColumns";
+const LS_FILTERS_KEY = "djfriend:libraryFilters";
 
 interface ColFilters {
   bpmMin: string; bpmMax: string; key: string;
   energyMin: number; energyMax: number; genre: string; missingOnly: boolean;
 }
 const DEFAULT_FILTERS: ColFilters = { bpmMin: "", bpmMax: "", key: "", energyMin: 0, energyMax: 100, genre: "", missingOnly: false };
+
+function loadFilters(): ColFilters {
+  try { const s = localStorage.getItem(LS_FILTERS_KEY); return s ? { ...DEFAULT_FILTERS, ...JSON.parse(s) as Partial<ColFilters> } : DEFAULT_FILTERS; }
+  catch { return DEFAULT_FILTERS; }
+}
 
 interface ContextMenu { x: number; y: number; song: Song }
 
@@ -213,7 +219,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   });
   const [colMenuOpen, setColMenuOpen]   = useState(false);
   const [filtersOpen, setFiltersOpen]   = useState(false);
-  const [filters, setFilters]           = useState<ColFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters]           = useState<ColFilters>(loadFilters);
   const [dupsOpen, setDupsOpen]         = useState(false);
   const [reanalyzing, setReanalyzing]   = useState<Set<string>>(new Set());
   const [deleting, setDeleting]         = useState(false);
@@ -237,6 +243,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   }, [library]);
 
   useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify([...visibleCols])); }, [visibleCols]);
+  useEffect(() => { localStorage.setItem(LS_FILTERS_KEY, JSON.stringify(filters)); }, [filters]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => { if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false); };

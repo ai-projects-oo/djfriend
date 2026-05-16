@@ -357,6 +357,7 @@ function AppInner() {
   const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
   // Visual-only loading state for the Generate CTA button
   const [isGenerating, setIsGenerating] = useState(false);
+  const [hasAttemptedGenerate, setHasAttemptedGenerate] = useState(false);
 
   // Click-outside for source playlist dropdown
   useEffect(() => {
@@ -2326,6 +2327,7 @@ function AppInner() {
                         onClick={() => {
                           if (library.length === 0 || isGenerating) return;
                           setIsGenerating(true);
+                          setHasAttemptedGenerate(true);
                           setTimeout(() => { handleGenerate(); setIsGenerating(false); }, 0);
                         }}
                         disabled={
@@ -2480,6 +2482,7 @@ function AppInner() {
                   }
                   isElectron={navigator.userAgent.toLowerCase().includes("electron")}
                   isMacOS={isMacOS}
+                  hasAttemptedGenerate={hasAttemptedGenerate}
                   onBulkReanalyze={async (indices, bpmHint) => {
                     for (let n = 0; n < indices.length; n++) {
                       const t = generatedSet[indices[n]];

@@ -761,7 +761,7 @@ async function handleReanalyze() {
       {/* Inline edit row */}
       {editing && (
         <tr className="border-b border-[#1e1e2e] bg-[#0d0d14]">
-          <td colSpan={8} className="px-4 py-3">
+          <td colSpan={totalCols} className="px-4 py-3">
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex flex-col gap-1 min-w-[160px]">
                 <label className="text-[10px] text-[#475569] uppercase tracking-wider">Title</label>

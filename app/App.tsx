@@ -821,6 +821,22 @@ function AppInner() {
     }).catch(() => {});
   }, [generatedSet, shareTelemetry]);
 
+  // Space bar toggles audio preview play/pause
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      const audio = audioRef.current;
+      if (!audio || !previewFile) return;
+      if (audio.paused) { void audio.play(); setPreviewPlaying(true); }
+      else { audio.pause(); setPreviewPlaying(false); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [previewFile]);
+
   // Check for app updates once on mount
   useEffect(() => {
     apiFetch('/api/check-update')
@@ -2447,6 +2463,7 @@ function AppInner() {
                   }}
                   onSwapTrack={handleSwapTrack}
                   onToggleLock={handleToggleLock}
+                  onSetAllLocked={(locked) => setGeneratedSet(prev => prev.map(t => ({ ...t, locked })))}
                   onRemoveTrack={handleRemoveTrack}
                   onReorderTrack={handleReorderTrack}
                   onUpdateTrack={handleUpdateTrack}

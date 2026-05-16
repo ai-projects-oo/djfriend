@@ -4,18 +4,9 @@ import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
 import { downloadRekordboxXml } from '../lib/rekordboxExport';
 import { SpotifyIcon, RekordboxIcon, M3UIcon, CopyIcon } from './Icons';
-import { parseCamelot } from '../lib/camelot';
+import { parseCamelot, CAMELOT_TO_KEY } from '../lib/camelot';
 import { sampleCurve } from '../lib/curveInterpolation';
 import { energyColor } from '../lib/theme';
-
-const CAMELOT_TO_KEY: Record<string, string> = {
-  '1a': 'Ab minor', '1b': 'B major', '2a': 'Eb minor', '2b': 'F# major',
-  '3a': 'Bb minor', '3b': 'Db major', '4a': 'F minor', '4b': 'Ab major',
-  '5a': 'C minor', '5b': 'Eb major', '6a': 'G minor', '6b': 'Bb major',
-  '7a': 'D minor', '7b': 'F major', '8a': 'A minor', '8b': 'C major',
-  '9a': 'E minor', '9b': 'G major', '10a': 'B minor', '10b': 'D major',
-  '11a': 'F# minor', '11b': 'A major', '12a': 'C# minor', '12b': 'E major',
-};
 
 export type FitLevel = 'good' | 'warn' | 'bad';
 
@@ -125,6 +116,7 @@ interface Props {
   onPreview?: (filePath: string, seekTo?: number) => void;
   onSwapTrack: (index: number) => void;
   onToggleLock: (index: number) => void;
+  onSetAllLocked?: (locked: boolean) => void;
   onRemoveTrack: (index: number) => void;
   onReorderTrack: (fromIdx: number, toIdx: number) => void;
   onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => void;
@@ -219,7 +211,7 @@ function MiniCurveStrip({ curve, tracks, onScrollTo }: {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [setStartTime, setSetStartTime] = useState<string>(''); // HH:MM
@@ -442,6 +434,24 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Lock all / unlock all */}
+          {onSetAllLocked && tracks.length > 0 && (() => {
+            const anyUnlocked = tracks.some(t => !t.locked);
+            return (
+              <button
+                onClick={() => onSetAllLocked(anyUnlocked)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#12121a] border border-[#2a2a3a] text-xs transition-colors cursor-pointer"
+                style={{ color: anyUnlocked ? '#94a3b8' : '#fbbf24', borderColor: anyUnlocked ? undefined : '#f59e0b44' }}
+                title={anyUnlocked ? 'Lock all tracks' : 'Unlock all tracks'}
+                aria-label={anyUnlocked ? 'Lock all' : 'Unlock all'}
+              >
+                {anyUnlocked
+                  ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
+                {anyUnlocked ? 'Lock all' : 'Unlock all'}
+              </button>
+            );
+          })()}
           {/* Set start time clock */}
           <div className="flex items-center gap-1.5">
             <label className="text-[10px] text-[#475569] whitespace-nowrap" htmlFor="set-start-time">Starts at</label>

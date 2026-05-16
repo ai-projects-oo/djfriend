@@ -44,6 +44,7 @@ import { findCrateGaps } from "./lib/crateBuilder";
 import { generateSet } from "./lib/setGenerator";
 import SuggestionsStrip from "./components/SuggestionsStrip";
 import CratesTab from "./components/CratesTab";
+import OnboardingModal from "./components/OnboardingModal";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -318,7 +319,6 @@ function AppInner() {
     enrichmentStatus,
     analysisQueue,
     cancelQueueItem,
-    folderPath,
     setFolderPath,
     playlistPicker,
     setPlaylistPicker,
@@ -337,6 +337,17 @@ function AppInner() {
   } = useLibrary({
     onNewAnalysis: () => onNewAnalysisRef.current?.(),
   });
+
+  // Auto-dismiss onboarding once library is populated
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (library.length > 0 && !onboardingDismissed) {
+      setOnboardingDismissed(true);
+      localStorage.setItem("djfriend-onboarding-dismissed", "true");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library.length]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Playlist filter — which import entries restrict the generator pool (multi-select)
   const [playlistFilterIds, setPlaylistFilterIds] = useState<string[]>([]);
@@ -1156,16 +1167,7 @@ function AppInner() {
 
             <div className="relative">
               <button
-                onClick={() => {
-                  setSettingsOpen(true);
-                  if (!onboardingDismissed) {
-                    setOnboardingDismissed(true);
-                    localStorage.setItem(
-                      "djfriend-onboarding-dismissed",
-                      "true",
-                    );
-                  }
-                }}
+                onClick={() => setSettingsOpen(true)}
                 title="Settings"
                 className="p-1.5 text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer"
               >
@@ -1184,30 +1186,6 @@ function AppInner() {
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
               </button>
-              {navigator.userAgent.toLowerCase().includes("electron") &&
-                !folderPath.trim() &&
-                !onboardingDismissed && (
-                  <div className="absolute right-0 top-full mt-2 z-50">
-                    <div className="relative bg-[#7c3aed] text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap flex items-center gap-2">
-                      <span className="absolute -top-1.5 right-3 w-3 h-3 bg-[#7c3aed] rotate-45" />
-                      <span>Configure your folders to get started</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOnboardingDismissed(true);
-                          localStorage.setItem(
-                            "djfriend-onboarding-dismissed",
-                            "true",
-                          );
-                        }}
-                        className="ml-1 opacity-70 hover:opacity-100 transition-opacity cursor-pointer"
-                        aria-label="Dismiss"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                )}
             </div>
             {/* Hidden file input for M3U / TXT import */}
             <input
@@ -3968,6 +3946,24 @@ function AppInner() {
       />
 
       {/* ── AI Set Planner slide-in panel ── */}
+
+      {/* ── Onboarding ── */}
+      {library.length === 0 && !onboardingDismissed && !isInitializing && (
+        <OnboardingModal
+          isElectron={navigator.userAgent.toLowerCase().includes("electron")}
+          isMacOS={isMacOS}
+          hasSpotifyCredentials={hasSpotifyCredentials}
+          onScanAppleMusic={() => void openPlaylistPicker()}
+          onImportM3U={() => fileInputRef.current?.click()}
+          onImportRekordbox={() => rbFileInputRef.current?.click()}
+          onUploadFolder={() => uploadFolderInputRef.current?.click()}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onDismiss={() => {
+            setOnboardingDismissed(true);
+            localStorage.setItem("djfriend-onboarding-dismissed", "true");
+          }}
+        />
+      )}
 
     </div>
   );

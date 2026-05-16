@@ -85,9 +85,8 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [saving, setSaving] = useState(false)
 
   const [analysisMode, setAnalysisMode] = useState<'performance' | 'normal' | 'power-saving'>('normal')
-  const [energyCheckThreshold, setEnergyCheckThreshold] = useState(12)
   const [shareTelemetry, setShareTelemetry] = useState(true)
-  const [tipConfig, setTipConfig] = useState<{ help: boolean; info: boolean; ai: boolean }>({ help: true, info: true, ai: true })
+  const [showTips, setShowTips] = useState(true)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -128,9 +127,8 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         setRekordboxFolderStatus('idle')
         if (d.analysisMode === 'performance' || d.analysisMode === 'power-saving') setAnalysisMode(d.analysisMode)
         else setAnalysisMode('normal')
-        setEnergyCheckThreshold(Math.round((d.energyCheckThreshold ?? 0.12) * 100))
         setShareTelemetry(d.shareTelemetry !== false)
-        if (d.tipConfig) setTipConfig(Object.assign({ help: true, info: true, ai: true }, d.tipConfig))
+        if (d.tipConfig) setShowTips(d.tipConfig.help !== false || d.tipConfig.info !== false || d.tipConfig.ai !== false)
         setHasSpotifySecret(d.hasSecret ?? false)
         setHasDiscogsOAuth(d.hasDiscogsOAuth ?? false)
         setHasDiscogsConsumerKey(d.hasDiscogsConsumerKey ?? false)
@@ -150,7 +148,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       const r = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), analysisMode, energyCheckThreshold: energyCheckThreshold / 100, shareTelemetry, tipConfig }),
+        body: JSON.stringify({ musicFolder: musicFolder.trim(), rekordboxFolder: rekordboxFolder.trim(), analysisMode, energyCheckThreshold: 0.12, shareTelemetry, tipConfig: { help: showTips, info: showTips, ai: showTips } }),
       })
       if (!r.ok) throw new Error('Save failed')
       const folderChanged = musicFolder.trim() !== loadedMusicFolder.current
@@ -296,30 +294,6 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Performance</h3>
 
-          {/* Energy Check threshold */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-sm text-[#e2e8f0]">Energy check sensitivity</label>
-              <span className="text-sm font-semibold text-[#a78bfa] tabular-nums">{energyCheckThreshold}%</span>
-            </div>
-            <input
-              type="range"
-              min={12}
-              max={50}
-              step={1}
-              value={62 - energyCheckThreshold}
-              onChange={e => setEnergyCheckThreshold(62 - Number(e.target.value))}
-              className="w-full accent-[#7c3aed] cursor-pointer"
-            />
-            <div className="flex justify-between text-[10px] text-[#334155] mt-0.5">
-              <span>Low</span>
-              <span>High</span>
-            </div>
-            <p className="text-[11px] text-[#64748b] mt-1">
-              Higher = more warnings. Flags tracks whose energy deviates from the curve target by more than {energyCheckThreshold}%.
-            </p>
-          </div>
-
           <div>
             <p className="text-xs text-[#64748b] mb-2">Concurrent Process Mode</p>
             <div className="space-y-2">
@@ -343,37 +317,28 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
         {/* ── Display ──────────────────────────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-1">Hover Tips</h3>
-          <p className="text-[11px] text-[#334155] mb-3">Control which tooltips appear when hovering over tracks.</p>
-          <div className="flex flex-col gap-2.5">
-            {([
-              { key: 'help', label: 'Help tips', desc: 'Button labels, drag hints' },
-              { key: 'info', label: 'Info tips', desc: 'Energy values, key compatibility' },
-              { key: 'ai',   label: 'AI hints',  desc: 'Fit warnings, transition hints, why this track' },
-            ] as { key: 'help' | 'info' | 'ai'; label: string; desc: string }[]).map(({ key, label, desc }) => (
-              <label key={key} className="flex items-center gap-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={tipConfig[key]}
-                  onChange={e => {
-                    const next = { ...tipConfig, [key]: e.target.checked }
-                    setTipConfig(next)
-                    apiFetch('/api/settings', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ tipConfig: next }),
-                    }).catch(() => {})
-                  }}
-                  className="w-4 h-4 cursor-pointer accent-[#7c3aed] flex-shrink-0"
-                  aria-label={label}
-                />
-                <span className="flex flex-col">
-                  <span className="text-sm text-[#e2e8f0]">{label}</span>
-                  <span className="text-[11px] text-[#475569]">{desc}</span>
-                </span>
-              </label>
-            ))}
-          </div>
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Display</h3>
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showTips}
+              onChange={e => {
+                setShowTips(e.target.checked)
+                const tc = { help: e.target.checked, info: e.target.checked, ai: e.target.checked }
+                apiFetch('/api/settings', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tipConfig: tc }),
+                }).catch(() => {})
+              }}
+              className="w-4 h-4 cursor-pointer accent-[#7c3aed] flex-shrink-0"
+              aria-label="Show tips"
+            />
+            <span className="flex flex-col">
+              <span className="text-sm text-[#e2e8f0]">Show tips</span>
+              <span className="text-[11px] text-[#475569]">Hover tooltips on tracks and controls</span>
+            </span>
+          </label>
         </div>
 
         {/* ── AI & Privacy ─────────────────────────────────────────── */}

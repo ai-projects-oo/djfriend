@@ -42,10 +42,8 @@ import { blendModels, isValidModelWeights } from "./lib/mlModel";
 import { SCORE_THRESHOLDS } from "./lib/setScore";
 import { findCrateGaps } from "./lib/crateBuilder";
 import { generateSet } from "./lib/setGenerator";
-import VenuePlannerPanel from "./components/VenuePlannerPanel";
 import SuggestionsStrip from "./components/SuggestionsStrip";
 import CratesTab from "./components/CratesTab";
-import type { SetPlan } from "./types";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -188,8 +186,9 @@ export default function App() {
 
 function AppInner() {
   const [activeTab, setActiveTab] = useState<
-    "Set Generator" | "Library" | "Crates" | "History" | "Import"
+    "Set Generator" | "Library" | "Crates" | "History"
   >("Set Generator");
+  const [importsModalOpen, setImportsModalOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
       const raw = localStorage.getItem("djfriend-history");
@@ -214,22 +213,18 @@ function AppInner() {
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [plannerOpen, setPlannerOpen] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(true);
-  const [plannerVenue, setPlannerVenue] = useState<import('./types').VenueType>('Club');
-  const [plannerPhase, setPlannerPhase] = useState<import('./types').SetPhase>('Peak time');
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
   const [hasDiscogsOAuth, setHasDiscogsOAuth] = useState(false);
   const [isMacOS, setIsMacOS] = useState(true); // assume macOS until settings load
-  const [energyCheckThreshold, setEnergyCheckThreshold] = useState(0.12);
+  const energyCheckThreshold = 0.12;
   const [onboardingDismissed, setOnboardingDismissed] = useState(
     () => localStorage.getItem("djfriend-onboarding-dismissed") === "true",
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [scoringOpen, setScoringOpen] = useState(false);
   const [dateCalendar, setDateCalendar] = useState<"from" | "to" | null>(null);
   const [analyzeMenuOpen, setAnalyzeMenuOpen] = useState(false);
   const [playlistSearch, setPlaylistSearch] = useState("");
@@ -646,16 +641,6 @@ function AppInner() {
     [setPrefs, setCurve, setGeneratedSet],
   );
 
-  const handleApplyPlan = useCallback(
-    (plan: SetPlan) => {
-      if (plan.bpmMin != null) setPrefs(p => ({ ...p, bpmMin: plan.bpmMin, bpmMax: plan.bpmMax }));
-      if (plan.venueType)      setPrefs(p => ({ ...p, venueType: plan.venueType! }));
-      setCurve(plan.curve);
-      setScoringWeights(plan.scoringWeights);
-      setPlannerOpen(false);
-    },
-    [setPrefs, setCurve, setScoringWeights],
-  );
 
   const {
     spotifyExportStatus,
@@ -735,7 +720,6 @@ function AppInner() {
             musicFolder?: string;
             rekordboxFolder?: string;
             hasSecret?: boolean;
-            energyCheckThreshold?: number;
           }>,
       )
       .then((d) => {
@@ -746,7 +730,6 @@ function AppInner() {
           !!(d.rekordboxFolder && d.rekordboxFolder.trim()),
         );
         if ((d as { platform?: string }).platform) setIsMacOS((d as { platform?: string }).platform === 'darwin');
-        if (d.energyCheckThreshold !== undefined) setEnergyCheckThreshold(d.energyCheckThreshold);
         if ((d as { shareTelemetry?: boolean }).shareTelemetry !== undefined) setShareTelemetry((d as { shareTelemetry?: boolean }).shareTelemetry !== false);
         if ((d as { tipConfig?: TipConfig }).tipConfig) setTipConfig({ ...DEFAULT_TIP_CONFIG, ...(d as { tipConfig: TipConfig }).tipConfig });
       })
@@ -885,7 +868,7 @@ function AppInner() {
         const pendingImport = getPendingImport();
         clearPendingImport();
         if (pendingImport === "__browse__") {
-          setActiveTab("Import");
+          setImportsModalOpen(true);
           setLoadingSpotifyPlaylists(true);
           try {
             const playlists = await fetchUserPlaylists(access_token);
@@ -894,7 +877,7 @@ function AppInner() {
             setLoadingSpotifyPlaylists(false);
           }
         } else if (pendingImport) {
-          setActiveTab("Import");
+          setImportsModalOpen(true);
           setImportUrl(pendingImport);
           setPendingImportUrl(pendingImport);
         }
@@ -1392,9 +1375,6 @@ function AppInner() {
               "Library",
               "History",
               ...(hasDiscogsOAuth ? (["Crates"] as const) : ([] as const)),
-              ...(hasSpotifyCredentials
-                ? (["Import"] as const)
-                : ([] as const)),
             ] as const
           ).map((tab) => (
             <button
@@ -1407,9 +1387,6 @@ function AppInner() {
               }`}
             >
               <span className="flex items-center gap-1.5">
-                {tab === "Import" && (
-                  <SpotifyIcon size={13} className="text-[#1db954]" />
-                )}
                 {tab === "Crates" && (
                   <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
                     <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
@@ -1434,14 +1411,23 @@ function AppInner() {
                     {discogsCollection.releases.length}
                   </span>
                 )}
-                {tab === "Import" && importHistory.length > 0 && (
-                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                    {importHistory.length}
-                  </span>
-                )}
               </span>
             </button>
           ))}
+          {hasSpotifyCredentials && (
+            <button
+              onClick={() => setImportsModalOpen(true)}
+              className="ml-auto px-3 py-2 text-sm font-medium border-b-2 border-transparent text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <SpotifyIcon size={13} className="text-[#1db954]" />
+              Imports
+              {importHistory.length > 0 && (
+                <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                  {importHistory.length}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </header>
 
@@ -1674,101 +1660,34 @@ function AppInner() {
                   )}
 
                   {/* DJ System */}
-                  <div className="pt-2 border-t border-[#1e1e2e] flex flex-col gap-2">
+                  <div className="pt-2 border-t border-[#1e1e2e]">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">DJ System</span>
-                      {/* Channel count picker */}
+                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Turntables</span>
                       <div className="flex rounded overflow-hidden border border-[#2a2a3a] text-[10px] font-medium">
-                        {([2, 3, 4] as const).map(n => {
-                          const active = djSystem.channels.length === n;
+                        {([0, 1, 2] as const).map(n => {
+                          const vinylCount = djSystem.channels.filter(k => k === 'vinyl').length;
+                          const active = vinylCount === n;
                           return (
                             <button key={n} type="button"
                               onClick={() => {
-                                const cur = djSystem.channels;
-                                let next: ChannelKind[];
-                                if (n > cur.length) next = [...cur, ...Array(n - cur.length).fill('digital' as ChannelKind)];
-                                else next = cur.slice(0, n);
+                                const chCount = djSystem.channels.length;
+                                const next: ChannelKind[] = Array(chCount).fill('digital' as ChannelKind);
+                                for (let i = 0; i < Math.min(n, chCount); i++) next[i] = 'vinyl';
                                 handleSetDjSystem({ channels: next });
                               }}
-                              className="px-2 py-1 transition-colors cursor-pointer"
+                              className="px-2.5 py-1 transition-colors cursor-pointer"
                               style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#64748b' }}
                             >
-                              {n}ch
+                              {n}
                             </button>
                           );
                         })}
                       </div>
                     </div>
-
-                    {/* Per-channel type selector */}
-                    <div className="flex flex-col gap-1">
-                      {djSystem.channels.map((kind, i) => (
-                        <div key={i} className="flex items-center justify-between">
-                          <span className="text-[10px] text-[#475569]">Ch {i + 1}</span>
-                          <div className="flex rounded overflow-hidden border border-[#2a2a3a] text-[10px] font-medium">
-                            {(['digital', 'vinyl'] as ChannelKind[]).map(k => {
-                              const active = kind === k;
-                              return (
-                                <button key={k} type="button"
-                                  onClick={() => {
-                                    const next = [...djSystem.channels] as ChannelKind[];
-                                    next[i] = k;
-                                    handleSetDjSystem({ channels: next });
-                                  }}
-                                  className="px-2 py-1 cursor-pointer flex items-center justify-center transition-opacity"
-                                  style={{ backgroundColor: 'transparent', opacity: active ? 1 : 0.35 }}
-                                  title={k === 'digital' ? 'CDJ / Digital player' : 'Turntable / Vinyl'}
-                                  aria-label={k}
-                                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.75'; }}
-                                  onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.35'; }}
-                                >
-                                  {k === 'digital' ? (
-                                    <img src="/icons/cdj.png" style={{ height: 36, width: 'auto' }} alt="CDJ" />
-                                  ) : (
-                                    <img src="/icons/turntable.png" style={{ height: 36, width: 'auto' }} alt="Turntable" />
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
                   </div>
                   </div>}
                 </div>
               )}
-
-              {/* Card 2: Venue Planner */}
-              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setPlannerOpen(o => !o)}
-                  className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-[#0d0d14] transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">Venue Planner</span>
-                    {!plannerOpen && (
-                      <span className="text-[10px] text-[#334155]">{plannerVenue} · {plannerPhase}</span>
-                    )}
-                  </div>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`text-[#475569] transition-transform duration-150 ${plannerOpen ? 'rotate-180' : ''}`}>
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-                {plannerOpen && (
-                  <div className="border-t border-[#1e1e2e]">
-                    <VenuePlannerPanel
-                      onApply={handleApplyPlan}
-                      venue={plannerVenue}
-                      phase={plannerPhase}
-                      onVenueChange={setPlannerVenue}
-                      onPhaseChange={setPlannerPhase}
-                    />
-                  </div>
-                )}
-              </div>
 
               {/* Card 3: Genre */}
               {genreGroups.length > 0 && (
@@ -2321,13 +2240,13 @@ function AppInner() {
                   );
                 })()}
 
-              {/* Card 5: Scoring weights — collapsible, advanced */}
+              {/* Card 5: Style / scoring presets — always visible */}
               {(() => {
-                const PRESETS: { name: string; desc: string; detail: string; weights: { harmonicWeight: number; energyWeight: number; bpmWeight: number; transitionWeight: number } }[] = [
-                  { name: 'Balanced', desc: 'Works for most sets', detail: 'Harmonic 45 · Energy 25 · BPM 22 · Transition 8', weights: { harmonicWeight: 0.45, energyWeight: 0.25, bpmWeight: 0.22, transitionWeight: 0.08 } },
-                  { name: 'Club', desc: 'Techno / house / trance', detail: 'Harmonic 55 · Energy 20 · BPM 20 · Transition 5', weights: { harmonicWeight: 0.55, energyWeight: 0.20, bpmWeight: 0.20, transitionWeight: 0.05 } },
-                  { name: 'Festival', desc: 'Big room — energy arc first', detail: 'Harmonic 20 · Energy 55 · BPM 20 · Transition 5', weights: { harmonicWeight: 0.20, energyWeight: 0.55, bpmWeight: 0.20, transitionWeight: 0.05 } },
-                  { name: 'Open Format', desc: 'Bar / mixed genre / wedding', detail: 'Harmonic 20 · Energy 30 · BPM 20 · Transition 30', weights: { harmonicWeight: 0.20, energyWeight: 0.30, bpmWeight: 0.20, transitionWeight: 0.30 } },
+                const PRESETS: { name: string; desc: string; weights: { harmonicWeight: number; energyWeight: number; bpmWeight: number; transitionWeight: number } }[] = [
+                  { name: 'Balanced',    desc: 'Works for most sets',         weights: { harmonicWeight: 0.45, energyWeight: 0.25, bpmWeight: 0.22, transitionWeight: 0.08 } },
+                  { name: 'Club',        desc: 'Techno / house / trance',     weights: { harmonicWeight: 0.55, energyWeight: 0.20, bpmWeight: 0.20, transitionWeight: 0.05 } },
+                  { name: 'Festival',    desc: 'Big room — energy arc first', weights: { harmonicWeight: 0.20, energyWeight: 0.55, bpmWeight: 0.20, transitionWeight: 0.05 } },
+                  { name: 'Open Format', desc: 'Bar / mixed genre / wedding', weights: { harmonicWeight: 0.20, energyWeight: 0.30, bpmWeight: 0.20, transitionWeight: 0.30 } },
                 ];
                 const activePreset = PRESETS.find(p =>
                   scoringWeights &&
@@ -2336,60 +2255,40 @@ function AppInner() {
                   p.weights.bpmWeight === scoringWeights.bpmWeight &&
                   p.weights.transitionWeight === scoringWeights.transitionWeight
                 ) ?? PRESETS[0];
-                const nonDefault = activePreset.name !== 'Balanced';
                 return (
-                  <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setScoringOpen(o => !o)}
-                      className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[#0d0d14] transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">Scoring</span>
-                        {nonDefault && (
-                          <span className="text-[10px] font-medium bg-[#7c3aed33] text-[#a78bfa] border border-[#7c3aed66] px-1.5 py-0.5 rounded-full">
-                            {activePreset.name}
-                          </span>
-                        )}
-                      </div>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`text-[#475569] transition-transform duration-150 ${scoringOpen ? "rotate-180" : ""}`}>
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                    </button>
-                    {scoringOpen && (
-                      <div className="px-4 pb-4 border-t border-[#1e1e2e] pt-3 flex flex-col gap-2">
-                        <p className="text-[10px] text-[#475569] leading-relaxed">Controls what matters most when picking the next track.</p>
-                        <div className="flex gap-1.5 flex-wrap">
-                          {PRESETS.map((preset, i) => {
-                            const isActive = preset.name === activePreset.name;
-                            const isLast = i === PRESETS.length - 1;
-                            return (
-                              <div key={preset.name} className="relative group">
-                                <button
-                                  type="button"
-                                  onClick={() => setScoringWeights(preset.name === 'Balanced' ? undefined : preset.weights)}
-                                  className={`text-[10px] px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
-                                    isActive
-                                      ? 'bg-[#7c3aed]/20 border-[#7c3aed]/60 text-[#a78bfa]'
-                                      : 'bg-[#0d0d14] border-[#1e1e2e] text-[#6b7280] hover:border-[#374151] hover:text-[#9ca3af]'
-                                  }`}
-                                >
-                                  {preset.name}
-                                </button>
-                                <div className={`absolute bottom-full mb-2 w-44 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 ${isLast ? 'right-0' : 'left-0'}`}>
-                                  <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
-                                    <p className="text-[10px] font-semibold text-[#c4b5fd] mb-0.5">{preset.name}</p>
-                                    <p className="text-[10px] text-[#9ca3af] mb-1.5">{preset.desc}</p>
-                                    <p className="text-[10px] text-[#6b7280] leading-relaxed">{preset.detail}</p>
-                                  </div>
-                                  <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${isLast ? 'mr-3 ml-auto' : 'ml-3'}`} />
-                                </div>
+                  <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Style</span>
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {PRESETS.map((preset, i) => {
+                        const isActive = preset.name === activePreset.name;
+                        const isLast = i === PRESETS.length - 1;
+                        return (
+                          <div key={preset.name} className="relative group">
+                            <button
+                              type="button"
+                              onClick={() => setScoringWeights(preset.name === 'Balanced' ? undefined : preset.weights)}
+                              title={preset.desc}
+                              className={`text-[10px] px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
+                                isActive
+                                  ? 'bg-[#7c3aed]/20 border-[#7c3aed]/60 text-[#a78bfa]'
+                                  : 'bg-[#0d0d14] border-[#1e1e2e] text-[#6b7280] hover:border-[#374151] hover:text-[#9ca3af]'
+                              }`}
+                            >
+                              {preset.name}
+                            </button>
+                            <div className={`absolute bottom-full mb-2 w-40 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 ${isLast ? 'right-0' : 'left-0'}`}>
+                              <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
+                                <p className="text-[10px] font-semibold text-[#c4b5fd] mb-0.5">{preset.name}</p>
+                                <p className="text-[10px] text-[#9ca3af]">{preset.desc}</p>
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                              <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${isLast ? 'mr-3 ml-auto' : 'ml-3'}`} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })()}
@@ -2531,16 +2430,16 @@ function AppInner() {
                   tipConfig={tipConfig}
                   previewFile={previewFile}
                   previewPlaying={previewPlaying}
-                  onPreview={(filePath) => {
+                  onPreview={(filePath, seekTo) => {
                     const audio = audioRef.current;
                     if (!audio) return;
                     const url = `/api/audio-stream?path=${encodeURIComponent(filePath)}`;
-                    if (previewFile === filePath) {
+                    if (previewFile === filePath && seekTo === undefined) {
                       if (audio.paused) { void audio.play(); setPreviewPlaying(true); }
                       else { audio.pause(); setPreviewPlaying(false); }
                     } else {
                       audio.src = url;
-                      audio.currentTime = 0;
+                      audio.currentTime = seekTo ?? 0;
                       setPreviewFile(filePath);
                       setPreviewPlaying(true);
                       void audio.play();
@@ -2794,8 +2693,19 @@ function AppInner() {
         </main>
       )}
 
-      {activeTab === "Import" && (
-        <main className="px-2 py-6 flex-1 overflow-y-auto">
+      {importsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setImportsModalOpen(false)}>
+          <div className="w-full max-w-2xl mt-12 mb-8 rounded-xl border border-[#2a2a3a] bg-[#0d0d14] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e1e2e]">
+              <div className="flex items-center gap-2">
+                <SpotifyIcon size={16} className="text-[#1db954]" />
+                <span className="text-sm font-semibold text-[#e2e8f0]">Manage Spotify Imports</span>
+              </div>
+              <button onClick={() => setImportsModalOpen(false)} className="text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer" aria-label="Close">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+        <main className="px-4 py-5">
           {/* Import input */}
           <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -3427,6 +3337,8 @@ function AppInner() {
           );
           })()}
         </main>
+          </div>
+        </div>
       )}
 
       {spotifyPlaylistPicker && (

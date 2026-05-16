@@ -44,6 +44,7 @@ import { findCrateGaps } from "./lib/crateBuilder";
 import { generateSet } from "./lib/setGenerator";
 import SuggestionsStrip from "./components/SuggestionsStrip";
 import CratesTab from "./components/CratesTab";
+import OnboardingModal from "./components/OnboardingModal";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -318,7 +319,6 @@ function AppInner() {
     enrichmentStatus,
     analysisQueue,
     cancelQueueItem,
-    folderPath,
     setFolderPath,
     playlistPicker,
     setPlaylistPicker,
@@ -337,6 +337,17 @@ function AppInner() {
   } = useLibrary({
     onNewAnalysis: () => onNewAnalysisRef.current?.(),
   });
+
+  // Auto-dismiss onboarding once library is populated
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (library.length > 0 && !onboardingDismissed) {
+      setOnboardingDismissed(true);
+      localStorage.setItem("djfriend-onboarding-dismissed", "true");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library.length]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Playlist filter — which import entries restrict the generator pool (multi-select)
   const [playlistFilterIds, setPlaylistFilterIds] = useState<string[]>([]);
@@ -561,6 +572,7 @@ function AppInner() {
   );
 
   // Reset analysis request when the set changes
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setCrateGapsRequested(false); }, [generatedSet]);
 
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
@@ -1155,16 +1167,7 @@ function AppInner() {
 
             <div className="relative">
               <button
-                onClick={() => {
-                  setSettingsOpen(true);
-                  if (!onboardingDismissed) {
-                    setOnboardingDismissed(true);
-                    localStorage.setItem(
-                      "djfriend-onboarding-dismissed",
-                      "true",
-                    );
-                  }
-                }}
+                onClick={() => setSettingsOpen(true)}
                 title="Settings"
                 className="p-1.5 text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer"
               >
@@ -1183,30 +1186,6 @@ function AppInner() {
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
               </button>
-              {navigator.userAgent.toLowerCase().includes("electron") &&
-                !folderPath.trim() &&
-                !onboardingDismissed && (
-                  <div className="absolute right-0 top-full mt-2 z-50">
-                    <div className="relative bg-[#7c3aed] text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap flex items-center gap-2">
-                      <span className="absolute -top-1.5 right-3 w-3 h-3 bg-[#7c3aed] rotate-45" />
-                      <span>Configure your folders to get started</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOnboardingDismissed(true);
-                          localStorage.setItem(
-                            "djfriend-onboarding-dismissed",
-                            "true",
-                          );
-                        }}
-                        className="ml-1 opacity-70 hover:opacity-100 transition-opacity cursor-pointer"
-                        aria-label="Dismiss"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                )}
             </div>
             {/* Hidden file input for M3U / TXT import */}
             <input
@@ -1385,51 +1364,56 @@ function AppInner() {
 
         {/* Tab nav */}
         <div className="px-2 flex gap-1">
-          {(
-            [
-              "Set Generator",
-              "Library",
-              "History",
-              ...(hasDiscogsOAuth ? (["Crates"] as const) : ([] as const)),
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-                activeTab === tab
-                  ? "border-[#7c3aed] text-[#e2e8f0]"
-                  : "border-transparent text-[#475569] hover:text-[#94a3b8]"
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                {tab === "Crates" && (
-                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
-                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
-                  </svg>
-                )}
-                {tab}
-                {tab === "Library" && isInitializing && (
-                  <span className="w-3.5 h-3.5 rounded-full border-2 border-[#7c3aed]/30 border-t-[#7c3aed] animate-spin inline-block" />
-                )}
-                {tab === "Library" && !isInitializing && library.length > 0 && (
-                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                    {library.length}
-                  </span>
-                )}
-                {tab === "History" && history.length > 0 && (
-                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                    {history.length}
-                  </span>
-                )}
-                {tab === "Crates" && discogsCollection && (
-                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                    {discogsCollection.releases.length}
-                  </span>
-                )}
-              </span>
-            </button>
-          ))}
+          {(["Set Generator", "Library", "History", "Crates"] as const).map((tab) => {
+            const isCratesLocked = tab === "Crates" && !hasDiscogsOAuth;
+            return (
+              <button
+                key={tab}
+                onClick={() => {
+                  if (isCratesLocked) { setSettingsOpen(true); return; }
+                  setActiveTab(tab as typeof activeTab);
+                }}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+                  isCratesLocked
+                    ? "border-transparent text-[#2a2a3a] hover:text-[#475569]"
+                    : activeTab === tab
+                    ? "border-[#7c3aed] text-[#e2e8f0]"
+                    : "border-transparent text-[#475569] hover:text-[#94a3b8]"
+                }`}
+                title={isCratesLocked ? "Connect Discogs in Settings to unlock Crates" : undefined}
+              >
+                <span className="flex items-center gap-1.5">
+                  {tab === "Crates" && (
+                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
+                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
+                    </svg>
+                  )}
+                  {tab}
+                  {isCratesLocked && (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-50"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  )}
+                  {tab === "Library" && isInitializing && (
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-[#7c3aed]/30 border-t-[#7c3aed] animate-spin inline-block" />
+                  )}
+                  {tab === "Library" && !isInitializing && library.length > 0 && (
+                    <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                      {library.length}
+                    </span>
+                  )}
+                  {tab === "History" && history.length > 0 && (
+                    <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                      {history.length}
+                    </span>
+                  )}
+                  {tab === "Crates" && discogsCollection && (
+                    <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                      {discogsCollection.releases.length}
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
           {hasSpotifyCredentials && (
             <button
               onClick={() => setImportsModalOpen(true)}
@@ -1462,7 +1446,26 @@ function AppInner() {
             <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4">
 
               {/* Card 1: Source — visible when playlists exist (Apple Music or Spotify) */}
-              {(Object.keys(applePlaylistFiles).length > 0 || importHistory.length > 0) && (
+              {Object.keys(applePlaylistFiles).length === 0 && importHistory.length === 0 ? (
+                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-2.5">
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Source</span>
+                  <div className="flex flex-col gap-1.5 py-1">
+                    <p className="text-xs text-[#334155]">No playlists imported yet.</p>
+                    <p className="text-[11px] text-[#2a2a3a]">
+                      Import a Spotify playlist or load an Apple Music library to filter your generator source.
+                    </p>
+                    {hasSpotifyCredentials && (
+                      <button
+                        type="button"
+                        onClick={() => setImportsModalOpen(true)}
+                        className="mt-1 self-start px-2.5 py-1 rounded-md text-xs text-[#7c3aed] border border-[#7c3aed33] bg-[#7c3aed0d] hover:bg-[#7c3aed1a] transition-colors cursor-pointer"
+                      >
+                        Open Imports →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
                 <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
@@ -2425,13 +2428,13 @@ function AppInner() {
                     const tooltip = `Harmonic: ${Math.round((1 - setScore.harmonicRate) * 100)}%  ·  Energy fit: ${Math.round((1 - setScore.avgEnergyError) * 100)}%  ·  BPM flow: ${Math.round(setScore.bpmSmoothness * 100)}%`;
                     return (
                       <div
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-[#0d0d14] cursor-default"
-                        style={{ borderColor: `${scoreColor}33` }}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-[#0d0d14] cursor-default"
+                        style={{ borderColor: `${scoreColor}44` }}
                         title={tooltip}
                       >
-                        <span className="text-[10px] text-[#64748b] font-medium">Score</span>
-                        <span className="text-sm font-bold tabular-nums" style={{ color: scoreColor }}>{setScore.total}</span>
-                        <span className="text-[10px] text-[#334155]">/ 100</span>
+                        <span className="text-[10px] text-[#475569] font-medium uppercase tracking-wider">Score</span>
+                        <span className="text-xl font-bold tabular-nums leading-none" style={{ color: scoreColor }}>{setScore.total}</span>
+                        <span className="text-xs text-[#334155] font-medium">/ 100</span>
                       </div>
                     );
                   })()}
@@ -3943,6 +3946,24 @@ function AppInner() {
       />
 
       {/* ── AI Set Planner slide-in panel ── */}
+
+      {/* ── Onboarding ── */}
+      {library.length === 0 && !onboardingDismissed && !isInitializing && (
+        <OnboardingModal
+          isElectron={navigator.userAgent.toLowerCase().includes("electron")}
+          isMacOS={isMacOS}
+          hasSpotifyCredentials={hasSpotifyCredentials}
+          onScanAppleMusic={() => void openPlaylistPicker()}
+          onImportM3U={() => fileInputRef.current?.click()}
+          onImportRekordbox={() => rbFileInputRef.current?.click()}
+          onUploadFolder={() => uploadFolderInputRef.current?.click()}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onDismiss={() => {
+            setOnboardingDismissed(true);
+            localStorage.setItem("djfriend-onboarding-dismissed", "true");
+          }}
+        />
+      )}
 
     </div>
   );

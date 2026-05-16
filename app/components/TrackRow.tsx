@@ -244,29 +244,29 @@ async function handleReanalyze() {
         )}
         {/* # */}
         <td className="py-3 pl-4 pr-2 w-10">
-          <div className="relative w-5 h-4 flex items-center justify-center">
+          <div className="relative flex items-center justify-start min-w-[20px]">
             <span
               className="group-hover:hidden text-[#475569] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
               title="Drag to reorder"
             >
               {index + 1}
             </span>
-            <div className="hidden group-hover:flex items-center gap-1">
+            <div className="hidden group-hover:flex items-center gap-0.5">
               {track.filePath && onPreview ? (
                 <>
                   <button
                     onClick={() => onPreview(track.filePath!)}
-                    className={`flex items-center justify-center cursor-pointer transition-colors ${isPreviewPlaying ? 'text-white' : 'text-[#7c3aed] hover:text-white'}`}
+                    className={`p-1 rounded flex items-center justify-center cursor-pointer transition-colors ${isPreviewPlaying ? 'text-white bg-[#7c3aed22]' : 'text-[#7c3aed] hover:text-white hover:bg-[#7c3aed22]'}`}
                     title={isPreviewPlaying ? 'Pause preview' : 'Preview from start'}
                   >
                     {isPreviewPlaying
-                      ? <Pause size={13} fill="currentColor" />
-                      : <Play size={13} fill="currentColor" />}
+                      ? <Pause size={12} fill="currentColor" />
+                      : <Play size={12} fill="currentColor" />}
                   </button>
                   {track.duration && track.duration > 45 && (
                     <button
                       onClick={() => onPreview(track.filePath!, Math.max(0, track.duration! - 30))}
-                      className="flex items-center justify-center text-[#475569] hover:text-[#a78bfa] cursor-pointer transition-colors text-[9px] font-mono leading-none"
+                      className="p-1 rounded flex items-center justify-center text-[#475569] hover:text-[#a78bfa] hover:bg-[#a78bfa11] cursor-pointer transition-colors text-[9px] font-mono leading-none"
                       title="Preview last 30s (outro)"
                     >
                       −30s
@@ -276,16 +276,16 @@ async function handleReanalyze() {
               ) : (
                 <button
                   onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
-                  className="flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
+                  className="p-1 rounded flex items-center justify-center text-[#7c3aed] hover:text-white hover:bg-[#7c3aed22] cursor-pointer transition-colors"
                   title="Play in Apple Music"
                 >
-                  <Play size={13} fill="currentColor" />
+                  <Play size={12} fill="currentColor" />
                 </button>
               )}
               {track.filePath && (
                 <button
                   onClick={() => void fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath }) })}
-                  className="flex items-center justify-center text-[#475569] hover:text-[#94a3b8] cursor-pointer transition-colors"
+                  className="p-1 rounded flex items-center justify-center text-[#475569] hover:text-[#94a3b8] hover:bg-[#94a3b811] cursor-pointer transition-colors"
                   title="Reveal in Finder"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
@@ -356,7 +356,7 @@ async function handleReanalyze() {
                       const bg = r.quality === 'good' ? '#14532d40' : r.quality === 'bonus' ? '#4c1d9540' : r.quality === 'ok' ? '#78350f40' : r.quality === 'bad' ? '#7f1d1d40' : '#1e293b';
                       const color = r.quality === 'good' ? '#86efac' : r.quality === 'bonus' ? '#c4b5fd' : r.quality === 'ok' ? '#fcd34d' : r.quality === 'bad' ? '#fca5a5' : '#94a3b8';
                       return (
-                        <span key={i} className="text-[9px] px-1.5 py-0 rounded-full leading-4 whitespace-nowrap" style={{ backgroundColor: bg, color }}>
+                        <span key={i} className="text-[10px] px-1.5 py-0 rounded-full leading-4 whitespace-nowrap" style={{ backgroundColor: bg, color }}>
                           {r.text}
                         </span>
                       );
@@ -476,7 +476,7 @@ async function handleReanalyze() {
           >
             <div
               className="relative rounded-full bg-[#1e1e2e]"
-              style={{ width: 56, height: 4 }}
+              style={{ width: 72, height: 5 }}
             >
               <div
                 className="h-full rounded-full transition-all"
@@ -491,7 +491,7 @@ async function handleReanalyze() {
                   left: `${Math.min(Math.max(track.targetEnergy * 100, 0), 100).toFixed(1)}%`,
                   width: 1,
                   height: 6,
-                  backgroundColor: 'rgba(255,255,255,0.4)',
+                  backgroundColor: 'rgba(255,255,255,0.7)',
                   transform: 'translate(-50%, -50%)',
                 }}
               />
@@ -700,7 +700,7 @@ async function handleReanalyze() {
                 {/* ── Remove ── */}
                 <button
                   onClick={() => { setMenuOpen(false); handleRemove(); }}
-                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#94a3b8] hover:bg-[#ef444410] hover:text-[#ef4444] transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#ef4444]/60 hover:bg-[#ef444415] hover:text-[#ef4444] transition-colors cursor-pointer"
                 >
                   <Trash2 size={13} className="w-3.5 flex-shrink-0" />
                   Remove

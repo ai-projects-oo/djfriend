@@ -2478,6 +2478,8 @@ function AppInner() {
                         }
                       : undefined
                   }
+                  isElectron={navigator.userAgent.toLowerCase().includes("electron")}
+                  isMacOS={isMacOS}
                   onBulkReanalyze={async (indices, bpmHint) => {
                     for (let n = 0; n < indices.length; n++) {
                       const t = generatedSet[indices[n]];

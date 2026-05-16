@@ -335,6 +335,25 @@ async function handleReanalyze() {
             >
               <div className="text-sm font-medium text-[#e2e8f0] truncate">{track.title}</div>
               <div className="text-xs text-[#64748b] truncate">{track.artist}</div>
+              {tc.ai && track.selectionReason && track.selectionReason.length > 0 && (() => {
+                const qualityOrder = { good: 0, bonus: 1, ok: 2, info: 3, bad: 4 };
+                const top2 = [...track.selectionReason]
+                  .sort((a, b) => (qualityOrder[a.quality] ?? 5) - (qualityOrder[b.quality] ?? 5))
+                  .slice(0, 2);
+                return (
+                  <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                    {top2.map((r, i) => {
+                      const bg = r.quality === 'good' ? '#14532d40' : r.quality === 'bonus' ? '#4c1d9540' : r.quality === 'ok' ? '#78350f40' : r.quality === 'bad' ? '#7f1d1d40' : '#1e293b';
+                      const color = r.quality === 'good' ? '#86efac' : r.quality === 'bonus' ? '#c4b5fd' : r.quality === 'ok' ? '#fcd34d' : r.quality === 'bad' ? '#fca5a5' : '#94a3b8';
+                      return (
+                        <span key={i} className="text-[9px] px-1.5 py-0 rounded-full leading-4 whitespace-nowrap" style={{ backgroundColor: bg, color }}>
+                          {r.text}
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
               {tc.ai && showReasonTooltip && track.selectionReason && track.selectionReason.length > 0 && (
                 <div className={`absolute left-0 ${openDown ? 'top-full mt-1' : 'bottom-full mb-1'} z-50 min-w-[220px] max-w-[300px] rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] px-3 py-2.5 shadow-xl pointer-events-none`}>
                   <div className="text-[9px] uppercase tracking-widest text-[#334155] mb-2">Why this track</div>

@@ -37,6 +37,7 @@ import { camelotColor } from "./lib/camelotColors";
 import { transitionFeatures } from "./lib/mlFeatures";
 import { blendModels, isValidModelWeights } from "./lib/mlModel";
 import { SCORE_THRESHOLDS } from "./lib/setScore";
+import { findCrateGaps } from "./lib/crateBuilder";
 import VenuePlannerPanel from "./components/VenuePlannerPanel";
 import SuggestionsStrip from "./components/SuggestionsStrip";
 import CratesTab from "./components/CratesTab";
@@ -550,7 +551,15 @@ function AppInner() {
     return min < max ? { min: Math.round(min * 100) / 100, max: Math.round(max * 100) / 100 } : null;
   }, [library, effectiveFilterFiles]);
 
+  const crateGaps = useMemo(
+    () => setScore && (setScore.harmonicRate > 0.2 || setScore.avgEnergyError > 0.15)
+      ? findCrateGaps(generatedSet, prefs)
+      : [],
+    [generatedSet, prefs, setScore],
+  );
+
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
+  const [crateGapsOpen, setCrateGapsOpen] = useState(true);
 
   // Clamp curve points into the library energy range whenever it changes.
   // Without this, default y=0.3 or y=0.9 values render outside the SVG viewport
@@ -2618,6 +2627,44 @@ function AppInner() {
                             })}
                           </div>
                         )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {crateGaps.length > 0 && (
+                  <div className="mt-4 rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
+                    <button
+                      onClick={() => setCrateGapsOpen(o => !o)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <span className="text-xs font-semibold text-[#e2e8f0]">Crate Suggestions</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#7c3aed]/10 border border-[#7c3aed]/30 text-[#a78bfa] font-bold">{crateGaps.length}</span>
+                      </div>
+                      <span className="text-[10px] text-[#475569]">{crateGapsOpen ? "▲" : "▼"}</span>
+                    </button>
+                    {crateGapsOpen && (
+                      <div className="border-t border-[#1e1e2e] divide-y divide-[#1e1e2e]">
+                        {crateGaps.map((gap, idx) => (
+                          <div key={idx} className="px-4 py-3 flex flex-col gap-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] text-[#475569] tabular-nums">
+                                Slot {Math.round(gap.setPosition * (generatedSet.length - 1)) + 1} of {generatedSet.length}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {gap.camelotNeeded.slice(0, 4).map(k => (
+                                  <span key={k} className="text-[10px] px-1 py-0.5 rounded bg-[#1e1e2e] text-[#94a3b8] font-mono">{k}</span>
+                                ))}
+                                <span className="text-[10px] text-[#475569] ml-1">{gap.bpmRange.min}–{gap.bpmRange.max} BPM</span>
+                              </div>
+                            </div>
+                            <p className="text-xs text-[#a78bfa] font-mono select-all">{gap.suggestedSearch}</p>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

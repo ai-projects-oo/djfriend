@@ -2,7 +2,8 @@
 import { describe, it, expect } from 'vitest'
 import { generateSet } from '../app/lib/setGenerator'
 import { isCamelotClockwise } from '../app/lib/camelot'
-import type { Song, DJPreferences, CurvePoint } from '../app/types'
+import { findCrateGaps } from '../app/lib/crateBuilder'
+import type { Song, DJPreferences, CurvePoint, SetTrack } from '../app/types'
 
 function makeSong(overrides: Partial<Song> & { file: string }): Song {
   return {
@@ -232,5 +233,113 @@ describe('energyProfile transition score', () => {
     const songs = [makeSong({ file: 'a.mp3', energyProfile: profile })]
     const set = generateSet(songs, { ...defaultPrefs, setDuration: 10 }, flatCurve)
     expect(set[0].energyProfile).toEqual(profile)
+  })
+})
+
+// ─── Phase 7: findCrateGaps ───────────────────────────────────────────────────
+
+function makeSetTrack(overrides: Partial<SetTrack> & { file: string }): SetTrack {
+  return {
+    filePath: overrides.file,
+    artist: 'Artist',
+    title: 'Title',
+    bpm: 128,
+    key: 'C Major',
+    camelot: '8B',
+    energy: 0.7,
+    genres: ['House'],
+    duration: 210,
+    slot: 0,
+    targetEnergy: 0.7,
+    harmonicWarning: false,
+    ...overrides,
+  }
+}
+
+describe('findCrateGaps', () => {
+  it('returns empty array when set is empty', () => {
+    expect(findCrateGaps([], defaultPrefs)).toEqual([])
+  })
+
+  it('returns empty array when all tracks are clean', () => {
+    const set = [
+      makeSetTrack({ file: 'a.mp3', slot: 0, energy: 0.7, targetEnergy: 0.7, harmonicWarning: false }),
+      makeSetTrack({ file: 'b.mp3', slot: 1, energy: 0.72, targetEnergy: 0.7, harmonicWarning: false }),
+    ]
+    expect(findCrateGaps(set, defaultPrefs)).toEqual([])
+  })
+
+  it('flags a slot with harmonicWarning as a gap', () => {
+    const set = [
+      makeSetTrack({ file: 'a.mp3', slot: 0, camelot: '8B', harmonicWarning: false }),
+      makeSetTrack({ file: 'b.mp3', slot: 1, camelot: '1A', harmonicWarning: true }),
+    ]
+    const gaps = findCrateGaps(set, defaultPrefs)
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0].setPosition).toBeCloseTo(1)
+  })
+
+  it('flags a slot with large energy error as a gap', () => {
+    const set = [
+      makeSetTrack({ file: 'a.mp3', slot: 0, energy: 0.4, targetEnergy: 0.4, harmonicWarning: false }),
+      makeSetTrack({ file: 'b.mp3', slot: 1, energy: 0.3, targetEnergy: 0.8, harmonicWarning: false }),
+    ]
+    const gaps = findCrateGaps(set, defaultPrefs)
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0].targetEnergy).toBe(0.8)
+  })
+
+  it('does not flag a slot with energy error <= 0.15', () => {
+    const set = [
+      makeSetTrack({ file: 'a.mp3', slot: 0, energy: 0.7, targetEnergy: 0.7, harmonicWarning: false }),
+      makeSetTrack({ file: 'b.mp3', slot: 1, energy: 0.58, targetEnergy: 0.7, harmonicWarning: false }),
+    ]
+    expect(findCrateGaps(set, defaultPrefs)).toHaveLength(0)
+  })
+
+  it('populates camelotNeeded from the previous track', () => {
+    const set = [
+      makeSetTrack({ file: 'a.mp3', slot: 0, camelot: '8B', harmonicWarning: false }),
+      makeSetTrack({ file: 'b.mp3', slot: 1, camelot: '1A', harmonicWarning: true }),
+    ]
+    const gaps = findCrateGaps(set, defaultPrefs)
+    expect(gaps[0].camelotNeeded).toContain('8B') // perfect
+    expect(gaps[0].camelotNeeded).toContain('8A') // relative
+    expect(gaps[0].camelotNeeded).toContain('7B') // compatible −1
+    expect(gaps[0].camelotNeeded).toContain('9B') // compatible +1
+  })
+
+  it('produces an empty camelotNeeded for slot 0 (no previous track)', () => {
+    const set = [
+      makeSetTrack({ file: 'a.mp3', slot: 0, energy: 0.2, targetEnergy: 0.8, harmonicWarning: false }),
+    ]
+    const gaps = findCrateGaps(set, defaultPrefs)
+    expect(gaps[0].camelotNeeded).toEqual([])
+  })
+
+  it('bpmRange is centred on the track BPM and clamped to prefs', () => {
+    const prefs: DJPreferences = { ...defaultPrefs, bpmMin: 125, bpmMax: 135 }
+    const set = [
+      makeSetTrack({ file: 'a.mp3', slot: 0, bpm: 130, harmonicWarning: true }),
+    ]
+    const gaps = findCrateGaps(set, prefs)
+    expect(gaps[0].bpmRange.min).toBe(125)
+    expect(gaps[0].bpmRange.max).toBe(135)
+  })
+
+  it('includes the genre in suggestedSearch when present', () => {
+    const prefs: DJPreferences = { ...defaultPrefs, genres: ['Techno'] }
+    const set = [makeSetTrack({ file: 'a.mp3', slot: 0, harmonicWarning: true })]
+    const gaps = findCrateGaps(set, prefs)
+    expect(gaps[0].suggestedSearch).toMatch(/techno/i)
+  })
+
+  it('setPosition is 0–1 normalised to set length', () => {
+    const set = Array.from({ length: 5 }, (_, i) =>
+      makeSetTrack({ file: `t${i}.mp3`, slot: i, energy: 0.2, targetEnergy: 0.9, harmonicWarning: false })
+    )
+    const gaps = findCrateGaps(set, defaultPrefs)
+    expect(gaps[0].setPosition).toBeCloseTo(0)
+    expect(gaps[4].setPosition).toBeCloseTo(1)
   })
 })

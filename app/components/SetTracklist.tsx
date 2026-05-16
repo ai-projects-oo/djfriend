@@ -124,6 +124,8 @@ interface Props {
   onExportSpotify?: () => void;
   onBulkReanalyze?: (indices: number[], bpmHint?: { min: number; max: number }) => Promise<void>;
   onBulkPatchBpm?: (indices: number[], multiplier: 2 | 0.5) => Promise<void>;
+  isElectron?: boolean;
+  isMacOS?: boolean;
 }
 
 async function apiFetch(url: string, options?: RequestInit) {
@@ -211,7 +213,7 @@ function MiniCurveStrip({ curve, tracks, onScrollTo }: {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, isElectron = false, isMacOS = false }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [setStartTime, setSetStartTime] = useState<string>(''); // HH:MM
@@ -230,6 +232,7 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
   const [editYear, setEditYear] = useState('');
   const [editComment, setEditComment] = useState('');
   const [saving, setSaving] = useState(false);
+  const [globalEditError, setGlobalEditError] = useState<string | null>(null);
   // Snapshots original BPMs so ×2/÷2 can be previewed live and Cancel can revert
   const originalBpmsRef = useRef<Map<number, number>>(new Map());
   const exportDropdownRef = useRef<HTMLDivElement>(null);
@@ -281,6 +284,8 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
   async function saveGlobalEdit() {
     if (selectedIndices.size === 0) { originalBpmsRef.current = new Map(); setGlobalEditMode(false); setSelectedIndices(new Set()); return; }
     setSaving(true);
+    setGlobalEditError(null);
+    let failCount = 0;
     const fieldBpm = parseFloat(editBpm);
     const yearVal = parseInt(editYear, 10);
     const normalizedCamelot = editCamelot.trim().toUpperCase();
@@ -313,12 +318,16 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
           ...(patch.bpm != null ? { bpm: patch.bpm as number } : {}),
           ...(patch.camelot ? { camelot: patch.camelot as string, key: patch.key as string } : {}),
         });
-      } catch { /* ignore individual failures */ }
+      } catch { failCount++; }
     }
     setSaving(false);
     originalBpmsRef.current = new Map();
     setGlobalEditMode(false);
     setSelectedIndices(new Set());
+    if (failCount > 0) {
+      setGlobalEditError(`${failCount} track${failCount === 1 ? '' : 's'} failed to save`);
+      setTimeout(() => setGlobalEditError(null), 5000);
+    }
   }
 
   function toggleColumn(key: ColumnKey) {
@@ -697,6 +706,12 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
                 className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-[#2a2a3a] text-[#94a3b8] text-xs hover:text-[#e2e8f0] hover:border-[#475569] disabled:opacity-50 transition-colors cursor-pointer">
                 Cancel
               </button>
+              {globalEditError && (
+                <span className="text-xs text-[#ef4444] flex items-center gap-1">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  {globalEditError}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -790,6 +805,8 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
                       setDragOverIdx(null);
                     }}
                     isDragOver={dragOverIdx === idx}
+                    isElectron={isElectron}
+                    isMacOS={isMacOS}
                   />
                 );
               })}

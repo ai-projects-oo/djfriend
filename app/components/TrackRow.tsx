@@ -28,6 +28,8 @@ interface Props {
   isDragOver?: boolean;
   isSelected?: boolean;
   onSelect?: () => void;
+  isElectron?: boolean;
+  isMacOS?: boolean;
 }
 
 import { CAMELOT_TO_KEY } from '../lib/camelot';
@@ -86,7 +88,7 @@ function TagPill({ label, type }: { label: string; type: keyof typeof TAG_COLORS
   );
 }
 
-export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, totalTracks = 20, tipConfig, isPreviewPlaying = false, onPreview, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver, isSelected, onSelect }: Props) {
+export default function TrackRow({ track, index, fitInfo, transition, visibleColumns, totalCols, totalTracks = 20, tipConfig, isPreviewPlaying = false, onPreview, onSwap, onToggleLock, onRemove, onUpdateTrack, onDragStart, onDragEnd, onDragOver, onDrop, isDragOver, isSelected, onSelect, isElectron = false, isMacOS = false }: Props) {
   const tc = tipConfig ?? { help: true, info: true, ai: true };
   // Open popups downward for top-half rows, upward for bottom-half rows
   const openDown = index < totalTracks / 2;
@@ -102,6 +104,7 @@ export default function TrackRow({ track, index, fitInfo, transition, visibleCol
   const [removing, setRemoving] = useState(false);
   const [swapFlash, setSwapFlash] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
   const [reanalyzing, setReanalyzing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const bpmInputRef = useRef<HTMLInputElement>(null);
@@ -171,8 +174,11 @@ async function handleReanalyze() {
       const data = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'Reanalysis failed');
       onUpdateTrack({ bpm: data.bpm, key: data.key, camelot: data.camelot, energy: data.energy });
-    } catch { /* silently ignore — no UI for error here */ }
-    finally { setReanalyzing(false); }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Reanalysis failed';
+      setReanalyzeError(msg);
+      setTimeout(() => setReanalyzeError(null), 4000);
+    } finally { setReanalyzing(false); }
   }
 
   async function saveEdit() {
@@ -273,7 +279,7 @@ async function handleReanalyze() {
                     </button>
                   )}
                 </>
-              ) : (
+              ) : isElectron && isMacOS ? (
                 <button
                   onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
                   className="p-1 rounded flex items-center justify-center text-[#7c3aed] hover:text-white hover:bg-[#7c3aed22] cursor-pointer transition-colors"
@@ -281,8 +287,8 @@ async function handleReanalyze() {
                 >
                   <Play size={12} fill="currentColor" />
                 </button>
-              )}
-              {track.filePath && (
+              ) : null}
+              {isElectron && track.filePath && (
                 <button
                   onClick={() => void fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath }) })}
                   className="p-1 rounded flex items-center justify-center text-[#475569] hover:text-[#94a3b8] hover:bg-[#94a3b811] cursor-pointer transition-colors"
@@ -594,6 +600,7 @@ async function handleReanalyze() {
             {track.locked && <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] flex-shrink-0" title="Locked" />}
             {(showTags || editing) && <span className="w-1.5 h-1.5 rounded-full bg-[#7c3aed] flex-shrink-0" title="Panel open" />}
             {reanalyzing && <span className="text-[10px] text-[#475569] animate-pulse">…</span>}
+            {reanalyzeError && <span className="text-[10px] text-[#ef4444] max-w-[120px] truncate" title={reanalyzeError}>⚠ {reanalyzeError}</span>}
 
             <button
               onClick={() => setMenuOpen(o => !o)}
@@ -619,13 +626,15 @@ async function handleReanalyze() {
                 <div className="h-px bg-[#1e1e2e] my-1" />
 
                 {/* ── Play / Open ── */}
-                <button
-                  onClick={() => { setMenuOpen(false); void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) }); }}
-                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                >
-                  <Play size={13} className="w-3.5 flex-shrink-0" />
-                  Play in Apple Music
-                </button>
+                {isElectron && isMacOS && (
+                  <button
+                    onClick={() => { setMenuOpen(false); void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) }); }}
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    <Play size={13} className="w-3.5 flex-shrink-0" />
+                    Play in Apple Music
+                  </button>
+                )}
 
                 {track.spotifyId && (
                   <a

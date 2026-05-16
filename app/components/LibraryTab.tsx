@@ -168,8 +168,9 @@ function SortHeader({ col, label, sortKey, sortAsc, onSort }: { col: SortKey; la
 
 // ─── Context menu ─────────────────────────────────────────────────────────────
 
-function RowContextMenu({ menu, onGetInfo, onPlay, onReanalyze, onSendToGenerator, onDelete, onExportM3U, onClose }: {
+function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSendToGenerator, onDelete, onExportM3U, onClose }: {
   menu: ContextMenu;
+  selection: Set<string>;
   onGetInfo: (s: Song) => void;
   onPlay: (s: Song) => void;
   onReanalyze: (s: Song) => void;
@@ -200,7 +201,9 @@ function RowContextMenu({ menu, onGetInfo, onPlay, onReanalyze, onSendToGenerato
       {sep()}
       {item("Re-analyze Audio", () => onReanalyze(menu.song))}
       {item("Export as M3U", () => onExportM3U(menu.song))}
-      {onSendToGenerator && item("Send to Set Generator", () => onSendToGenerator([menu.song.file]))}
+      {onSendToGenerator && selection.has(menu.song.file) && selection.size > 1
+        ? item(`Send ${selection.size} selected to Set Generator`, () => onSendToGenerator([...selection]))
+        : onSendToGenerator && item("Send to Set Generator", () => onSendToGenerator([menu.song.file]))}
       {sep()}
       {item("Delete from Library", () => onDelete(menu.song), true)}
     </div>
@@ -766,6 +769,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
       {contextMenu && (
         <RowContextMenu
           menu={contextMenu}
+          selection={selected}
           onGetInfo={s => setInfoSong(s)}
           onPlay={s => setNowPlaying(s)}
           onReanalyze={handleReanalyze}

@@ -799,14 +799,37 @@ async function handleReanalyze() {
                   </button>
                 </div>
               </div>
-              <div className="flex flex-col gap-1 w-16">
-                <label className="text-[10px] text-[#475569] uppercase tracking-wider">Key</label>
-                <input
-                  value={editCamelot}
-                  onChange={e => setEditCamelot(e.target.value)}
-                  placeholder="e.g. 7A"
-                  className="bg-[#1a1a2e] border border-[#2a2a3a] rounded px-2 py-1 text-xs font-mono text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full"
-                />
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-[#475569] uppercase tracking-wider">Key {editCamelot && <span className="font-mono normal-case text-[#a78bfa]">{editCamelot.toUpperCase()}</span>}</label>
+                <div className="flex flex-col gap-0.5">
+                  {(['B', 'A'] as const).map(letter => (
+                    <div key={letter} className="flex gap-0.5">
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const num = i + 1;
+                        const key = `${num}${letter}`;
+                        const active = editCamelot.toUpperCase() === key;
+                        const cc = camelotColor(key);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setEditCamelot(key)}
+                            className="w-6 h-5 rounded text-[9px] font-mono font-semibold transition-all cursor-pointer"
+                            style={{
+                              backgroundColor: active ? cc : cc + '18',
+                              color: active ? '#fff' : cc,
+                              border: `1px solid ${active ? cc : cc + '44'}`,
+                            }}
+                            title={CAMELOT_TO_KEY[key.toLowerCase()] ?? key}
+                          >
+                            {num}
+                          </button>
+                        );
+                      })}
+                      <span className="text-[9px] text-[#334155] ml-0.5 self-center">{letter}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="flex items-end gap-2 pb-0.5">
                 <button

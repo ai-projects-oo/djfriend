@@ -169,6 +169,14 @@ export interface DiscogsCollectionEntry {
   releases:       DiscogsRelease[];
 }
 
+export interface CrateGap {
+  setPosition:   number;              // 0–1, where in the set the gap appears
+  targetEnergy:  number;              // desired energy at this position
+  camelotNeeded: string[];            // compatible keys from the camelot wheel
+  bpmRange:      { min: number; max: number };
+  suggestedSearch: string;            // e.g. "techno 128–132 BPM 6A 6B energy 0.8+"
+}
+
 export interface SetPlan {
   curve:          CurvePoint[];
   bpmMin:         number;

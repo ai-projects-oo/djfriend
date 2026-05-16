@@ -375,18 +375,9 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
     [generatedSet, library, prefs],
   );
 
-  const handleSwapTrack = useCallback(
-    (index: number) => {
-      setSwapModal({ index, suggestions: buildSwapSuggestions(index) });
-    },
-    [buildSwapSuggestions],
-  );
-
-  const applySwapSuggestion = useCallback(
-    (song: Song) => {
+  const applySongAtIndex = useCallback(
+    (index: number, song: Song) => {
       setGeneratedSet((prev) => {
-        if (!swapModal) return prev;
-        const index = swapModal.index;
         if (index < 0 || index >= prev.length) return prev;
         const previousTrack = index > 0 ? prev[index - 1] : null;
         const next = [...prev];
@@ -410,9 +401,29 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
         }
         return next;
       });
+    },
+    [],
+  );
+
+  const handleSwapTrack = useCallback(
+    (index: number) => {
+      const suggestions = buildSwapSuggestions(index);
+      if (suggestions.length > 0) {
+        applySongAtIndex(index, suggestions[0].song);
+      } else {
+        setSwapModal({ index, suggestions });
+      }
+    },
+    [buildSwapSuggestions, applySongAtIndex],
+  );
+
+  const applySwapSuggestion = useCallback(
+    (song: Song) => {
+      if (!swapModal) return;
+      applySongAtIndex(swapModal.index, song);
       setSwapModal(null);
     },
-    [swapModal],
+    [swapModal, applySongAtIndex],
   );
 
   const handleLoadToSet = useCallback((songs: Song[]) => {

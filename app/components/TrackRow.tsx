@@ -19,7 +19,7 @@ interface Props {
   onUpdateTrack: (tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => void;
   tipConfig?: import('../types').TipConfig;
   isPreviewPlaying?: boolean;
-  onPreview?: (filePath: string) => void;
+  onPreview?: (filePath: string, seekTo?: number) => void;
   // drag-to-reorder
   onDragStart?: () => void;
   onDragEnd?: () => void;
@@ -261,15 +261,26 @@ async function handleReanalyze() {
             </span>
             <div className="hidden group-hover:flex items-center gap-1">
               {track.filePath && onPreview ? (
-                <button
-                  onClick={() => onPreview(track.filePath!)}
-                  className={`flex items-center justify-center cursor-pointer transition-colors ${isPreviewPlaying ? 'text-white' : 'text-[#7c3aed] hover:text-white'}`}
-                  title={isPreviewPlaying ? 'Pause preview' : 'Preview'}
-                >
-                  {isPreviewPlaying
-                    ? <Pause size={13} fill="currentColor" />
-                    : <Play size={13} fill="currentColor" />}
-                </button>
+                <>
+                  <button
+                    onClick={() => onPreview(track.filePath!)}
+                    className={`flex items-center justify-center cursor-pointer transition-colors ${isPreviewPlaying ? 'text-white' : 'text-[#7c3aed] hover:text-white'}`}
+                    title={isPreviewPlaying ? 'Pause preview' : 'Preview from start'}
+                  >
+                    {isPreviewPlaying
+                      ? <Pause size={13} fill="currentColor" />
+                      : <Play size={13} fill="currentColor" />}
+                  </button>
+                  {track.duration && track.duration > 45 && (
+                    <button
+                      onClick={() => onPreview(track.filePath!, Math.max(0, track.duration! - 30))}
+                      className="flex items-center justify-center text-[#475569] hover:text-[#a78bfa] cursor-pointer transition-colors text-[9px] font-mono leading-none"
+                      title="Preview last 30s (outro)"
+                    >
+                      −30s
+                    </button>
+                  )}
+                </>
               ) : (
                 <button
                   onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}

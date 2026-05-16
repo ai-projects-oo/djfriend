@@ -122,7 +122,7 @@ interface Props {
   tipConfig?: import('../types').TipConfig;
   previewFile?: string | null;
   previewPlaying?: boolean;
-  onPreview?: (filePath: string) => void;
+  onPreview?: (filePath: string, seekTo?: number) => void;
   onSwapTrack: (index: number) => void;
   onToggleLock: (index: number) => void;
   onRemoveTrack: (index: number) => void;
@@ -222,6 +222,7 @@ function MiniCurveStrip({ curve, tracks, onScrollTo }: {
 export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [setStartTime, setSetStartTime] = useState<string>(''); // HH:MM
   const [actionsOpen, setActionsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadVisibleColumns);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
@@ -441,6 +442,18 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Set start time clock */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-[10px] text-[#475569] whitespace-nowrap" htmlFor="set-start-time">Starts at</label>
+            <input
+              id="set-start-time"
+              type="time"
+              value={setStartTime}
+              onChange={e => setSetStartTime(e.target.value)}
+              className="bg-[#12121a] border border-[#2a2a3a] rounded px-2 py-1 text-xs text-[#94a3b8] focus:outline-none focus:border-[#7c3aed] cursor-pointer"
+              aria-label="Set start time"
+            />
+          </div>
           {/* Column chooser */}
           <div className="relative" ref={columnsDropdownRef}>
             <button
@@ -507,17 +520,30 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
                 </button>
                 <button
                   onClick={() => {
-                    const OVERLAP = 120; // 2 min crossfade overlap
-                    let cursor = 0;
+                    const OVERLAP = 120;
+                    let cursorSec = 0;
+                    const [startH, startM] = setStartTime
+                      ? setStartTime.split(':').map(Number)
+                      : [0, 0];
+                    const startTotalMin = startH * 60 + startM;
                     const lines = tracks.map((t) => {
-                      const h = Math.floor(cursor / 3600);
-                      const m = Math.floor((cursor % 3600) / 60);
-                      const s = cursor % 60;
-                      const ts = h > 0
-                        ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-                        : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                      const elapsedMin = startTotalMin + Math.floor(cursorSec / 60);
+                      const clockH = Math.floor(elapsedMin / 60) % 24;
+                      const clockM = elapsedMin % 60;
+                      const elapsedS = cursorSec % 60;
+                      const ts = setStartTime
+                        ? `${String(clockH).padStart(2, '0')}:${String(clockM).padStart(2, '0')}`
+                        : (() => {
+                            const h = Math.floor(cursorSec / 3600);
+                            const m = Math.floor((cursorSec % 3600) / 60);
+                            const s = cursorSec % 60;
+                            return h > 0
+                              ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+                              : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                          })();
+                      void elapsedS; // used only when no start time
                       const line = `${ts}  ${t.artist} — ${t.title}`;
-                      cursor += Math.max(0, Math.round(t.duration ?? 210) - OVERLAP);
+                      cursorSec += Math.max(0, Math.round(t.duration ?? 210) - OVERLAP);
                       return line;
                     });
                     void navigator.clipboard.writeText(lines.join('\n'));
@@ -526,7 +552,7 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
                   className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
                   <CopyIcon size={14} className="shrink-0 opacity-60" />
-                  Copy timestamps
+                  {setStartTime ? 'Copy clock times' : 'Copy timestamps'}
                 </button>
                 <button
                   onClick={() => { downloadM3U(tracks); onExport?.(); setExportOpen(false); }}

@@ -139,7 +139,7 @@ export default function OnboardingModal({
           {options.map((opt) => (
             <button
               key={opt.id}
-              onClick={() => { opt.action(); onDismiss(); }}
+              onClick={() => opt.action()}
               onMouseEnter={() => setHovered(opt.id)}
               onMouseLeave={() => setHovered(null)}
               className="flex items-center gap-4 w-full text-left px-4 py-3.5 rounded-xl border transition-all cursor-pointer"
@@ -183,7 +183,7 @@ export default function OnboardingModal({
           <div className="flex items-center gap-2">
             {!hasSpotifyCredentials && (
               <button
-                onClick={() => { onOpenSettings(); onDismiss(); }}
+                onClick={() => onOpenSettings()}
                 className="hover:text-[#64748b] transition-colors cursor-pointer"
               >
                 Connect Spotify →

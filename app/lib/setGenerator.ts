@@ -205,7 +205,10 @@ function generateSetOnce(
   const avgDuration =
     candidatePool.reduce((sum, s) => sum + (s.duration ?? FALLBACK_DURATION), 0) / candidatePool.length;
   const trackSlotDuration = avgDuration + GAP_SECONDS;
-  const estCount = unlimited ? candidatePool.length : Math.max(1, Math.floor(budgetSeconds / trackSlotDuration));
+  const MAX_UNCONSTRAINED = 60;
+  const estCount = unlimited
+    ? Math.min(candidatePool.length, MAX_UNCONSTRAINED)
+    : Math.max(1, Math.floor(budgetSeconds / trackSlotDuration));
   const maxCount = Math.min(estCount, candidatePool.length);
 
   const affinityKey = getAffinityKey(prefs.venueType, prefs.setPhase);

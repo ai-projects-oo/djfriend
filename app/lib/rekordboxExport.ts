@@ -26,6 +26,7 @@ function isAbsolutePath(p: string): boolean {
 }
 
 function resolveTrackPath(track: SetTrack, songsFolder: string): string {
+  if (track.spotifyOnly && track.spotifyId) return `spotify:track:${track.spotifyId}`;
   const src = (track.filePath ?? track.file).trim();
   if (!src) return src;
   if (isAbsolutePath(src)) return src;
@@ -65,11 +66,12 @@ export function generateRekordboxXml(tracks: SetTrack[], playlistName = 'DJFrien
   const trackNodes = tracks.map((t, i) => {
     const id       = i + 1;
     const path     = resolveTrackPath(t, songsFolder);
-    const location = toLocation(path);
+    const location = path.startsWith('spotify:') ? path : toLocation(path);
     const bpm      = t.bpm > 0 ? t.bpm.toFixed(2) : '0.00';
     const duration = t.duration != null ? Math.round(t.duration) : 0;
     const tonality = CAMELOT_TO_TONALITY[t.camelot] ?? '';
     const added    = t.dateAdded ? isoDate(t.dateAdded) : today;
+    const kind     = t.spotifyOnly ? 'Streaming' : 'MP3 File';
 
     return [
       `    <TRACK`,
@@ -78,7 +80,7 @@ export function generateRekordboxXml(tracks: SetTrack[], playlistName = 'DJFrien
       `      Artist="${escapeXml(t.artist)}"`,
       `      Album=""`,
       `      Genre="${escapeXml(t.genres?.[0] ?? '')}"`,
-      `      Kind="MP3 File"`,
+      `      Kind="${kind}"`,
       `      TotalTime="${duration}"`,
       `      AverageBpm="${bpm}"`,
       `      DateAdded="${added}"`,

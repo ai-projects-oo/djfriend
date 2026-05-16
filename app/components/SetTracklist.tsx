@@ -126,10 +126,12 @@ interface Props {
   onBulkPatchBpm?: (indices: number[], multiplier: 2 | 0.5) => Promise<void>;
   isElectron?: boolean;
   isMacOS?: boolean;
+  hasAttemptedGenerate?: boolean;
 }
 
 async function apiFetch(url: string, options?: RequestInit) {
   const res = await fetch(url, options);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 
@@ -213,7 +215,7 @@ function MiniCurveStrip({ curve, tracks, onScrollTo }: {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, isElectron = false, isMacOS = false }: Props) {
+export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, isElectron = false, isMacOS = false, hasAttemptedGenerate = false }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [setStartTime, setSetStartTime] = useState<string>(''); // HH:MM
@@ -376,11 +378,19 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
   }, [actionsOpen]);
 
   if (tracks.length === 0) {
+    const isFilterBlocked = libraryLoaded && hasAttemptedGenerate;
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
-        <span className="text-4xl">🎵</span>
+      <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3 text-center px-8">
+        <span className="text-4xl">{isFilterBlocked ? '🔍' : '🎵'}</span>
         {!libraryLoaded ? (
           <p className="text-sm">Load a library above to get started.</p>
+        ) : isFilterBlocked ? (
+          <>
+            <p className="text-sm text-[#64748b]">No tracks matched your current settings.</p>
+            <p className="text-[11px] text-[#334155] max-w-xs leading-relaxed">
+              Try widening your BPM range, reducing genre filters, or switching source to Full Library.
+            </p>
+          </>
         ) : (
           <p className="text-sm">Hit ▶ to generate your set.</p>
         )}

@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
-import type { SetTrack, DJPreferences } from '../types';
+import type { SetTrack, DJPreferences, CurvePoint } from '../types';
 import TrackRow from './TrackRow';
 import { downloadM3U } from '../lib/m3uExport';
 import { downloadRekordboxXml } from '../lib/rekordboxExport';
 import { SpotifyIcon, RekordboxIcon, M3UIcon, CopyIcon } from './Icons';
 import { parseCamelot } from '../lib/camelot';
+import { sampleCurve } from '../lib/curveInterpolation';
+import { energyColor } from '../lib/theme';
 
 const CAMELOT_TO_KEY: Record<string, string> = {
   '1a': 'Ab minor', '1b': 'B major', '2a': 'Eb minor', '2b': 'F# major',
@@ -113,6 +115,7 @@ function computeFit(track: SetTrack, warnThreshold: number): FitInfo {
 interface Props {
   tracks: SetTrack[];
   prefs: DJPreferences;
+  curve?: CurvePoint[];
   libraryLoaded: boolean;
   energyCheckThreshold?: number;
   showRekordboxExport?: boolean;
@@ -141,9 +144,63 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
   return Math.round(totalSecs / 60);
 }
 
+function MiniCurveStrip({ curve, tracks, onScrollTo }: {
+  curve: CurvePoint[];
+  tracks: SetTrack[];
+  onScrollTo: (idx: number) => void;
+}) {
+  if (tracks.length < 2 || curve.length < 2) return null;
+  // viewBox 0 0 100 40, padded 3 units on each side
+  const PL = 3; const PR = 3; const PT = 4; const PB = 4;
+  const IW = 100 - PL - PR; const IH = 40 - PT - PB;
+
+  const steps = 80;
+  const pts = Array.from({ length: steps + 1 }, (_, i) => {
+    const t = i / steps;
+    const cy = sampleCurve(curve, t);
+    return `${i === 0 ? 'M' : 'L'}${(PL + t * IW).toFixed(2)},${(PT + (1 - cy) * IH).toFixed(2)}`;
+  }).join(' ');
+
+  // Fill path: close below the curve
+  const fillPts = `${pts} L${(PL + IW).toFixed(2)},${PT + IH} L${PL},${PT + IH} Z`;
+
+  return (
+    <div className="mb-2 rounded-lg border border-[#1e1e2e] bg-[#0d0d14] overflow-hidden" style={{ height: 40 }}>
+      <svg width="100%" height="40" viewBox="0 0 100 40" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="mcFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.03" />
+          </linearGradient>
+        </defs>
+        <path d={fillPts} fill="url(#mcFill)" />
+        <path d={pts} fill="none" stroke="#7c3aed" strokeWidth="0.8" opacity="0.7" />
+        {tracks.map((t, idx) => {
+          const x = PL + (idx / (tracks.length - 1)) * IW;
+          const y = PT + (1 - t.energy) * IH;
+          return (
+            <circle
+              key={idx}
+              cx={x}
+              cy={y}
+              r="1.8"
+              fill={energyColor(t.energy)}
+              opacity="0.85"
+              style={{ cursor: 'pointer' }}
+              onClick={() => onScrollTo(idx)}
+            >
+              <title>{t.artist} — {t.title}</title>
+            </circle>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
+export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -167,6 +224,11 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
   const columnsDropdownRef = useRef<HTMLDivElement>(null);
   const actionsDropdownRef = useRef<HTMLDivElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  function scrollToTrack(idx: number) {
+    const rows = tableContainerRef.current?.querySelectorAll('tbody tr');
+    rows?.[idx]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 
   function openGlobalEdit() {
     originalBpmsRef.current = new Map(tracks.map((t, i) => [i, t.bpm]));
@@ -547,6 +609,10 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
             </div>
           </div>
         </div>
+      )}
+
+      {curve && tracks.length >= 2 && (
+        <MiniCurveStrip curve={curve} tracks={tracks} onScrollTo={scrollToTrack} />
       )}
 
       {/* Table */}

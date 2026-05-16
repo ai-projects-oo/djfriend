@@ -2484,6 +2484,7 @@ function AppInner() {
                 <SetTracklist
                   tracks={generatedSet}
                   prefs={prefs}
+                  curve={curve}
                   libraryLoaded={library.length > 0}
                   energyCheckThreshold={energyCheckThreshold}
                   showRekordboxExport={hasRekordboxFolder}

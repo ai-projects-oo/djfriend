@@ -166,3 +166,64 @@ export function matchInLibrary(spotifyId: string, title: string, artist: string,
   }
   return best;
 }
+
+// ─── Spotify-native song creation ────────────────────────────────────────────
+
+const PITCH_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B'];
+const CAMELOT_MAJOR = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B'];
+const CAMELOT_MINOR = ['5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A'];
+
+export interface SpotifyAudioFeatures {
+  id: string;
+  tempo: number;
+  energy: number;
+  key: number;    // 0–11 pitch class; -1 = unknown
+  mode: number;   // 1=major, 0=minor
+  duration_ms: number;
+}
+
+export async function fetchAudioFeatures(
+  spotifyIds: string[],
+  token: string,
+): Promise<Map<string, SpotifyAudioFeatures>> {
+  const result = new Map<string, SpotifyAudioFeatures>();
+  const BATCH = 100;
+  for (let i = 0; i < spotifyIds.length; i += BATCH) {
+    const ids = spotifyIds.slice(i, i + BATCH).join(',');
+    const data = await spotifyGet<{ audio_features: (SpotifyAudioFeatures | null)[] }>(
+      `https://api.spotify.com/v1/audio-features?ids=${encodeURIComponent(ids)}`,
+      token,
+    );
+    for (const f of data.audio_features) {
+      if (f) result.set(f.id, f);
+    }
+  }
+  return result;
+}
+
+export function spotifyTrackToSong(
+  track: SpotifyImportTrack,
+  features: SpotifyAudioFeatures,
+): Song {
+  const pitchClass = features.key >= 0 ? features.key : 0;
+  const isMajor = features.mode === 1;
+  const camelot = isMajor ? CAMELOT_MAJOR[pitchClass] : CAMELOT_MINOR[pitchClass];
+  const key = `${PITCH_NAMES[pitchClass]} ${isMajor ? 'Major' : 'Minor'}`;
+  const bpm = Math.round(features.tempo * 10) / 10;
+  const energy = Math.round(features.energy * 1000) / 1000;
+  const duration = Math.round(features.duration_ms / 1000);
+
+  return {
+    file: `spotify:${track.spotifyId}`,
+    artist: track.artist,
+    title: track.title,
+    spotifyId: track.spotifyId,
+    bpm,
+    key,
+    camelot,
+    energy,
+    genres: [],
+    duration,
+    spotifyOnly: true,
+  };
+}

@@ -49,6 +49,7 @@ export interface Song {
   energyProfile?: EnergyProfile;
   discogsReleaseId?: number;
   discogsFromAPI?:   boolean;
+  spotifyOnly?:      boolean; // true = no local file; sourced entirely from Spotify audio features
 }
 
 export interface SetTrack extends Song {

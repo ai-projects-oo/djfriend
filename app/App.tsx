@@ -16,12 +16,15 @@ import {
   getPendingExport,
   clearPendingExport,
   searchTracksOnSpotify,
+  getStoredToken,
 } from "./lib/spotifyExport";
 import {
   getPendingImport,
   clearPendingImport,
   fetchUserPlaylists,
   findSongsForImport,
+  fetchAudioFeatures,
+  spotifyTrackToSong,
 } from "./lib/spotifyImport";
 import { downloadM3U } from "./lib/m3uExport";
 import { SpotifyIcon, M3UIcon } from "./components/Icons";
@@ -38,6 +41,7 @@ import { transitionFeatures } from "./lib/mlFeatures";
 import { blendModels, isValidModelWeights } from "./lib/mlModel";
 import { SCORE_THRESHOLDS } from "./lib/setScore";
 import { findCrateGaps } from "./lib/crateBuilder";
+import { generateSet } from "./lib/setGenerator";
 import VenuePlannerPanel from "./components/VenuePlannerPanel";
 import SuggestionsStrip from "./components/SuggestionsStrip";
 import CratesTab from "./components/CratesTab";
@@ -685,6 +689,30 @@ function AppInner() {
       setActiveTab("Set Generator");
     },
     [library, handleLoadToSet, setPlaylistFilterIds],
+  );
+
+  const handleGenerateFromSpotify = useCallback(
+    async (entry: import("./types").ImportEntry) => {
+      const token = getStoredToken();
+      if (!token) return;
+      const localSongs = findSongsForImport(entry.tracks, library);
+      const localIds = new Set(localSongs.map(s => s.spotifyId).filter(Boolean));
+      const unmatched = entry.tracks.filter(
+        t => !t.inLibrary && !t.unavailable && t.spotifyId && !localIds.has(t.spotifyId),
+      );
+      const featureMap = unmatched.length > 0
+        ? await fetchAudioFeatures(unmatched.map(t => t.spotifyId), token).catch(() => new Map())
+        : new Map();
+      const spotifySongs = unmatched
+        .filter(t => featureMap.has(t.spotifyId))
+        .map(t => spotifyTrackToSong(t, featureMap.get(t.spotifyId)!));
+      const pool = [...localSongs, ...spotifySongs];
+      if (pool.length === 0) return;
+      const set = generateSet(pool, prefs, curve);
+      setGeneratedSet(set);
+      setActiveTab("Set Generator");
+    },
+    [library, prefs, curve, setGeneratedSet],
   );
 
   const loadSettings = useCallback(() => {
@@ -2897,6 +2925,15 @@ function AppInner() {
                         className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#7c3aed] hover:text-[#a78bfa] disabled:hover:text-[#475569]"
                       >
                         + Set
+                      </button>
+                      <button
+                        onClick={() => void handleGenerateFromSpotify(entry)}
+                        disabled={entry.tracks.filter(t => !t.unavailable).length === 0}
+                        aria-label="Generate a set from full Spotify playlist (includes unmatched tracks)"
+                        title={`Generate from full playlist via Spotify (${entry.tracks.filter(t => !t.unavailable).length} tracks)`}
+                        className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#1db954] hover:text-[#4ade80] disabled:hover:text-[#475569]"
+                      >
+                        ⚡ Spotify
                       </button>
                       <a
                         href={`https://open.spotify.com/playlist/${entry.playlistId}`}

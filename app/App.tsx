@@ -555,12 +555,18 @@ function AppInner() {
     return min < max ? { min: Math.round(min * 100) / 100, max: Math.round(max * 100) / 100 } : null;
   }, [library, effectiveFilterFiles]);
 
-  const crateGaps = useMemo(
-    () => setScore && (setScore.harmonicRate > 0.2 || setScore.avgEnergyError > 0.15)
-      ? findCrateGaps(generatedSet, prefs)
-      : [],
-    [generatedSet, prefs, setScore],
+  const crateGapsEligible = useMemo(
+    () => Boolean(setScore && (setScore.harmonicRate > 0.2 || setScore.avgEnergyError > 0.15)),
+    [setScore],
   );
+  const [crateGapsRequested, setCrateGapsRequested] = useState(false);
+  const crateGaps = useMemo(
+    () => crateGapsRequested && crateGapsEligible ? findCrateGaps(generatedSet, prefs) : [],
+    [generatedSet, prefs, crateGapsEligible, crateGapsRequested],
+  );
+
+  // Reset analysis request when the set changes
+  useEffect(() => { setCrateGapsRequested(false); }, [generatedSet]);
 
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
   const [crateGapsOpen, setCrateGapsOpen] = useState(true);
@@ -2664,6 +2670,20 @@ function AppInner() {
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {crateGapsEligible && !crateGapsRequested && (
+                  <div className="mt-4">
+                    <button
+                      onClick={() => { setCrateGapsRequested(true); setCrateGapsOpen(true); }}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-[#7c3aed]/30 text-[#a78bfa] text-xs hover:border-[#7c3aed]/60 hover:bg-[#7c3aed]/5 transition-colors cursor-pointer"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                      </svg>
+                      Analyse gaps
+                    </button>
                   </div>
                 )}
 

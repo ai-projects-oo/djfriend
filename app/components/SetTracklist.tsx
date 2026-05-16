@@ -177,6 +177,25 @@ function MiniCurveStrip({ curve, tracks, onScrollTo }: {
         <path d={pts} fill="none" stroke="#7c3aed" strokeWidth="0.8" opacity="0.7" />
         {tracks.map((t, idx) => {
           const x = PL + (idx / (tracks.length - 1)) * IW;
+          const targetEnergy = sampleCurve(curve, idx / (tracks.length - 1));
+          const energyError = Math.abs(t.energy - targetEnergy);
+          const isHotspot = t.harmonicWarning || energyError > 0.15;
+          if (!isHotspot) return null;
+          const color = t.harmonicWarning ? '#f87171' : '#fb923c';
+          return (
+            <line
+              key={`h${idx}`}
+              x1={x} y1={PT}
+              x2={x} y2={PT + IH}
+              stroke={color}
+              strokeWidth="0.7"
+              opacity="0.55"
+              style={{ pointerEvents: 'none' }}
+            />
+          );
+        })}
+        {tracks.map((t, idx) => {
+          const x = PL + (idx / (tracks.length - 1)) * IW;
           const y = PT + (1 - t.energy) * IH;
           return (
             <circle
@@ -485,6 +504,29 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
                 >
                   <CopyIcon size={14} className="shrink-0 opacity-60" />
                   Copy as text
+                </button>
+                <button
+                  onClick={() => {
+                    const OVERLAP = 120; // 2 min crossfade overlap
+                    let cursor = 0;
+                    const lines = tracks.map((t) => {
+                      const h = Math.floor(cursor / 3600);
+                      const m = Math.floor((cursor % 3600) / 60);
+                      const s = cursor % 60;
+                      const ts = h > 0
+                        ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+                        : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                      const line = `${ts}  ${t.artist} — ${t.title}`;
+                      cursor += Math.max(0, Math.round(t.duration ?? 210) - OVERLAP);
+                      return line;
+                    });
+                    void navigator.clipboard.writeText(lines.join('\n'));
+                    setExportOpen(false);
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                >
+                  <CopyIcon size={14} className="shrink-0 opacity-60" />
+                  Copy timestamps
                 </button>
                 <button
                   onClick={() => { downloadM3U(tracks); onExport?.(); setExportOpen(false); }}

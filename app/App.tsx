@@ -564,6 +564,7 @@ function AppInner() {
 
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
   const [crateGapsOpen, setCrateGapsOpen] = useState(true);
+  const [spotifyGeneratingId, setSpotifyGeneratingId] = useState<string | null>(null);
 
   // Clamp curve points into the library energy range whenever it changes.
   // Without this, default y=0.3 or y=0.9 values render outside the SVG viewport
@@ -695,22 +696,27 @@ function AppInner() {
     async (entry: import("./types").ImportEntry) => {
       const token = getStoredToken();
       if (!token) return;
-      const localSongs = findSongsForImport(entry.tracks, library);
-      const localIds = new Set(localSongs.map(s => s.spotifyId).filter(Boolean));
-      const unmatched = entry.tracks.filter(
-        t => !t.inLibrary && !t.unavailable && t.spotifyId && !localIds.has(t.spotifyId),
-      );
-      const featureMap = unmatched.length > 0
-        ? await fetchAudioFeatures(unmatched.map(t => t.spotifyId), token).catch(() => new Map())
-        : new Map();
-      const spotifySongs = unmatched
-        .filter(t => featureMap.has(t.spotifyId))
-        .map(t => spotifyTrackToSong(t, featureMap.get(t.spotifyId)!));
-      const pool = [...localSongs, ...spotifySongs];
-      if (pool.length === 0) return;
-      const set = generateSet(pool, prefs, curve);
-      setGeneratedSet(set);
-      setActiveTab("Set Generator");
+      setSpotifyGeneratingId(entry.id);
+      try {
+        const localSongs = findSongsForImport(entry.tracks, library);
+        const localIds = new Set(localSongs.map(s => s.spotifyId).filter(Boolean));
+        const unmatched = entry.tracks.filter(
+          t => !t.inLibrary && !t.unavailable && t.spotifyId && !localIds.has(t.spotifyId),
+        );
+        const featureMap = unmatched.length > 0
+          ? await fetchAudioFeatures(unmatched.map(t => t.spotifyId), token).catch(() => new Map())
+          : new Map();
+        const spotifySongs = unmatched
+          .filter(t => featureMap.has(t.spotifyId))
+          .map(t => spotifyTrackToSong(t, featureMap.get(t.spotifyId)!));
+        const pool = [...localSongs, ...spotifySongs];
+        if (pool.length === 0) return;
+        const set = generateSet(pool, prefs, curve);
+        setGeneratedSet(set);
+        setActiveTab("Set Generator");
+      } finally {
+        setSpotifyGeneratingId(null);
+      }
     },
     [library, prefs, curve, setGeneratedSet],
   );
@@ -2928,12 +2934,12 @@ function AppInner() {
                       </button>
                       <button
                         onClick={() => void handleGenerateFromSpotify(entry)}
-                        disabled={entry.tracks.filter(t => !t.unavailable).length === 0}
+                        disabled={entry.tracks.filter(t => !t.unavailable).length === 0 || spotifyGeneratingId === entry.id}
                         aria-label="Generate a set from full Spotify playlist (includes unmatched tracks)"
-                        title={`Generate from full playlist via Spotify (${entry.tracks.filter(t => !t.unavailable).length} tracks)`}
-                        className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#1db954] hover:text-[#4ade80] disabled:hover:text-[#475569]"
+                        title={spotifyGeneratingId === entry.id ? 'Fetching audio features…' : `Generate from full playlist via Spotify (${entry.tracks.filter(t => !t.unavailable).length} tracks)`}
+                        className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-[#1db954] hover:text-[#4ade80] disabled:hover:text-[#1db954]"
                       >
-                        ⚡ Spotify
+                        {spotifyGeneratingId === entry.id ? '…' : '⚡ Spotify'}
                       </button>
                       <a
                         href={`https://open.spotify.com/playlist/${entry.playlistId}`}

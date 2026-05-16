@@ -333,7 +333,14 @@ async function handleReanalyze() {
               onMouseEnter={() => setShowReasonTooltip(true)}
               onMouseLeave={() => setShowReasonTooltip(false)}
             >
-              <div className="text-sm font-medium text-[#e2e8f0] truncate">{track.title}</div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="text-sm font-medium text-[#e2e8f0] truncate">{track.title}</div>
+                {track.spotifyOnly && (
+                  <span className="shrink-0 text-[9px] px-1 py-0 rounded leading-4 font-medium" style={{ backgroundColor: '#1db95420', color: '#1db954' }} title="Streaming via Spotify">
+                    ▶ Spotify
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-[#64748b] truncate">{track.artist}</div>
               {tc.ai && track.selectionReason && track.selectionReason.length > 0 && (() => {
                 const qualityOrder = { good: 0, bonus: 1, ok: 2, info: 3, bad: 4 };

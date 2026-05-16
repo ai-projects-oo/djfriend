@@ -358,6 +358,7 @@ function AppInner() {
   // Visual-only loading state for the Generate CTA button
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasAttemptedGenerate, setHasAttemptedGenerate] = useState(false);
+  const [bulkOpError, setBulkOpError] = useState<string | null>(null);
 
   // Click-outside for source playlist dropdown
   useEffect(() => {
@@ -2423,6 +2424,12 @@ function AppInner() {
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
                     Generated Set
                   </h2>
+                  {bulkOpError && (
+                    <span className="flex items-center gap-1 text-xs text-[#ef4444]">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      {bulkOpError}
+                    </span>
+                  )}
                   {setScore !== null && (() => {
                     const scoreColor = setScore.total >= SCORE_THRESHOLDS.good
                       ? '#22c55e' : setScore.total >= SCORE_THRESHOLDS.fair
@@ -2484,6 +2491,7 @@ function AppInner() {
                   isMacOS={isMacOS}
                   hasAttemptedGenerate={hasAttemptedGenerate}
                   onBulkReanalyze={async (indices, bpmHint) => {
+                    let failCount = 0;
                     for (let n = 0; n < indices.length; n++) {
                       const t = generatedSet[indices[n]];
                       if (!t) continue;
@@ -2493,10 +2501,16 @@ function AppInner() {
                         const res = await apiFetch('/api/reanalyze-track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                         const d = await res.json() as { ok?: boolean; bpm?: number; key?: string; camelot?: string; energy?: number };
                         if (d.ok) handleUpdateTrack(indices[n], { bpm: d.bpm, key: d.key, camelot: d.camelot, energy: d.energy });
-                      } catch { /* ignore */ }
+                        else failCount++;
+                      } catch { failCount++; }
+                    }
+                    if (failCount > 0) {
+                      setBulkOpError(`${failCount} track${failCount === 1 ? '' : 's'} failed to re-analyze`);
+                      setTimeout(() => setBulkOpError(null), 5000);
                     }
                   }}
                   onBulkPatchBpm={async (indices, multiplier) => {
+                    let failCount = 0;
                     for (const idx of indices) {
                       const t = generatedSet[idx];
                       if (!t || !(t.bpm > 0)) continue;
@@ -2504,7 +2518,11 @@ function AppInner() {
                       try {
                         await apiFetch('/api/track-meta', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: t.file, patch: { bpm: newBpm } }) });
                         handleUpdateTrack(idx, { bpm: newBpm });
-                      } catch { /* ignore */ }
+                      } catch { failCount++; }
+                    }
+                    if (failCount > 0) {
+                      setBulkOpError(`${failCount} track${failCount === 1 ? '' : 's'} failed to update`);
+                      setTimeout(() => setBulkOpError(null), 5000);
                     }
                   }}
                 />

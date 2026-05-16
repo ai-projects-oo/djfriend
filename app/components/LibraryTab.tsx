@@ -690,7 +690,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                 <tr
                   key={song.file}
                   ref={isFirst ? missingRowRef : undefined}
-                  className={`group transition-colors cursor-default select-none ${isMissing ? "border-l-2 border-[#ef4444]/40" : ""} ${isSelected ? "bg-[#7c3aed]/10" : isPlaying ? "bg-[#7c3aed]/5" : "hover:bg-[#0d0d14]"}`}
+                  className={`group transition-colors cursor-default select-none ${isMissing ? "border-l-2 border-[#ef4444]/60" : ""} ${isSelected ? "bg-[#7c3aed]/10" : isPlaying ? "bg-[#7c3aed]/5" : "hover:bg-[#0d0d14]"}`}
                   onClick={e => handleRowClick(e, song, idx)}
                   onDoubleClick={() => { setNowPlaying(song); }}
                   onContextMenu={e => handleRowContextMenu(e, song)}
@@ -709,7 +709,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                     <span className="text-sm text-[#cbd5e1] block truncate">{song.title || "—"}</span>
                     {isMissing && (
                       <div className="flex gap-1 mt-0.5 flex-wrap">
-                        {missingFields.map(f => <span key={f} className="text-[9px] px-1 py-0.5 rounded bg-[#ef4444]/10 text-[#ef4444]/70 border border-[#ef4444]/20 leading-none">No {f}</span>)}
+                        {missingFields.map(f => <span key={f} className="text-[10px] px-1 py-0.5 rounded bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30 leading-none font-medium">No {f}</span>)}
                       </div>
                     )}
                   </td>

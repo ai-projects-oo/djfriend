@@ -405,18 +405,29 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
             <span className="text-[#e2e8f0] font-semibold">{tracks.length}</span> tracks
           </span>
           <span>
-            <span className="text-[#e2e8f0] font-semibold">~{duration}</span> min
-          </span>
-          <span>
-            Target: <span className="text-[#e2e8f0] font-semibold">{prefs.setDuration}</span> min
+            <span className="text-[#e2e8f0] font-semibold">~{duration}</span>
+            {prefs.setDuration != null && (
+              <>
+                <span className="text-[#475569]"> / </span>
+                <span className="text-[#e2e8f0] font-semibold">{prefs.setDuration}</span>
+              </>
+            )}
+            {' min'}
+            {prefs.setDuration != null && Math.abs(duration - prefs.setDuration) >= 1 && (
+              <span className={`ml-1.5 text-xs font-semibold ${duration > prefs.setDuration ? 'text-[#f59e0b]' : 'text-[#22c55e]'}`}>
+                {duration > prefs.setDuration ? `+${duration - prefs.setDuration}` : `${duration - prefs.setDuration}`}
+              </span>
+            )}
           </span>
           {badFitCount > 0 && (
             <button
               onClick={scrollToFirstBadFit}
-              className="text-[#ef4444] hover:text-[#f87171] transition-colors cursor-pointer text-xs"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors cursor-pointer border"
+              style={{ color: '#ef4444', borderColor: '#ef444433', backgroundColor: '#ef444410' }}
               title="Jump to first track needing replacement"
             >
-              ● {badFitCount} {badFitCount === 1 ? 'track needs' : 'tracks need'} replacing
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ef4444] flex-shrink-0" />
+              {badFitCount} {badFitCount === 1 ? 'needs replacing' : 'need replacing'}
             </button>
           )}
           {warnFitCount > 0 && (
@@ -425,10 +436,12 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
                 const el = tableContainerRef.current?.querySelector('[data-fit="warn"]');
                 el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
-              className="text-[#f59e0b] hover:text-[#fbbf24] transition-colors cursor-pointer text-xs"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors cursor-pointer border"
+              style={{ color: '#f59e0b', borderColor: '#f59e0b33', backgroundColor: '#f59e0b10' }}
               title="Jump to first track with fit warnings"
             >
-              ● {warnFitCount} {warnFitCount === 1 ? 'track has' : 'tracks have'} fit issues
+              <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] flex-shrink-0" />
+              {warnFitCount} {warnFitCount === 1 ? 'fit issue' : 'fit issues'}
             </button>
           )}
         </div>
@@ -723,7 +736,7 @@ export default function SetTracklist({ tracks, prefs, curve, libraryLoaded, ener
                 {visibleColumns.has('comment') && (
                   <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Comments</th>
                 )}
-                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">Next</th>
+                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">→ Transition</th>
                 <th className="py-2 pl-2 pr-4 text-right text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>

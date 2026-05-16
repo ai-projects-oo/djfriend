@@ -561,6 +561,7 @@ function AppInner() {
   );
 
   // Reset analysis request when the set changes
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setCrateGapsRequested(false); }, [generatedSet]);
 
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
@@ -1385,51 +1386,56 @@ function AppInner() {
 
         {/* Tab nav */}
         <div className="px-2 flex gap-1">
-          {(
-            [
-              "Set Generator",
-              "Library",
-              "History",
-              ...(hasDiscogsOAuth ? (["Crates"] as const) : ([] as const)),
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-                activeTab === tab
-                  ? "border-[#7c3aed] text-[#e2e8f0]"
-                  : "border-transparent text-[#475569] hover:text-[#94a3b8]"
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                {tab === "Crates" && (
-                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
-                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
-                  </svg>
-                )}
-                {tab}
-                {tab === "Library" && isInitializing && (
-                  <span className="w-3.5 h-3.5 rounded-full border-2 border-[#7c3aed]/30 border-t-[#7c3aed] animate-spin inline-block" />
-                )}
-                {tab === "Library" && !isInitializing && library.length > 0 && (
-                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                    {library.length}
-                  </span>
-                )}
-                {tab === "History" && history.length > 0 && (
-                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                    {history.length}
-                  </span>
-                )}
-                {tab === "Crates" && discogsCollection && (
-                  <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
-                    {discogsCollection.releases.length}
-                  </span>
-                )}
-              </span>
-            </button>
-          ))}
+          {(["Set Generator", "Library", "History", "Crates"] as const).map((tab) => {
+            const isCratesLocked = tab === "Crates" && !hasDiscogsOAuth;
+            return (
+              <button
+                key={tab}
+                onClick={() => {
+                  if (isCratesLocked) { setSettingsOpen(true); return; }
+                  setActiveTab(tab as typeof activeTab);
+                }}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+                  isCratesLocked
+                    ? "border-transparent text-[#2a2a3a] hover:text-[#475569]"
+                    : activeTab === tab
+                    ? "border-[#7c3aed] text-[#e2e8f0]"
+                    : "border-transparent text-[#475569] hover:text-[#94a3b8]"
+                }`}
+                title={isCratesLocked ? "Connect Discogs in Settings to unlock Crates" : undefined}
+              >
+                <span className="flex items-center gap-1.5">
+                  {tab === "Crates" && (
+                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
+                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
+                    </svg>
+                  )}
+                  {tab}
+                  {isCratesLocked && (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-50"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  )}
+                  {tab === "Library" && isInitializing && (
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-[#7c3aed]/30 border-t-[#7c3aed] animate-spin inline-block" />
+                  )}
+                  {tab === "Library" && !isInitializing && library.length > 0 && (
+                    <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                      {library.length}
+                    </span>
+                  )}
+                  {tab === "History" && history.length > 0 && (
+                    <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                      {history.length}
+                    </span>
+                  )}
+                  {tab === "Crates" && discogsCollection && (
+                    <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                      {discogsCollection.releases.length}
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
           {hasSpotifyCredentials && (
             <button
               onClick={() => setImportsModalOpen(true)}
@@ -1462,7 +1468,26 @@ function AppInner() {
             <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4">
 
               {/* Card 1: Source — visible when playlists exist (Apple Music or Spotify) */}
-              {(Object.keys(applePlaylistFiles).length > 0 || importHistory.length > 0) && (
+              {Object.keys(applePlaylistFiles).length === 0 && importHistory.length === 0 ? (
+                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-2.5">
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Source</span>
+                  <div className="flex flex-col gap-1.5 py-1">
+                    <p className="text-xs text-[#334155]">No playlists imported yet.</p>
+                    <p className="text-[11px] text-[#2a2a3a]">
+                      Import a Spotify playlist or load an Apple Music library to filter your generator source.
+                    </p>
+                    {hasSpotifyCredentials && (
+                      <button
+                        type="button"
+                        onClick={() => setImportsModalOpen(true)}
+                        className="mt-1 self-start px-2.5 py-1 rounded-md text-xs text-[#7c3aed] border border-[#7c3aed33] bg-[#7c3aed0d] hover:bg-[#7c3aed1a] transition-colors cursor-pointer"
+                      >
+                        Open Imports →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
                 <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
@@ -2425,13 +2450,13 @@ function AppInner() {
                     const tooltip = `Harmonic: ${Math.round((1 - setScore.harmonicRate) * 100)}%  ·  Energy fit: ${Math.round((1 - setScore.avgEnergyError) * 100)}%  ·  BPM flow: ${Math.round(setScore.bpmSmoothness * 100)}%`;
                     return (
                       <div
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-[#0d0d14] cursor-default"
-                        style={{ borderColor: `${scoreColor}33` }}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-[#0d0d14] cursor-default"
+                        style={{ borderColor: `${scoreColor}44` }}
                         title={tooltip}
                       >
-                        <span className="text-[10px] text-[#64748b] font-medium">Score</span>
-                        <span className="text-sm font-bold tabular-nums" style={{ color: scoreColor }}>{setScore.total}</span>
-                        <span className="text-[10px] text-[#334155]">/ 100</span>
+                        <span className="text-[10px] text-[#475569] font-medium uppercase tracking-wider">Score</span>
+                        <span className="text-xl font-bold tabular-nums leading-none" style={{ color: scoreColor }}>{setScore.total}</span>
+                        <span className="text-xs text-[#334155] font-medium">/ 100</span>
                       </div>
                     );
                   })()}

@@ -7,13 +7,13 @@ import { loadVinylStore, saveVinylStore, nextPosition, type VinylStore } from '.
 import { theme } from '../lib/theme';
 
 
-function printSticker(opts: {
+function buildStickerHtml(opts: {
   artist: string; title: string; year?: number;
   genres: string[]; styles: string[];
-  comment?: string; thumb?: string;
+  comment?: string;
   tracks?: VinylTrackEntry[];
-}) {
-  const { artist, title, year, genres, styles, comment, thumb, tracks = [] } = opts;
+}): string {
+  const { artist, title, year, genres, styles, comment, tracks = [] } = opts;
   const genre = [...genres.slice(0, 2), ...styles.slice(0, 1)].join(' · ');
 
   // Group tracks by side
@@ -50,12 +50,9 @@ function printSticker(opts: {
     @page { size: 3.5in 5in; margin: 0.12in; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { width: 3.26in; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; font-size: 7.5pt; }
-    .header { display: flex; gap: 0.12in; align-items: flex-start; padding-bottom: 0.1in; border-bottom: 1px solid #ddd; margin-bottom: 0.1in; }
-    .thumb { width: 0.7in; height: 0.7in; min-width: 0.7in; background: #111; overflow: hidden; border-radius: 2px; display: flex; align-items: center; justify-content: center; }
-    .thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .meta { flex: 1; overflow: hidden; }
-    .artist { font-size: 9pt; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .release-title { font-size: 8pt; color: #333; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header { padding-bottom: 0.1in; border-bottom: 1px solid #ddd; margin-bottom: 0.1in; }
+    .artist { font-size: 10pt; font-weight: 700; line-height: 1.2; }
+    .release-title { font-size: 8.5pt; color: #333; line-height: 1.2; }
     .sub { font-size: 6.5pt; color: #666; margin-top: 2px; }
     .release-comment { font-size: 6pt; color: #555; font-style: italic; margin-top: 3px; }
     .side-header { font-size: 6pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #999; margin: 0.08in 0 0.04in; }
@@ -68,24 +65,27 @@ function printSticker(opts: {
     .logo { font-size: 5pt; color: #ccc; text-align: right; margin-top: 0.1in; padding-top: 0.06in; border-top: 0.5px solid #eee; letter-spacing: 0.04em; }
   </style></head><body>
     <div class="header">
-      <div class="thumb">
-        ${thumb
-          ? `<img src="${thumb}" />`
-          : `<svg viewBox="0 0 80 80" width="48" height="48" fill="#888" opacity="0.3">
-               <circle cx="40" cy="40" r="38"/><circle cx="40" cy="40" r="24" fill="#fff"/>
-               <circle cx="40" cy="40" r="12" fill="#888"/><circle cx="40" cy="40" r="4" fill="#fff"/>
-             </svg>`}
-      </div>
-      <div class="meta">
-        <div class="artist">${artist}</div>
-        <div class="release-title">${title}</div>
-        <div class="sub">${[genre, year].filter(Boolean).join(' · ')}</div>
-        ${comment ? `<div class="release-comment">${comment}</div>` : ''}
-      </div>
+      <div class="artist">${artist}</div>
+      <div class="release-title">${title}</div>
+      <div class="sub">${[genre, year].filter(Boolean).join(' · ')}</div>
+      ${comment ? `<div class="release-comment">${comment}</div>` : ''}
     </div>
     ${tracksHtml || '<div style="color:#aaa;font-size:6.5pt;font-style:italic">No track data</div>'}
     <div class="logo">DJFriend</div>
-  </body></html>`);
+  </body></html>`;
+}
+
+function printHtml(html: string) {
+  const existing = document.getElementById('djfriend-print-frame');
+  if (existing) existing.remove();
+  const iframe = document.createElement('iframe');
+  iframe.id = 'djfriend-print-frame';
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;';
+  document.body.appendChild(iframe);
+  const win = iframe.contentWindow;
+  if (!win) return;
+  win.document.open();
+  win.document.write(html);
   win.document.close();
   setTimeout(() => { win.focus(); win.print(); }, 300);
 }
@@ -376,6 +376,7 @@ export default function CratesTab({
   const [vinylStore,      setVinylStore]      = useState<VinylStore>(() => loadVinylStore());
   const [autoImportProgress, setAutoImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [infoOpen, setInfoOpen] = useState<number | null>(null);
+  const [stickerHtml, setStickerHtml] = useState<string | null>(null);
   const [releaseInfoCache, setReleaseInfoCache] = useState<Map<number, {
     label?: string; catno?: string; country?: string; notes?: string;
     formats?: string[]; year?: number;
@@ -867,7 +868,7 @@ export default function CratesTab({
                         </svg>
                       </button>
                       <button type="button"
-                        onClick={() => printSticker({ artist: release.artist, title: release.title, year: release.year, genres: release.genres, styles: release.styles, comment, thumb: proxyThumb(release.thumb), tracks: vinylStore[release.releaseId]?.tracks })}
+                        onClick={() => setStickerHtml(buildStickerHtml({ artist: release.artist, title: release.title, year: release.year, genres: release.genres, styles: release.styles, comment, tracks: vinylStore[release.releaseId]?.tracks }))}
                         className="text-white/35 hover:text-white/80 transition-colors cursor-pointer" title="Print sticker">
                         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
                           <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
@@ -916,5 +917,36 @@ export default function CratesTab({
         </button>
       </div>
     </div>
+
+    {/* Sticker preview modal */}
+    {stickerHtml && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setStickerHtml(null)}>
+        <div className="flex flex-col gap-3 max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          {/* Preview iframe */}
+          <div className="bg-white rounded shadow-2xl overflow-hidden" style={{ width: 336, maxHeight: 'calc(90vh - 56px)', overflowY: 'auto' }}>
+            <iframe
+              srcDoc={stickerHtml}
+              style={{ width: 336, height: 480, border: 'none', display: 'block' }}
+              scrolling="no"
+            />
+          </div>
+          {/* Actions */}
+          <div className="flex gap-2 justify-end">
+            <button type="button" onClick={() => setStickerHtml(null)}
+              className="px-3 py-1.5 rounded border border-[#2a2a3a] text-[#64748b] text-[12px] hover:text-[#e2e8f0] transition-colors cursor-pointer">
+              Cancel
+            </button>
+            <button type="button" onClick={() => { printHtml(stickerHtml); setStickerHtml(null); }}
+              className="px-4 py-1.5 rounded bg-[#7c3aed] text-white text-[12px] hover:bg-[#6d28d9] transition-colors cursor-pointer flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+                <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
+                <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
+              </svg>
+              Print
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   );
 }

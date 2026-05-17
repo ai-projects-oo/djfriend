@@ -1,10 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { CurvePoint, ArcPreset, SetTrack } from '../types';
-import { buildSvgPath, sampleCurve } from '../lib/curveInterpolation';
+import { sampleCurve } from '../lib/curveInterpolation';
 
 const SVG_HEIGHT = 180;
-const HANDLE_RADIUS = 8;
+const HANDLE_RADIUS = 5;
 const PADDING = { top: 16, bottom: 24, left: 8, right: 8 };
 
 export const ARC_PRESETS: Record<ArcPreset, number[]> = {
@@ -80,10 +80,20 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, library
     [innerHeight, yMin, yMax, ySpan],
   );
 
-  const pathD = useMemo(
-    () => buildSvgPath(points, svgWidth, SVG_HEIGHT, 200),
-    [points, svgWidth],
-  );
+  // Build curve path in the same padded coordinate space used by handles/dots.
+  const pathD = useMemo(() => {
+    if (points.length < 2) return '';
+    const SAMPLES = 200;
+    let d = '';
+    for (let i = 0; i <= SAMPLES; i++) {
+      const x = i / SAMPLES;
+      const y = sampleCurve(points, x);
+      const sx = (PADDING.left + x * (svgWidth - PADDING.left - PADDING.right)).toFixed(2);
+      const sy = (PADDING.top + (1 - y) * (SVG_HEIGHT - PADDING.top - PADDING.bottom)).toFixed(2);
+      d += i === 0 ? `M ${sx} ${sy}` : ` L ${sx} ${sy}`;
+    }
+    return d;
+  }, [points, svgWidth]);
 
   // Energy gradient stops sampled from the curve
   const gradientStops = useMemo(() => {
@@ -137,7 +147,8 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, library
   // Rebuild path for fill under curve
   const fillPath = useMemo(() => {
     if (!pathD) return '';
-    return `${pathD} L ${(svgWidth - PADDING.right).toFixed(2)} ${SVG_HEIGHT} L ${PADDING.left} ${SVG_HEIGHT} Z`;
+    const bottom = SVG_HEIGHT - PADDING.bottom;
+    return `${pathD} L ${(svgWidth - PADDING.right).toFixed(2)} ${bottom} L ${PADDING.left} ${bottom} Z`;
   }, [pathD, svgWidth]);
 
   const currentCount = points.length;

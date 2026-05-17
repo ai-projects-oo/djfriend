@@ -37,16 +37,7 @@ function buildStickerHtml(opts: {
       </div>`).join('')}
   `).join('');
 
-  const existing = document.getElementById('djfriend-print-frame');
-  if (existing) existing.remove();
-  const iframe = document.createElement('iframe');
-  iframe.id = 'djfriend-print-frame';
-  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;';
-  document.body.appendChild(iframe);
-  const win = iframe.contentWindow;
-  if (!win) return;
-  win.document.open();
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sticker</title><style>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sticker</title><style>
     @page { size: 3.5in 5in; margin: 0.12in; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { width: 3.26in; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; font-size: 7.5pt; }

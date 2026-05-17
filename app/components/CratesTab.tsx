@@ -5,7 +5,6 @@ import type { ManualData } from '../lib/discogsManualData';
 import { saveManualData, saveRejected } from '../lib/discogsManualData';
 import { loadVinylStore, saveVinylStore, nextPosition, type VinylStore } from '../lib/vinylTracks';
 
-const CAMELOT_RE = /^(1[0-2]|[1-9])[AB]$/i;
 
 function printSticker(opts: {
   artist: string; title: string; year?: number;
@@ -250,15 +249,6 @@ function VinylTrackEditor({ releaseId, data, onChange }: {
 
   return (
     <div className="border-t border-[#ffffff10] mt-1 pt-2 flex flex-col gap-2">
-      {/* Release-level genre */}
-      <input
-        type="text"
-        value={data.genre ?? ''}
-        onChange={e => onChange({ ...data, genre: e.target.value || undefined })}
-        placeholder="Release genre…"
-        className={`w-full ${inputCls}`}
-      />
-
       {/* Track list */}
       {tracks.length > 0 && (
         <div className="flex flex-col gap-1">
@@ -368,19 +358,6 @@ export default function CratesTab({
     onRejectedChange(next);
   }, [rejectedMatches, onRejectedChange]);
 
-  const saveField = useCallback((releaseId: number, field: 'bpm' | 'camelot', raw: string) => {
-    const next    = new Map(manualData);
-    const current = next.get(releaseId) ?? {};
-    if (field === 'bpm') {
-      const n = parseFloat(raw);
-      next.set(releaseId, { ...current, bpm: (!Number.isNaN(n) && n > 0) ? Math.round(n) : undefined });
-    } else {
-      const v = raw.trim().toUpperCase();
-      next.set(releaseId, { ...current, camelot: CAMELOT_RE.test(v) ? v : undefined });
-    }
-    saveManualData(next);
-    onManualDataChange(next);
-  }, [manualData, onManualDataChange]);
 
   const saveComment = useCallback((releaseId: number) => {
     const val = commentRef.current?.value.trim() ?? '';
@@ -574,21 +551,20 @@ export default function CratesTab({
                     {release.year && <p className="text-[10px] font-semibold text-white/40 mt-0.5">{release.year}</p>}
                   </div>
 
-                  {/* BPM / key / energy */}
-                  {canEdit ? (
-                    <div className="flex items-center gap-1.5">
-                      <input type="number" placeholder="BPM"
-                        defaultValue={manual?.bpm ?? ''}
-                        onBlur={e => saveField(release.releaseId, 'bpm', e.target.value)}
-                        className="w-full rounded-md px-2 py-1.5 text-[12px] font-semibold bg-white/10 border border-white/20 text-white placeholder-white/30 focus:outline-none focus:border-[#7c3aed] focus:bg-white/15 transition-colors tabular-nums"
-                      />
-                      <input type="text" placeholder="Key"
-                        defaultValue={manual?.camelot ?? ''}
-                        onBlur={e => saveField(release.releaseId, 'camelot', e.target.value)}
-                        className="w-full rounded-md px-2 py-1.5 text-[12px] font-semibold bg-white/10 border border-white/20 text-[#a78bfa] placeholder-white/30 focus:outline-none focus:border-[#7c3aed] focus:bg-white/15 transition-colors uppercase"
-                      />
-                    </div>
-                  ) : (
+                  {/* Genre (always editable) */}
+                  <input
+                    type="text"
+                    placeholder="Genre…"
+                    defaultValue={vinylStore[release.releaseId]?.genre ?? ''}
+                    onBlur={e => {
+                      const existing = vinylStore[release.releaseId] ?? { tracks: [] };
+                      updateVinylData(release.releaseId, { ...existing, genre: e.target.value.trim() || undefined });
+                    }}
+                    className="w-full rounded-md px-2 py-1.5 text-[11px] bg-white/10 border border-white/20 text-white/80 placeholder-white/30 focus:outline-none focus:border-[#7c3aed] focus:bg-white/15 transition-colors"
+                  />
+
+                  {/* BPM / key / energy — matched releases only */}
+                  {!canEdit && (
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         {bpm     && <span className="text-[11px] font-semibold text-white/80 tabular-nums">{Math.round(bpm)} BPM</span>}

@@ -213,10 +213,11 @@ const CAMELOT_OPTIONS = [
   '1B','2B','3B','4B','5B','6B','7B','8B','9B','10B','11B','12B',
 ];
 
-function VinylTrackEditor({ releaseId, data, onChange }: {
+function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
   releaseId: number;
   data: VinylReleaseData;
   onChange: (d: VinylReleaseData) => void;
+  discogsGenre?: string;
 }) {
   const tracks = data.tracks;
 
@@ -301,9 +302,9 @@ function VinylTrackEditor({ releaseId, data, onChange }: {
                     </select>
                     <input
                       type="text"
-                      value={track.genre ?? data.genre ?? ''}
+                      value={track.genre ?? data.genre ?? discogsGenre ?? ''}
                       onChange={e => updateTrack(track.id, { genre: e.target.value || undefined })}
-                      placeholder="Genre"
+                      placeholder={discogsGenre ?? 'Genre'}
                       className={`w-16 ${inputCls}`}
                     />
                     <input
@@ -550,17 +551,24 @@ export default function CratesTab({
                     {release.year && <p className="text-[10px] font-semibold text-white/40 mt-0.5">{release.year}</p>}
                   </div>
 
-                  {/* Genre (always editable) */}
-                  <input
-                    type="text"
-                    placeholder="Genre…"
-                    defaultValue={vinylStore[release.releaseId]?.genre ?? ''}
-                    onBlur={e => {
-                      const existing = vinylStore[release.releaseId] ?? { tracks: [] };
-                      updateVinylData(release.releaseId, { ...existing, genre: e.target.value.trim() || undefined });
-                    }}
-                    className="w-full rounded-md px-2 py-1.5 text-[11px] bg-white/10 border border-white/20 text-white/80 placeholder-white/30 focus:outline-none focus:border-[#7c3aed] focus:bg-white/15 transition-colors"
-                  />
+                  {/* Genre — pre-filled from Discogs, user can override */}
+                  {(() => {
+                    const discogsGenre = [...release.genres, ...release.styles].filter(Boolean)[0];
+                    const storedGenre  = vinylStore[release.releaseId]?.genre;
+                    return (
+                      <input
+                        key={`genre-${release.releaseId}`}
+                        type="text"
+                        placeholder={discogsGenre ?? 'Genre…'}
+                        defaultValue={storedGenre ?? discogsGenre ?? ''}
+                        onBlur={e => {
+                          const existing = vinylStore[release.releaseId] ?? { tracks: [] };
+                          updateVinylData(release.releaseId, { ...existing, genre: e.target.value.trim() || undefined });
+                        }}
+                        className="w-full rounded-md px-2 py-1.5 text-[11px] bg-white/10 border border-white/20 text-white/80 placeholder-white/30 focus:outline-none focus:border-[#7c3aed] focus:bg-white/15 transition-colors"
+                      />
+                    );
+                  })()}
 
                   {/* BPM / key / energy — matched releases only */}
                   {!canEdit && (
@@ -681,6 +689,7 @@ export default function CratesTab({
                       releaseId={release.releaseId}
                       data={vinylStore[release.releaseId] ?? { tracks: [] }}
                       onChange={d => updateVinylData(release.releaseId, d)}
+                      discogsGenre={[...release.genres, ...release.styles].filter(Boolean)[0]}
                     />
                   )}
                 </div>

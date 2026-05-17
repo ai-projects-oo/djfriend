@@ -9,62 +9,85 @@ import { theme } from '../lib/theme';
 
 function printSticker(opts: {
   artist: string; title: string; year?: number;
-  bpm?: number; camelot?: string; genres: string[]; styles: string[];
+  genres: string[]; styles: string[];
   comment?: string; thumb?: string;
+  tracks?: VinylTrackEntry[];
 }) {
-  const { artist, title, year, bpm, camelot, genres, styles, comment, thumb } = opts;
+  const { artist, title, year, genres, styles, comment, thumb, tracks = [] } = opts;
   const genre = [...genres.slice(0, 2), ...styles.slice(0, 1)].join(' · ');
-  const win = window.open('', '_blank', 'width=600,height=400');
+
+  // Group tracks by side
+  const sides = new Map<string, VinylTrackEntry[]>();
+  for (const t of tracks) {
+    const side = t.position.match(/^([A-Za-z]+)/)?.[1].toUpperCase() ?? '?';
+    if (!sides.has(side)) sides.set(side, []);
+    sides.get(side)!.push(t);
+  }
+
+  const tracksHtml = [...sides.entries()].map(([side, sideTracks]) => `
+    <div class="side-header">Side ${side}</div>
+    ${sideTracks.map(t => `
+      <div class="track">
+        <div class="track-main">
+          <span class="pos">${t.position}</span>
+          <span class="tname">${t.title ?? '—'}</span>
+          <span class="tmeta">${[t.bpm ? `${t.bpm} BPM` : '', t.camelot ?? ''].filter(Boolean).join(' · ')}</span>
+        </div>
+        ${t.comment ? `<div class="track-comment">${t.comment}</div>` : ''}
+      </div>`).join('')}
+  `).join('');
+
+  const existing = document.getElementById('djfriend-print-frame');
+  if (existing) existing.remove();
+  const iframe = document.createElement('iframe');
+  iframe.id = 'djfriend-print-frame';
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;';
+  document.body.appendChild(iframe);
+  const win = iframe.contentWindow;
   if (!win) return;
+  win.document.open();
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sticker</title><style>
-    @page { size: 3.5in 2in; margin: 0; }
+    @page { size: 3.5in 5in; margin: 0.12in; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { width: 3.5in; height: 2in; font-family: 'Helvetica Neue', Arial, sans-serif;
-           background: #fff; display: flex; align-items: stretch; overflow: hidden; }
-    .thumb { width: 1.4in; min-width: 1.4in; background: #111;
-             display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    body { width: 3.26in; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; font-size: 7.5pt; }
+    .header { display: flex; gap: 0.12in; align-items: flex-start; padding-bottom: 0.1in; border-bottom: 1px solid #ddd; margin-bottom: 0.1in; }
+    .thumb { width: 0.7in; height: 0.7in; min-width: 0.7in; background: #111; overflow: hidden; border-radius: 2px; display: flex; align-items: center; justify-content: center; }
     .thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .vinyl-icon { opacity: 0.25; }
-    .info { flex: 1; padding: 0.18in 0.16in; display: flex; flex-direction: column; gap: 0.04in; }
-    .artist { font-size: 10pt; font-weight: 700; color: #111; line-height: 1.2;
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .title  { font-size: 8.5pt; color: #333; line-height: 1.2;
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .tags   { margin-top: 0.06in; display: flex; gap: 0.06in; align-items: center; flex-wrap: wrap; }
-    .badge  { font-size: 7pt; font-weight: 600; border: 1px solid #111; border-radius: 3px;
-              padding: 1px 5px; white-space: nowrap; }
-    .bpm    { font-size: 7pt; color: #333; white-space: nowrap; }
-    .genre  { font-size: 6.5pt; color: #555; margin-top: 0.04in;
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .comment { font-size: 6.5pt; color: #444; margin-top: auto; padding-top: 0.05in;
-               border-top: 0.5px solid #ddd; font-style: italic;
-               overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-    .logo   { font-size: 5pt; color: #bbb; margin-top: auto; text-align: right; letter-spacing: 0.03em; }
+    .meta { flex: 1; overflow: hidden; }
+    .artist { font-size: 9pt; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .release-title { font-size: 8pt; color: #333; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sub { font-size: 6.5pt; color: #666; margin-top: 2px; }
+    .release-comment { font-size: 6pt; color: #555; font-style: italic; margin-top: 3px; }
+    .side-header { font-size: 6pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #999; margin: 0.08in 0 0.04in; }
+    .track { margin-bottom: 0.05in; }
+    .track-main { display: flex; align-items: baseline; gap: 0.05in; }
+    .pos { font-size: 7pt; font-weight: 700; min-width: 0.2in; color: #555; }
+    .tname { flex: 1; font-size: 7.5pt; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tmeta { font-size: 6.5pt; color: #777; white-space: nowrap; }
+    .track-comment { font-size: 6pt; color: #888; font-style: italic; padding-left: 0.25in; margin-top: 1px; }
+    .logo { font-size: 5pt; color: #ccc; text-align: right; margin-top: 0.1in; padding-top: 0.06in; border-top: 0.5px solid #eee; letter-spacing: 0.04em; }
   </style></head><body>
-  <div class="thumb">
-    ${thumb
-      ? `<img src="${thumb}" />`
-      : `<svg class="vinyl-icon" viewBox="0 0 80 80" width="64" height="64" fill="#888">
-           <circle cx="40" cy="40" r="38"/><circle cx="40" cy="40" r="28" fill="#fff"/>
-           <circle cx="40" cy="40" r="24" fill="#888"/><circle cx="40" cy="40" r="16" fill="#fff"/>
-           <circle cx="40" cy="40" r="12" fill="#888"/><circle cx="40" cy="40" r="4" fill="#fff"/>
-         </svg>`}
-  </div>
-  <div class="info">
-    <div class="artist">${artist}</div>
-    <div class="title">${title}</div>
-    <div class="tags">
-      ${camelot ? `<span class="badge">${camelot}</span>` : ''}
-      ${bpm     ? `<span class="bpm">${bpm} BPM</span>` : ''}
-      ${year    ? `<span class="bpm">${year}</span>` : ''}
+    <div class="header">
+      <div class="thumb">
+        ${thumb
+          ? `<img src="${thumb}" />`
+          : `<svg viewBox="0 0 80 80" width="48" height="48" fill="#888" opacity="0.3">
+               <circle cx="40" cy="40" r="38"/><circle cx="40" cy="40" r="24" fill="#fff"/>
+               <circle cx="40" cy="40" r="12" fill="#888"/><circle cx="40" cy="40" r="4" fill="#fff"/>
+             </svg>`}
+      </div>
+      <div class="meta">
+        <div class="artist">${artist}</div>
+        <div class="release-title">${title}</div>
+        <div class="sub">${[genre, year].filter(Boolean).join(' · ')}</div>
+        ${comment ? `<div class="release-comment">${comment}</div>` : ''}
+      </div>
     </div>
-    ${genre   ? `<div class="genre">${genre}</div>` : ''}
-    ${comment ? `<div class="comment">${comment}</div>` : ''}
+    ${tracksHtml || '<div style="color:#aaa;font-size:6.5pt;font-style:italic">No track data</div>'}
     <div class="logo">DJFriend</div>
-  </div>
   </body></html>`);
   win.document.close();
-  win.onload = () => { win.focus(); win.print(); };
+  setTimeout(() => { win.focus(); win.print(); }, 300);
 }
 
 type Filter  = 'all' | 'in-library' | 'not-in-library';
@@ -844,7 +867,7 @@ export default function CratesTab({
                         </svg>
                       </button>
                       <button type="button"
-                        onClick={() => printSticker({ artist: release.artist, title: release.title, year: release.year, bpm, camelot, genres: release.genres, styles: release.styles, comment, thumb: proxyThumb(release.thumb) })}
+                        onClick={() => printSticker({ artist: release.artist, title: release.title, year: release.year, genres: release.genres, styles: release.styles, comment, thumb: proxyThumb(release.thumb), tracks: vinylStore[release.releaseId]?.tracks })}
                         className="text-white/35 hover:text-white/80 transition-colors cursor-pointer" title="Print sticker">
                         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
                           <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>

@@ -192,9 +192,9 @@ function generateSetOnce(
     if (dateFiltered.length > 0) candidatePool = dateFiltered;
   }
 
+  // excludeFiles is a hard constraint (no repeated tracks) — always applied, no fallback.
   if (options?.excludeFiles?.size) {
-    const remaining = candidatePool.filter(s => !options.excludeFiles!.has(s.file));
-    if (remaining.length > 0) candidatePool = remaining;
+    candidatePool = candidatePool.filter(s => !options.excludeFiles!.has(s.file));
   }
 
   const FALLBACK_DURATION = 210; // 3.5 min fallback when duration is absent

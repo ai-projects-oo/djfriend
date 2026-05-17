@@ -403,8 +403,65 @@ export default function CratesTab({
   const [linking,         setLinking]         = useState<number | null>(null);
   const [expandedTracks,  setExpandedTracks]  = useState<number | null>(null);
   const [vinylStore,      setVinylStore]      = useState<VinylStore>(() => loadVinylStore());
+  const [autoImportProgress, setAutoImportProgress] = useState<{ done: number; total: number } | null>(null);
 
   const commentRef = useRef<HTMLTextAreaElement>(null);
+  const prevSyncPhase = useRef<string | undefined>(undefined);
+
+  // Auto-import tracklists for all releases after a sync completes
+  useEffect(() => {
+    const prev = prevSyncPhase.current;
+    prevSyncPhase.current = syncPhase;
+    if (prev !== 'syncing' || syncPhase !== 'done') return;
+    if (!collection?.releases.length) return;
+
+    const releases = collection.releases;
+    const toFetch = releases.filter(r => !vinylStore[r.releaseId]?.tracks.length);
+    if (!toFetch.length) return;
+
+    let cancelled = false;
+    (async () => {
+      setAutoImportProgress({ done: 0, total: toFetch.length });
+      const store = loadVinylStore();
+      for (let i = 0; i < toFetch.length; i++) {
+        if (cancelled) break;
+        const release = toFetch[i];
+        try {
+          const r = await fetch(`/api/discogs/release-tracklist?id=${release.releaseId}`);
+          if (r.ok) {
+            const payload = await r.json() as {
+              tracklist: Array<{ position: string; title: string; duration?: string }>;
+              genres?: string[]; styles?: string[];
+            };
+            if (payload.tracklist?.length) {
+              const tracks: VinylTrackEntry[] = payload.tracklist.map(t => ({
+                id: `${release.releaseId}-${t.position}-auto`,
+                position: t.position,
+                title: t.title || undefined,
+              }));
+              const autoGenre = store[release.releaseId]?.genre
+                ?? payload.genres?.[0] ?? payload.styles?.[0];
+              store[release.releaseId] = {
+                genre: autoGenre,
+                tracks: store[release.releaseId]?.tracks.length
+                  ? store[release.releaseId].tracks
+                  : tracks,
+              };
+            }
+          }
+        } catch { /* skip failed releases */ }
+        setAutoImportProgress({ done: i + 1, total: toFetch.length });
+        if (i < toFetch.length - 1) await new Promise(res => setTimeout(res, 800));
+      }
+      if (!cancelled) {
+        saveVinylStore(store);
+        setVinylStore({ ...store });
+        setAutoImportProgress(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncPhase]);
 
   const rejectMatch = useCallback((releaseId: number) => {
     const next = new Set(rejectedMatches).add(releaseId);
@@ -550,6 +607,16 @@ export default function CratesTab({
           </div>
         </div>
 
+        {autoImportProgress && (
+          <div className="flex items-center gap-2 text-[10px] text-[#64748b]">
+            <svg className="animate-spin flex-shrink-0" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M8 2a6 6 0 0 1 0 12"/></svg>
+            <span>Importing tracklists from Discogs… {autoImportProgress.done}/{autoImportProgress.total}</span>
+            <div className="flex-1 h-1 rounded-full bg-[#1e1e2e] overflow-hidden">
+              <div className="h-full rounded-full bg-[#7c3aed] transition-all" style={{ width: `${(autoImportProgress.done / autoImportProgress.total) * 100}%` }} />
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between text-[10px] text-[#334155]">
           <span>{releases.length} release{releases.length !== 1 ? 's' : ''}{query ? ' found' : ''}</span>
           <div className="flex items-center gap-3">
@@ -587,7 +654,7 @@ export default function CratesTab({
             const q = encodeURIComponent(`${release.artist} ${release.title}`);
 
             return (
-              <div key={release.releaseId} className="group flex flex-col bg-white/15 rounded-lg overflow-hidden">
+              <div key={release.releaseId} className="group flex flex-col bg-white/15 rounded-lg">
 
                 {/* ── Art ── */}
                 <AlbumArt

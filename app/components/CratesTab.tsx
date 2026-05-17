@@ -729,7 +729,7 @@ export default function CratesTab({
                             )}
                             {info.country && <div><span className="text-[#475569]">Country </span>{info.country}</div>}
                             {info.formats?.length ? <div><span className="text-[#475569]">Format </span>{info.formats.join(', ')}</div> : null}
-                            {info.notes && <div className="text-[#475569] italic line-clamp-3 mt-0.5">{info.notes}</div>}
+                            {info.notes && <div className="text-[#475569] italic mt-0.5">{info.notes}</div>}
                             {!info.label && !info.country && !info.formats?.length && !info.notes && (
                               <span className="text-[#334155]">No extra info</span>
                             )}

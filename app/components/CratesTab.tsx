@@ -221,38 +221,6 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
   discogsGenre?: string;
 }) {
   const tracks = data.tracks;
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-
-  async function importFromDiscogs() {
-    setImporting(true);
-    setImportError(null);
-    try {
-      const r = await fetch(`/api/discogs/release-tracklist?id=${releaseId}`);
-      if (!r.ok) throw new Error(`${r.status}`);
-      const payload = await r.json() as {
-        tracklist: Array<{ position: string; title: string; duration?: string; artists?: string[] }>;
-        genres?: string[]; styles?: string[];
-      };
-      if (!payload.tracklist?.length) { setImportError('No tracks found'); return; }
-      const newTracks: VinylTrackEntry[] = payload.tracklist.map(t => ({
-        id: `${releaseId}-${t.position}-${Date.now()}`,
-        position: t.position,
-        title: t.title || undefined,
-        bpm: undefined, camelot: undefined, genre: undefined, comment: undefined,
-      }));
-      // Merge: keep user-edited tracks (with BPM/key/comments), fill in any missing positions
-      const existingByPos = new Map(tracks.filter(t => t.bpm || t.camelot || t.comment).map(t => [t.position, t]));
-      const merged = newTracks.map(t => existingByPos.get(t.position) ? { ...t, ...existingByPos.get(t.position) } : t);
-      // Auto-fill genre from Discogs if not already set
-      const autoGenre = data.genre || (payload.genres?.[0] ?? payload.styles?.[0]);
-      onChange({ ...data, genre: autoGenre, tracks: merged });
-    } catch (e) {
-      setImportError(e instanceof Error ? e.message : 'Failed');
-    } finally {
-      setImporting(false);
-    }
-  }
 
   function updateTrack(id: string, patch: Partial<VinylTrackEntry>) {
     onChange({ ...data, tracks: tracks.map(t => t.id === id ? { ...t, ...patch } : t) });
@@ -283,27 +251,6 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
 
   return (
     <div className="border-t border-[#ffffff10] mt-1 pt-2 flex flex-col gap-2">
-      {/* Import from Discogs */}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={importFromDiscogs}
-          disabled={importing}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer text-[11px] disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {importing ? (
-            <svg className="animate-spin" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M8 2a6 6 0 0 1 0 12"/></svg>
-          ) : (
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 2v8m-4-4 4 4 4-4"/><line x1="2" y1="14" x2="14" y2="14"/></svg>
-          )}
-          {importing ? 'Importing…' : 'Import from Discogs'}
-        </button>
-        {importError && <span className="text-[10px] text-[#ef4444]">{importError}</span>}
-        {!importing && !importError && tracks.length > 0 && (
-          <span className="text-[10px] text-[#334155]">{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
-        )}
-      </div>
-
       {/* Track list */}
       {tracks.length > 0 && (
         <div className="flex flex-col gap-1">
@@ -337,19 +284,19 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
                       </svg>
                     </button>
                   </div>
-                  {/* Row 2: BPM · key · genre · comment */}
-                  <div className="flex items-center gap-1">
+                  {/* Row 2: BPM + Key + Genre */}
+                  <div className="grid grid-cols-3 gap-1">
                     <input
                       type="number"
                       value={track.bpm ?? ''}
                       onChange={e => updateTrack(track.id, { bpm: e.target.value ? Number(e.target.value) : undefined })}
                       placeholder="BPM"
-                      className={`w-12 tabular-nums ${inputCls}`}
+                      className={`tabular-nums ${inputCls}`}
                     />
                     <select
                       value={track.camelot ?? ''}
                       onChange={e => updateTrack(track.id, { camelot: e.target.value || undefined })}
-                      className={`w-13 ${inputCls} cursor-pointer`}
+                      className={`${inputCls} cursor-pointer`}
                     >
                       <option value="">Key</option>
                       {CAMELOT_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
@@ -359,16 +306,17 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
                       value={track.genre ?? data.genre ?? discogsGenre ?? ''}
                       onChange={e => updateTrack(track.id, { genre: e.target.value || undefined })}
                       placeholder={discogsGenre ?? 'Genre'}
-                      className={`w-16 ${inputCls}`}
-                    />
-                    <input
-                      type="text"
-                      value={track.comment ?? ''}
-                      onChange={e => updateTrack(track.id, { comment: e.target.value || undefined })}
-                      placeholder="Comment…"
-                      className={`flex-1 ${inputCls}`}
+                      className={inputCls}
                     />
                   </div>
+                  {/* Row 3: Comment (full width) */}
+                  <input
+                    type="text"
+                    value={track.comment ?? ''}
+                    onChange={e => updateTrack(track.id, { comment: e.target.value || undefined })}
+                    placeholder="Comment…"
+                    className={`w-full ${inputCls}`}
+                  />
                 </div>
               ))}
             </div>

@@ -404,6 +404,11 @@ export default function CratesTab({
   const [expandedTracks,  setExpandedTracks]  = useState<number | null>(null);
   const [vinylStore,      setVinylStore]      = useState<VinylStore>(() => loadVinylStore());
   const [autoImportProgress, setAutoImportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [infoOpen, setInfoOpen] = useState<number | null>(null);
+  const [releaseInfoCache, setReleaseInfoCache] = useState<Map<number, {
+    label?: string; catno?: string; country?: string; notes?: string;
+    formats?: string[]; year?: number;
+  }>>(() => new Map());
 
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const prevSyncPhase = useRef<string | undefined>(undefined);
@@ -502,6 +507,18 @@ export default function CratesTab({
     setVinylStore(next);
     saveVinylStore(next);
   }, [vinylStore]);
+
+  const toggleReleaseInfo = useCallback(async (releaseId: number) => {
+    if (infoOpen === releaseId) { setInfoOpen(null); return; }
+    setInfoOpen(releaseId);
+    if (releaseInfoCache.has(releaseId)) return;
+    try {
+      const r = await fetch(`/api/discogs/release-tracklist?id=${releaseId}`);
+      if (!r.ok) return;
+      const d = await r.json() as { label?: string; catno?: string; country?: string; notes?: string; formats?: string[]; year?: number };
+      setReleaseInfoCache(prev => new Map(prev).set(releaseId, d));
+    } catch { /* ignore */ }
+  }, [infoOpen, releaseInfoCache]);
 
   const releases = useMemo<DiscogsRelease[]>(() => {
     if (!collection) return [];
@@ -752,6 +769,30 @@ export default function CratesTab({
                       onClick={() => setEditingComment(release.releaseId)}>{comment}</p>
                   ) : null}
 
+                  {/* Release info panel */}
+                  {infoOpen === release.releaseId && (() => {
+                    const info = releaseInfoCache.get(release.releaseId);
+                    return (
+                      <div className="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1.5 text-[10px] text-[#94a3b8] flex flex-col gap-0.5">
+                        {info ? (
+                          <>
+                            {(info.label || info.catno) && (
+                              <div><span className="text-[#475569]">Label </span>{[info.label, info.catno].filter(Boolean).join(' · ')}</div>
+                            )}
+                            {info.country && <div><span className="text-[#475569]">Country </span>{info.country}</div>}
+                            {info.formats?.length ? <div><span className="text-[#475569]">Format </span>{info.formats.join(', ')}</div> : null}
+                            {info.notes && <div className="text-[#475569] italic line-clamp-3 mt-0.5">{info.notes}</div>}
+                            {!info.label && !info.country && !info.formats?.length && !info.notes && (
+                              <span className="text-[#334155]">No extra info</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-[#334155]">Loading…</span>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* ── Action row ── */}
                   <div className="flex items-center gap-2 pt-1">
                     <a href={`https://www.discogs.com/release/${release.releaseId}`} target="_blank" rel="noopener noreferrer"
@@ -772,6 +813,15 @@ export default function CratesTab({
                         <SpotifyIcon size={14} />
                       </a>
                     )}
+                    <button type="button"
+                      onClick={() => void toggleReleaseInfo(release.releaseId)}
+                      className={`transition-colors cursor-pointer ${infoOpen === release.releaseId ? 'text-[#a78bfa]' : 'text-white/35 hover:text-[#a78bfa]'}`}
+                      title="Release info">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+                        <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM8 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-.75 1.5h1.5v4h-1.5v-4z"/>
+      </svg>
+                    </button>
+
                     <div className="flex items-center gap-2 ml-auto">
                       <button type="button"
                         onClick={() => setExpandedTracks(expandedTracks === release.releaseId ? null : release.releaseId)}

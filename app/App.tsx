@@ -187,9 +187,8 @@ export default function App() {
 
 function AppInner() {
   const [activeTab, setActiveTab] = useState<
-    "Set Generator" | "Library" | "Crates" | "History"
+    "Set Generator" | "Library" | "Crates" | "History" | "Imports"
   >("Set Generator");
-  const [importsModalOpen, setImportsModalOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
       const raw = localStorage.getItem("djfriend-history");
@@ -898,7 +897,7 @@ function AppInner() {
         const pendingImport = getPendingImport();
         clearPendingImport();
         if (pendingImport === "__browse__") {
-          setImportsModalOpen(true);
+          setActiveTab("Imports");
           setLoadingSpotifyPlaylists(true);
           try {
             const playlists = await fetchUserPlaylists(access_token);
@@ -907,7 +906,7 @@ function AppInner() {
             setLoadingSpotifyPlaylists(false);
           }
         } else if (pendingImport) {
-          setImportsModalOpen(true);
+          setActiveTab("Imports");
           setImportUrl(pendingImport);
           setPendingImportUrl(pendingImport);
         }
@@ -1418,8 +1417,12 @@ function AppInner() {
           })}
           {hasSpotifyCredentials && (
             <button
-              onClick={() => setImportsModalOpen(true)}
-              className="ml-auto px-3 py-2 text-sm font-medium border-b-2 border-transparent text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer flex items-center gap-1.5"
+              onClick={() => setActiveTab("Imports")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "Imports"
+                  ? "border-[#7c3aed] text-[#e2e8f0]"
+                  : "border-transparent text-[#475569] hover:text-[#94a3b8]"
+              }`}
             >
               <SpotifyIcon size={13} className="text-[#1db954]" />
               Imports
@@ -1459,7 +1462,7 @@ function AppInner() {
                     {hasSpotifyCredentials && (
                       <button
                         type="button"
-                        onClick={() => setImportsModalOpen(true)}
+                        onClick={() => setActiveTab("Imports")}
                         className="mt-1 self-start px-2.5 py-1 rounded-md text-xs text-[#7c3aed] border border-[#7c3aed33] bg-[#7c3aed0d] hover:bg-[#7c3aed1a] transition-colors cursor-pointer"
                       >
                         Open Imports →
@@ -2736,19 +2739,8 @@ function AppInner() {
         </main>
       )}
 
-      {importsModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setImportsModalOpen(false)}>
-          <div className="w-full max-w-2xl mt-12 mb-8 rounded-xl border border-[#2a2a3a] bg-[#0d0d14] shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e1e2e]">
-              <div className="flex items-center gap-2">
-                <SpotifyIcon size={16} className="text-[#1db954]" />
-                <span className="text-sm font-semibold text-[#e2e8f0]">Manage Spotify Imports</span>
-              </div>
-              <button onClick={() => setImportsModalOpen(false)} className="text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer" aria-label="Close">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-        <main className="px-4 py-5">
+      {activeTab === "Imports" && (
+        <main className="px-4 py-6 overflow-y-auto flex-1 max-w-3xl mx-auto w-full">
           {/* Import input */}
           <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -3380,8 +3372,6 @@ function AppInner() {
           );
           })()}
         </main>
-          </div>
-        </div>
       )}
 
       {spotifyPlaylistPicker && (

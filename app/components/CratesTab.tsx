@@ -356,7 +356,12 @@ export default function CratesTab({
   const [releaseInfoCache, setReleaseInfoCache] = useState<Map<number, {
     label?: string; catno?: string; country?: string; notes?: string;
     formats?: string[]; year?: number;
-  }>>(() => new Map());
+  }>>(() => {
+    try {
+      const raw = localStorage.getItem('djfriend-release-info');
+      return raw ? new Map(Object.entries(JSON.parse(raw)).map(([k, v]) => [Number(k), v as never])) : new Map();
+    } catch { return new Map(); }
+  });
 
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const prevSyncPhase = useRef<string | undefined>(undefined);
@@ -475,7 +480,11 @@ export default function CratesTab({
       const r = await fetch(`/api/discogs/release-tracklist?id=${releaseId}`);
       if (!r.ok) return;
       const d = await r.json() as { label?: string; catno?: string; country?: string; notes?: string; formats?: string[]; year?: number };
-      setReleaseInfoCache(prev => new Map(prev).set(releaseId, d));
+      setReleaseInfoCache(prev => {
+        const next = new Map(prev).set(releaseId, d);
+        try { localStorage.setItem('djfriend-release-info', JSON.stringify(Object.fromEntries(next))); } catch { /* quota */ }
+        return next;
+      });
     } catch { /* ignore */ }
   }, [infoOpen, releaseInfoCache]);
 

@@ -81,6 +81,30 @@ function printHtml(html: string) {
   setTimeout(() => { win.focus(); win.print(); }, 300);
 }
 
+function buildA4Html(stickers: string[]): string {
+  // A4 = 210×297mm; 2 columns × N rows, each sticker ~88mm wide × 125mm tall
+  const cells = stickers.map(inner => `<div class="cell">${inner}</div>`).join('');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Stickers</title><style>
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+    .cell { border: 0.5px dashed #ccc; padding: 4mm; break-inside: avoid; page-break-inside: avoid; }
+  </style></head><body><div class="grid">${cells}</div></body></html>`;
+}
+
+// Extracts just the <body> inner HTML from a full sticker HTML string
+function extractStickerBody(html: string): string {
+  const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return m ? m[1].trim() : html;
+}
+
+// Extracts <style> block from a sticker so we can inline it per cell
+function extractStickerStyle(html: string): string {
+  const m = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+  return m ? `<style>${m[1]}</style>` : '';
+}
+
 type Filter  = 'all' | 'in-library' | 'not-in-library';
 type SortKey = 'artist' | 'title' | 'year';
 
@@ -368,6 +392,8 @@ export default function CratesTab({
   const [autoImportProgress, setAutoImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [infoOpen, setInfoOpen] = useState<number | null>(null);
   const [stickerHtml, setStickerHtml] = useState<string | null>(null);
+  const [printMode, setPrintMode] = useState(false);
+  const [printSelection, setPrintSelection] = useState<Set<number>>(() => new Set());
   const [releaseInfoCache, setReleaseInfoCache] = useState<Map<number, {
     label?: string; catno?: string; country?: string; notes?: string;
     formats?: string[]; year?: number;
@@ -584,7 +610,7 @@ export default function CratesTab({
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="relative flex flex-col h-full overflow-hidden">
 
       {/* ── Toolbar ── */}
       <div className="flex-shrink-0 px-4 pt-4 pb-3 space-y-2.5">
@@ -620,6 +646,18 @@ export default function CratesTab({
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={() => { setPrintMode(m => !m); setPrintSelection(new Set()); }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-[11px] transition-colors cursor-pointer flex-shrink-0 ${printMode ? 'border-[#7c3aed] bg-[#7c3aed]/10 text-[#a78bfa]' : 'border-[#2a2a3a] bg-[#12121a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+              <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
+              <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
+            </svg>
+            Print stickers
+          </button>
 
           <button
             type="button"
@@ -680,16 +718,31 @@ export default function CratesTab({
             const canEdit = !effectivelyMatched;
             const q = encodeURIComponent(`${release.artist} ${release.title}`);
 
+            const isSelected = printSelection.has(release.releaseId);
+
             return (
-              <div key={release.releaseId} className="group flex flex-col bg-white/15 rounded-lg">
+              <div key={release.releaseId}
+                className={`group flex flex-col bg-white/15 rounded-lg ${printMode ? 'cursor-pointer' : ''} ${printMode && isSelected ? 'ring-2 ring-[#7c3aed]' : ''}`}
+                onClick={printMode ? () => setPrintSelection(prev => { const n = new Set(prev); if (isSelected) { n.delete(release.releaseId); } else { n.add(release.releaseId); } return n; }) : undefined}
+              >
+                {/* ── Print mode checkbox overlay ── */}
+                {printMode && (
+                  <div className="absolute top-2 left-2 z-10 pointer-events-none">
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isSelected ? 'bg-[#7c3aed] border-[#7c3aed]' : 'bg-black/40 border-white/50'}`}>
+                      {isSelected && <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 8 6.5 11.5 13 5"/></svg>}
+                    </div>
+                  </div>
+                )}
 
                 {/* ── Art ── */}
+                <div className="relative">
                 <AlbumArt
                   release={release}
                   imageSrc={imageSrc}
                   isManualLink={isManualLink}
                   effectivelyMatched={effectivelyMatched}
                 />
+                </div>
 
                 {/* ── Details ── */}
                 <div className="px-2 pt-2 pb-2 flex flex-col gap-1.5">
@@ -860,7 +913,7 @@ export default function CratesTab({
                       </button>
                       <button type="button"
                         onClick={() => setStickerHtml(buildStickerHtml({ artist: release.artist, title: release.title, year: release.year, genres: release.genres, styles: release.styles, comment, tracks: vinylStore[release.releaseId]?.tracks }))}
-                        className="text-white/35 hover:text-white/80 transition-colors cursor-pointer" title="Print sticker">
+                        className="text-white/35 hover:text-white/80 transition-colors cursor-pointer" title="Preview sticker">
                         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
                           <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
                           <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
@@ -907,6 +960,66 @@ export default function CratesTab({
           {syncPhase === 'syncing' ? 'Syncing…' : '↺ Re-sync'}
         </button>
       </div>
+
+      {/* Floating print stickers bar */}
+      {printMode && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[#1a1a2e] border border-[#7c3aed] shadow-2xl whitespace-nowrap">
+          {printSelection.size === 0
+            ? <span className="text-[12px] text-[#64748b]">Click releases to select</span>
+            : (() => {
+                // Estimate page count: each sticker ~125mm tall (base 40mm + ~7mm per track)
+                // A4 usable height ~277mm, 2 cols → stickers per page depends on tallest in each row
+                const heights = [...printSelection].map(id => {
+                  const tracks = vinylStore[id]?.tracks.length ?? 0;
+                  return 40 + tracks * 7; // mm
+                });
+                const pageH = 277;
+                let pages = 0, rowH = 0, col = 0;
+                if (heights.length) { pages = 1; }
+                for (const h of heights) {
+                  if (col === 2) { col = 0; rowH = 0; }
+                  if (col === 0) rowH = h;
+                  else rowH = Math.max(rowH, h);
+                  col++;
+                  if (col === 2) {
+                    // check if this row fits; simplified: just count pages by total height
+                  }
+                }
+                // Simple: 2 cols, estimate pages = ceil(ceil(n/2) * avgH / pageH)
+                const avgH = heights.reduce((a, b) => a + b, 0) / heights.length;
+                const rows = Math.ceil(heights.length / 2);
+                pages = Math.ceil((rows * avgH) / pageH);
+                return (
+                  <span className="text-[12px] text-[#a78bfa] font-medium">
+                    {printSelection.size} sticker{printSelection.size !== 1 ? 's' : ''} · ~{pages} A4 page{pages !== 1 ? 's' : ''}
+                  </span>
+                );
+              })()
+          }
+          {printSelection.size > 0 && (
+            <button type="button"
+              onClick={() => {
+                const stickers = [...printSelection].map(id => {
+                  const rel = collection!.releases.find(r => r.releaseId === id);
+                  if (!rel) return '';
+                  const manual = manualData.get(id);
+                  const html = buildStickerHtml({ artist: rel.artist, title: rel.title, year: rel.year, genres: rel.genres, styles: rel.styles, comment: manual?.comment, tracks: vinylStore[id]?.tracks });
+                  return `${extractStickerStyle(html)}<div style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:7.5pt;color:#111">${extractStickerBody(html)}</div>`;
+                }).filter(Boolean);
+                printHtml(buildA4Html(stickers));
+                setPrintMode(false);
+                setPrintSelection(new Set());
+              }}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#7c3aed] text-white text-[12px] hover:bg-[#6d28d9] transition-colors cursor-pointer">
+              OK — Print
+            </button>
+          )}
+          <button type="button" onClick={() => { setPrintMode(false); setPrintSelection(new Set()); }}
+            className="text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer text-[11px]">
+            Cancel
+          </button>
+        </div>
+      )}
 
       {/* Sticker preview modal */}
       {stickerHtml && (

@@ -907,37 +907,35 @@ export default function CratesTab({
           {syncPhase === 'syncing' ? 'Syncing…' : '↺ Re-sync'}
         </button>
       </div>
-    </div>
 
-    {/* Sticker preview modal */}
-    {stickerHtml && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setStickerHtml(null)}>
-        <div className="flex flex-col gap-3 max-h-[90vh]" onClick={e => e.stopPropagation()}>
-          {/* Preview iframe */}
-          <div className="bg-white rounded shadow-2xl overflow-hidden" style={{ width: 336, maxHeight: 'calc(90vh - 56px)', overflowY: 'auto' }}>
-            <iframe
-              srcDoc={stickerHtml}
-              style={{ width: 336, height: 480, border: 'none', display: 'block' }}
-              scrolling="no"
-            />
-          </div>
-          {/* Actions */}
-          <div className="flex gap-2 justify-end">
-            <button type="button" onClick={() => setStickerHtml(null)}
-              className="px-3 py-1.5 rounded border border-[#2a2a3a] text-[#64748b] text-[12px] hover:text-[#e2e8f0] transition-colors cursor-pointer">
-              Cancel
-            </button>
-            <button type="button" onClick={() => { printHtml(stickerHtml); setStickerHtml(null); }}
-              className="px-4 py-1.5 rounded bg-[#7c3aed] text-white text-[12px] hover:bg-[#6d28d9] transition-colors cursor-pointer flex items-center gap-1.5">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
-                <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
-                <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
-              </svg>
-              Print
-            </button>
+      {/* Sticker preview modal */}
+      {stickerHtml && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setStickerHtml(null)}>
+          <div className="flex flex-col gap-3 max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded shadow-2xl overflow-hidden" style={{ width: 336, maxHeight: 'calc(90vh - 56px)', overflowY: 'auto' }}>
+              <iframe
+                srcDoc={stickerHtml}
+                style={{ width: 336, height: 480, border: 'none', display: 'block' }}
+                scrolling="no"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setStickerHtml(null)}
+                className="px-3 py-1.5 rounded border border-[#2a2a3a] text-[#64748b] text-[12px] hover:text-[#e2e8f0] transition-colors cursor-pointer">
+                Cancel
+              </button>
+              <button type="button" onClick={() => { printHtml(stickerHtml); setStickerHtml(null); }}
+                className="px-4 py-1.5 rounded bg-[#7c3aed] text-white text-[12px] hover:bg-[#6d28d9] transition-colors cursor-pointer flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+                  <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
+                  <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
+                </svg>
+                Print
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
+    </div>
   );
 }

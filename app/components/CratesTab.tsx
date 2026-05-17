@@ -633,12 +633,8 @@ export default function CratesTab({
           </div>
         )}
 
-        <div className="flex items-center justify-between text-[10px] text-[#334155]">
+        <div className="text-[10px] text-[#334155]">
           <span>{releases.length} release{releases.length !== 1 ? 's' : ''}{query ? ' found' : ''}</span>
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" />Exact match</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#7c3aed] inline-block" />Linked</span>
-          </div>
         </div>
       </div>
 

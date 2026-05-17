@@ -162,6 +162,21 @@ export interface DiscogsRelease {
   energy?:          number;
 }
 
+export interface VinylTrackEntry {
+  id:       string;    // stable key for React (timestamp-based)
+  position: string;    // "A1", "A2", "B1", "B2", …
+  title?:   string;
+  bpm?:     number;
+  camelot?: string;
+  genre?:   string;
+  comment?: string;
+}
+
+export interface VinylReleaseData {
+  genre?:  string;     // release-level genre override
+  tracks:  VinylTrackEntry[];
+}
+
 export interface DiscogsCollectionEntry {
   id:             'discogs-collection';
   username:       string;

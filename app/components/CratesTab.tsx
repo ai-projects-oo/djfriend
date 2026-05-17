@@ -558,6 +558,23 @@ export default function CratesTab({
         />
 
         <div className="flex items-center gap-2">
+          {/* Sync button */}
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={syncPhase === 'syncing'}
+            title="Sync Discogs collection"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#2a2a3a] bg-[#12121a] text-[11px] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+          >
+            <svg className={syncPhase === 'syncing' ? 'animate-spin' : ''} width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              {syncPhase === 'syncing'
+                ? <path d="M8 2a6 6 0 0 1 0 12"/>
+                : <><path d="M13.5 2.5A7 7 0 1 0 14 8"/><polyline points="14 2.5 14 6.5 10 6.5"/></>
+              }
+            </svg>
+            {syncPhase === 'syncing' ? 'Syncing…' : 'Sync'}
+          </button>
+
           {/* Filter pills */}
           <div className="flex rounded-md overflow-hidden border border-[#2a2a3a] text-[11px] font-medium">
             {([

@@ -369,13 +369,20 @@ export default function CratesTab({
 
   const runTracklsitImport = useCallback((releases: typeof collection extends null ? never : NonNullable<typeof collection>['releases']) => {
     if (autoImportRunning.current) return () => {};
-    const toFetch = releases.filter(r => !loadVinylStore()[r.releaseId]?.tracks.length);
+    // Fetch releases missing tracks OR missing info cache
+    let infoCache: Record<string, object>;
+    try { infoCache = JSON.parse(localStorage.getItem('djfriend-release-info') ?? '{}'); } catch { infoCache = {}; }
+    const toFetch = releases.filter(r =>
+      !loadVinylStore()[r.releaseId]?.tracks.length || !infoCache[String(r.releaseId)]
+    );
     if (!toFetch.length) return () => {};
     let cancelled = false;
     autoImportRunning.current = true;
     (async () => {
       setAutoImportProgress({ done: 0, total: toFetch.length });
       const store = loadVinylStore();
+      let infoObj: Record<string, object>;
+      try { infoObj = JSON.parse(localStorage.getItem('djfriend-release-info') ?? '{}'); } catch { infoObj = {}; }
       for (let i = 0; i < toFetch.length; i++) {
         if (cancelled) break;
         const release = toFetch[i];
@@ -385,7 +392,10 @@ export default function CratesTab({
             const payload = await r.json() as {
               tracklist: Array<{ position: string; title: string; duration?: string }>;
               genres?: string[]; styles?: string[];
+              label?: string; catno?: string; country?: string;
+              notes?: string; formats?: string[]; year?: number;
             };
+            // Save tracklist
             if (payload.tracklist?.length) {
               const tracks: VinylTrackEntry[] = payload.tracklist.map(t => ({
                 id: `${release.releaseId}-${t.position}-auto`,
@@ -401,6 +411,9 @@ export default function CratesTab({
                   : tracks,
               };
             }
+            // Save release info (label, country, notes, formats, etc.)
+            const { label, catno, country, notes, formats, year } = payload;
+            infoObj[String(release.releaseId)] = { label, catno, country, notes, formats, year };
           }
         } catch { /* skip */ }
         setAutoImportProgress({ done: i + 1, total: toFetch.length });
@@ -409,6 +422,8 @@ export default function CratesTab({
       if (!cancelled) {
         saveVinylStore(store);
         setVinylStore({ ...store });
+        try { localStorage.setItem('djfriend-release-info', JSON.stringify(infoObj)); } catch { /* quota */ }
+        setReleaseInfoCache(new Map(Object.entries(infoObj).map(([k, v]) => [Number(k), v as never])));
         setAutoImportProgress(null);
       }
       autoImportRunning.current = false;

@@ -4,6 +4,7 @@ import { SpotifyIcon, DiscogsIcon, BeatportIcon, TraxsourceIcon } from './Icons'
 import type { ManualData } from '../lib/discogsManualData';
 import { saveManualData, saveRejected } from '../lib/discogsManualData';
 import { loadVinylStore, saveVinylStore, nextPosition, type VinylStore } from '../lib/vinylTracks';
+import { theme } from '../lib/theme';
 
 
 function printSticker(opts: {
@@ -579,6 +580,8 @@ export default function CratesTab({
             const bpm     = release.bpm     ?? manualLinkedSong?.bpm     ?? manual?.bpm;
             const camelot = release.camelot ?? manualLinkedSong?.camelot ?? manual?.camelot;
             const energy  = release.energy  ?? manualLinkedSong?.energy;
+            const matchedSong = manualLinkedSong ?? (release.matchedFile ? library.find(s => s.file === release.matchedFile) : null);
+            const semanticTags = matchedSong?.semanticTags;
             const isManualLink = !release.inLibrary && !!manualLinkedSong;
             const canEdit = !effectivelyMatched;
             const q = encodeURIComponent(`${release.artist} ${release.title}`);
@@ -602,6 +605,18 @@ export default function CratesTab({
                     <p className="text-[11px] font-bold text-white leading-snug line-clamp-2">{release.title}</p>
                     <p className="text-[10px] font-medium text-white/70 leading-snug mt-0.5 truncate">{release.artist}</p>
                     {release.year && <p className="text-[10px] font-semibold text-white/40 mt-0.5">{release.year}</p>}
+                    {semanticTags && (semanticTags.vibeTags.length > 0 || semanticTags.moodTags.length > 0) && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {semanticTags.vibeTags.map(t => (
+                          <span key={t} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium whitespace-nowrap"
+                            style={{ backgroundColor: theme.tag.vibe.bg, color: theme.tag.vibe.text }}>{t}</span>
+                        ))}
+                        {semanticTags.moodTags.map(t => (
+                          <span key={t} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium whitespace-nowrap"
+                            style={{ backgroundColor: theme.tag.mood.bg, color: theme.tag.mood.text }}>{t}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Genre — pre-filled from Discogs, user can override */}

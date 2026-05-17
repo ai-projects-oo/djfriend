@@ -45,6 +45,7 @@ import { generateSet } from "./lib/setGenerator";
 import SuggestionsStrip from "./components/SuggestionsStrip";
 import CratesTab from "./components/CratesTab";
 import OnboardingModal from "./components/OnboardingModal";
+import PlayerBar from "./components/PlayerBar";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -918,6 +919,10 @@ function AppInner() {
       }
     })();
   }, [setImportUrl, setLoadingSpotifyPlaylists, setPendingImportUrl, setSpotifyExportStatus, setSpotifyPlaylistPicker]);
+
+  const previewTrack = previewFile
+    ? (generatedSet.find(t => t.filePath === previewFile) ?? null)
+    : null;
 
   return (
     <div className="h-screen bg-[#0a0a0f] text-[#e2e8f0] flex flex-col overflow-hidden">
@@ -3975,6 +3980,25 @@ function AppInner() {
         />
       )}
 
+      {previewTrack && (
+        <PlayerBar
+          track={previewTrack}
+          audioRef={audioRef}
+          playing={previewPlaying}
+          onToggle={() => {
+            const audio = audioRef.current;
+            if (!audio) return;
+            if (audio.paused) { void audio.play(); setPreviewPlaying(true); }
+            else { audio.pause(); setPreviewPlaying(false); }
+          }}
+          onClose={() => {
+            const audio = audioRef.current;
+            if (audio) { audio.pause(); audio.src = ""; }
+            setPreviewFile(null);
+            setPreviewPlaying(false);
+          }}
+        />
+      )}
     </div>
   );
 }

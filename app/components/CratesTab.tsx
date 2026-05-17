@@ -360,19 +360,14 @@ export default function CratesTab({
 
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const prevSyncPhase = useRef<string | undefined>(undefined);
+  const autoImportRunning = useRef(false);
 
-  // Auto-import tracklists for all releases after a sync completes
-  useEffect(() => {
-    const prev = prevSyncPhase.current;
-    prevSyncPhase.current = syncPhase;
-    if (prev !== 'syncing' || syncPhase !== 'done') return;
-    if (!collection?.releases.length) return;
-
-    const releases = collection.releases;
-    const toFetch = releases.filter(r => !vinylStore[r.releaseId]?.tracks.length);
-    if (!toFetch.length) return;
-
+  const runTracklsitImport = useCallback((releases: typeof collection extends null ? never : NonNullable<typeof collection>['releases']) => {
+    if (autoImportRunning.current) return () => {};
+    const toFetch = releases.filter(r => !loadVinylStore()[r.releaseId]?.tracks.length);
+    if (!toFetch.length) return () => {};
     let cancelled = false;
+    autoImportRunning.current = true;
     (async () => {
       setAutoImportProgress({ done: 0, total: toFetch.length });
       const store = loadVinylStore();
@@ -402,7 +397,7 @@ export default function CratesTab({
               };
             }
           }
-        } catch { /* skip failed releases */ }
+        } catch { /* skip */ }
         setAutoImportProgress({ done: i + 1, total: toFetch.length });
         if (i < toFetch.length - 1) await new Promise(res => setTimeout(res, 800));
       }
@@ -411,8 +406,24 @@ export default function CratesTab({
         setVinylStore({ ...store });
         setAutoImportProgress(null);
       }
+      autoImportRunning.current = false;
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; autoImportRunning.current = false; };
+  }, []);
+
+  // Trigger on mount (for existing collection) and after each Discogs sync
+  useEffect(() => {
+    if (!collection?.releases.length) return;
+    return runTracklsitImport(collection.releases);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const prev = prevSyncPhase.current;
+    prevSyncPhase.current = syncPhase;
+    if (prev !== 'syncing' || syncPhase !== 'done') return;
+    if (!collection?.releases.length) return;
+    return runTracklsitImport(collection.releases);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncPhase]);
 

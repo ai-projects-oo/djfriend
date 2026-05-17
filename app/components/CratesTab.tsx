@@ -1,8 +1,9 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { DiscogsCollectionEntry, DiscogsRelease, Song } from '../types';
+import type { DiscogsCollectionEntry, DiscogsRelease, Song, VinylTrackEntry, VinylReleaseData } from '../types';
 import { SpotifyIcon, DiscogsIcon, BeatportIcon, TraxsourceIcon } from './Icons';
 import type { ManualData } from '../lib/discogsManualData';
 import { saveManualData, saveRejected } from '../lib/discogsManualData';
+import { loadVinylStore, saveVinylStore, nextPosition, type VinylStore } from '../lib/vinylTracks';
 
 const CAMELOT_RE = /^(1[0-2]|[1-9])[AB]$/i;
 
@@ -208,6 +209,144 @@ function FilePicker({ library, onPick, onClose }: {
   );
 }
 
+const CAMELOT_OPTIONS = [
+  '1A','2A','3A','4A','5A','6A','7A','8A','9A','10A','11A','12A',
+  '1B','2B','3B','4B','5B','6B','7B','8B','9B','10B','11B','12B',
+];
+
+function VinylTrackEditor({ releaseId, data, onChange }: {
+  releaseId: number;
+  data: VinylReleaseData;
+  onChange: (d: VinylReleaseData) => void;
+}) {
+  const tracks = data.tracks;
+
+  function updateTrack(id: string, patch: Partial<VinylTrackEntry>) {
+    onChange({ ...data, tracks: tracks.map(t => t.id === id ? { ...t, ...patch } : t) });
+  }
+
+  function removeTrack(id: string) {
+    onChange({ ...data, tracks: tracks.filter(t => t.id !== id) });
+  }
+
+  function addTrack() {
+    const pos = nextPosition(tracks);
+    const newTrack: VinylTrackEntry = { id: `${releaseId}-${Date.now()}`, position: pos };
+    onChange({ ...data, tracks: [...tracks, newTrack] });
+  }
+
+  // Group by side letter for display
+  const sides = useMemo(() => {
+    const map = new Map<string, VinylTrackEntry[]>();
+    for (const t of tracks) {
+      const side = t.position.match(/^([A-Za-z]+)/)?.[1].toUpperCase() ?? '?';
+      if (!map.has(side)) map.set(side, []);
+      map.get(side)!.push(t);
+    }
+    return map;
+  }, [tracks]);
+
+  const inputCls = "bg-[#0d0d14] border border-[#1e1e2e] rounded px-1.5 py-1 text-[11px] text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors";
+
+  return (
+    <div className="border-t border-[#ffffff10] mt-1 pt-2 flex flex-col gap-2">
+      {/* Release-level genre */}
+      <input
+        type="text"
+        value={data.genre ?? ''}
+        onChange={e => onChange({ ...data, genre: e.target.value || undefined })}
+        placeholder="Release genre…"
+        className={`w-full ${inputCls}`}
+      />
+
+      {/* Track list */}
+      {tracks.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {[...sides.entries()].map(([side, sideTracks]) => (
+            <div key={side}>
+              <div className="text-[9px] uppercase tracking-widest text-[#334155] font-semibold mb-1">Side {side}</div>
+              {sideTracks.map(track => (
+                <div key={track.id} className="flex flex-col gap-1 mb-1.5 bg-[#0d0d14] rounded-md p-1.5 border border-[#1e1e2e]">
+                  {/* Row 1: position + title + delete */}
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={track.position}
+                      onChange={e => updateTrack(track.id, { position: e.target.value.toUpperCase() })}
+                      className={`w-9 text-center font-bold text-[#a78bfa] ${inputCls}`}
+                    />
+                    <input
+                      type="text"
+                      value={track.title ?? ''}
+                      onChange={e => updateTrack(track.id, { title: e.target.value || undefined })}
+                      placeholder="Title…"
+                      className={`flex-1 ${inputCls}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeTrack(track.id)}
+                      className="text-[#334155] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/>
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Row 2: BPM + key + genre */}
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={track.bpm ?? ''}
+                      onChange={e => updateTrack(track.id, { bpm: e.target.value ? Number(e.target.value) : undefined })}
+                      placeholder="BPM"
+                      className={`w-14 tabular-nums ${inputCls}`}
+                    />
+                    <select
+                      value={track.camelot ?? ''}
+                      onChange={e => updateTrack(track.id, { camelot: e.target.value || undefined })}
+                      className={`w-14 ${inputCls} cursor-pointer`}
+                    >
+                      <option value="">Key</option>
+                      {CAMELOT_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                    </select>
+                    <input
+                      type="text"
+                      value={track.genre ?? data.genre ?? ''}
+                      onChange={e => updateTrack(track.id, { genre: e.target.value || undefined })}
+                      placeholder="Genre"
+                      className={`flex-1 ${inputCls}`}
+                    />
+                  </div>
+                  {/* Row 3: comment */}
+                  <input
+                    type="text"
+                    value={track.comment ?? ''}
+                    onChange={e => updateTrack(track.id, { comment: e.target.value || undefined })}
+                    placeholder="Comment…"
+                    className={`w-full ${inputCls}`}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add track */}
+      <button
+        type="button"
+        onClick={addTrack}
+        className="flex items-center justify-center gap-1 w-full py-1.5 rounded-md border border-dashed border-[#2a2a3a] text-[#475569] hover:border-[#7c3aed] hover:text-[#a78bfa] transition-colors cursor-pointer text-[11px]"
+      >
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/>
+        </svg>
+        {nextPosition(tracks)}
+      </button>
+    </div>
+  );
+}
+
 export default function CratesTab({
   collection, onSync, syncPhase, syncMessage, hasOAuth, hasSpotify,
   library, manualData, onManualDataChange, rejectedMatches, onRejectedChange,
@@ -216,8 +355,10 @@ export default function CratesTab({
   const [filter, setFilter] = useState<Filter>('all');
   const [sort,   setSort]   = useState<SortKey>('artist');
 
-  const [editingComment, setEditingComment] = useState<number | null>(null);
-  const [linking,        setLinking]        = useState<number | null>(null);
+  const [editingComment,  setEditingComment]  = useState<number | null>(null);
+  const [linking,         setLinking]         = useState<number | null>(null);
+  const [expandedTracks,  setExpandedTracks]  = useState<number | null>(null);
+  const [vinylStore,      setVinylStore]      = useState<VinylStore>(() => loadVinylStore());
 
   const commentRef = useRef<HTMLTextAreaElement>(null);
 
@@ -267,6 +408,12 @@ export default function CratesTab({
     saveManualData(next);
     onManualDataChange(next);
   }, [manualData, onManualDataChange]);
+
+  const updateVinylData = useCallback((releaseId: number, data: VinylReleaseData) => {
+    const next = { ...vinylStore, [releaseId]: data };
+    setVinylStore(next);
+    saveVinylStore(next);
+  }, [vinylStore]);
 
   const releases = useMemo<DiscogsRelease[]>(() => {
     if (!collection) return [];
@@ -509,6 +656,16 @@ export default function CratesTab({
                     )}
                     <div className="flex items-center gap-2 ml-auto">
                       <button type="button"
+                        onClick={() => setExpandedTracks(expandedTracks === release.releaseId ? null : release.releaseId)}
+                        className={`transition-colors cursor-pointer ${expandedTracks === release.releaseId ? 'text-[#a78bfa]' : 'text-white/35 hover:text-[#a78bfa]'}`}
+                        title="Edit track list">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <line x1="2" y1="4" x2="14" y2="4"/>
+                          <line x1="2" y1="8" x2="14" y2="8"/>
+                          <line x1="2" y1="12" x2="10" y2="12"/>
+                        </svg>
+                      </button>
+                      <button type="button"
                         onClick={() => setLinking(isLinking ? null : release.releaseId)}
                         className={`transition-colors cursor-pointer ${isLinking ? 'text-[#a78bfa]' : 'text-white/35 hover:text-[#a78bfa]'}`}
                         title="Link digital file">
@@ -540,6 +697,15 @@ export default function CratesTab({
                       library={library}
                       onPick={s => linkFile(release.releaseId, s)}
                       onClose={() => setLinking(null)}
+                    />
+                  )}
+
+                  {/* Vinyl track editor */}
+                  {expandedTracks === release.releaseId && (
+                    <VinylTrackEditor
+                      releaseId={release.releaseId}
+                      data={vinylStore[release.releaseId] ?? { tracks: [] }}
+                      onChange={d => updateVinylData(release.releaseId, d)}
                     />
                   )}
                 </div>

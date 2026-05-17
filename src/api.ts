@@ -1222,6 +1222,63 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     }
   })
 
+  // Fetch tracklist (and extra metadata) for a single release.
+  // Cache is shared with release-image — both hit the same endpoint URL.
+  const releaseDataCache = new Map<number, object>()
+  middlewares.use('/api/discogs/release-tracklist', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    const qs = req.url?.split('?')[1] ?? ''
+    const releaseId = parseInt(new URLSearchParams(qs).get('id') ?? '', 10)
+    if (!releaseId) { res.writeHead(400); res.end(); return }
+    const s = readSettings()
+    if (!s.discogsAccessToken || !s.discogsAccessTokenSecret || !s.discogsConsumerKey || !s.discogsConsumerSecret) {
+      res.writeHead(401); res.end(); return
+    }
+    if (releaseDataCache.has(releaseId)) {
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify(releaseDataCache.get(releaseId)))
+      return
+    }
+    try {
+      const url = `https://api.discogs.com/releases/${releaseId}`
+      const authHeader = discogsAuthHeader({
+        method: 'GET', url,
+        consumerKey: s.discogsConsumerKey, consumerSecret: s.discogsConsumerSecret,
+        token: s.discogsAccessToken, tokenSecret: s.discogsAccessTokenSecret,
+      })
+      const r = await fetch(url, { headers: { Authorization: authHeader, 'User-Agent': 'DJFriend/1.0 +https://djfriend.app' } })
+      if (!r.ok) { res.writeHead(r.status); res.end(); return }
+      const data = await r.json() as {
+        tracklist?: Array<{ position: string; title: string; duration?: string; type_?: string; extraartists?: Array<{ name: string; role: string }> }>;
+        genres?: string[]; styles?: string[]; year?: number; country?: string;
+        labels?: Array<{ name: string; catno: string }>;
+        notes?: string;
+      }
+      const payload = {
+        tracklist: (data.tracklist ?? [])
+          .filter(t => t.type_ !== 'heading' && t.position)
+          .map(t => ({
+            position: t.position,
+            title: t.title,
+            duration: t.duration ?? undefined,
+            artists: t.extraartists?.map(a => a.name) ?? [],
+          })),
+        genres: data.genres ?? [],
+        styles: data.styles ?? [],
+        year: data.year,
+        country: data.country,
+        label: data.labels?.[0]?.name,
+        catno: data.labels?.[0]?.catno,
+        notes: data.notes,
+      }
+      releaseDataCache.set(releaseId, payload)
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify(payload))
+    } catch {
+      res.writeHead(502); res.end()
+    }
+  })
+
   middlewares.use('/api/discogs/image-proxy', async (req, res, next) => {
     if (req.method !== 'GET') { next(); return }
     const qs  = req.url?.split('?')[1] ?? ''

@@ -141,7 +141,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, curve: _curve, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, isElectron = false, isMacOS = false, hasAttemptedGenerate = false }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, isElectron = false, isMacOS = false, hasAttemptedGenerate = false }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [setStartTime, setSetStartTime] = useState<string>(''); // HH:MM

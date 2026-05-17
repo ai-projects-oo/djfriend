@@ -259,26 +259,15 @@ async function handleReanalyze() {
             </span>
             <div className="hidden group-hover:flex items-center gap-0.5">
               {track.filePath && onPreview ? (
-                <>
-                  <button
-                    onClick={() => onPreview(track.filePath!)}
-                    className={`p-1 rounded flex items-center justify-center cursor-pointer transition-colors ${isPreviewPlaying ? 'text-white bg-[#7c3aed22]' : 'text-[#7c3aed] hover:text-white hover:bg-[#7c3aed22]'}`}
-                    title={isPreviewPlaying ? 'Pause preview' : 'Preview from start'}
-                  >
-                    {isPreviewPlaying
-                      ? <Pause size={12} fill="currentColor" />
-                      : <Play size={12} fill="currentColor" />}
-                  </button>
-                  {track.duration && track.duration > 45 && (
-                    <button
-                      onClick={() => onPreview(track.filePath!, Math.max(0, track.duration! - 30))}
-                      className="p-1 rounded flex items-center justify-center text-[#475569] hover:text-[#a78bfa] hover:bg-[#a78bfa11] cursor-pointer transition-colors text-[9px] font-mono leading-none"
-                      title="Preview last 30s (outro)"
-                    >
-                      −30s
-                    </button>
-                  )}
-                </>
+                <button
+                  onClick={() => onPreview(track.filePath!)}
+                  className={`p-1 rounded flex items-center justify-center cursor-pointer transition-colors ${isPreviewPlaying ? 'text-white bg-[#7c3aed22]' : 'text-[#7c3aed] hover:text-white hover:bg-[#7c3aed22]'}`}
+                  title={isPreviewPlaying ? 'Pause' : 'Play'}
+                >
+                  {isPreviewPlaying
+                    ? <Pause size={12} fill="currentColor" />
+                    : <Play size={12} fill="currentColor" />}
+                </button>
               ) : isElectron && isMacOS ? (
                 <button
                   onClick={() => void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) })}
@@ -288,15 +277,6 @@ async function handleReanalyze() {
                   <Play size={12} fill="currentColor" />
                 </button>
               ) : null}
-              {isElectron && track.filePath && (
-                <button
-                  onClick={() => void fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath }) })}
-                  className="p-1 rounded flex items-center justify-center text-[#475569] hover:text-[#94a3b8] hover:bg-[#94a3b811] cursor-pointer transition-colors"
-                  title="Reveal in Finder"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                </button>
-              )}
             </div>
           </div>
         </td>

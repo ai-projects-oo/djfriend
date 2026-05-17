@@ -264,16 +264,6 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, library
           {/* Control point handles */}
           {points.map((pt, idx) => (
             <g key={idx}>
-              {/* Outer ring */}
-              <circle
-                cx={toSvgX(pt.x)}
-                cy={toSvgY(pt.y)}
-                r={HANDLE_RADIUS + 4}
-                fill="transparent"
-                stroke="#7c3aed"
-                strokeWidth={1}
-                strokeOpacity={0.3}
-              />
               {/* Handle circle */}
               <circle
                 cx={toSvgX(pt.x)}
@@ -308,22 +298,17 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, library
             const xPos = i / (setTracks.length - 1);
             const cx = toSvgX(xPos);
             const cy = toSvgY(t.energy);
-            const targetCy = toSvgY(t.targetEnergy);
             return (
-              <g key={t.file}>
-                {/* Vertical line from target to actual */}
-                <line x1={cx} y1={targetCy} x2={cx} y2={cy} stroke={energyToColor(t.energy)} strokeWidth={1} strokeOpacity={0.3} />
-                {/* Actual energy dot */}
-                <circle
-                  cx={cx} cy={cy} r={t.locked ? 4 : 3}
-                  fill={energyToColor(t.energy)}
-                  fillOpacity={0.85}
-                  stroke={t.locked ? '#fff' : energyToColor(t.energy)}
-                  strokeWidth={t.locked ? 1.5 : 0}
-                >
-                  <title>{t.title} — Energy: {Math.round(t.energy * 100)}% Target: {Math.round(t.targetEnergy * 100)}%{t.locked ? ' 🔒' : ''}</title>
-                </circle>
-              </g>
+              <circle
+                key={t.file}
+                cx={cx} cy={cy} r={2.5}
+                fill={energyToColor(t.energy)}
+                fillOpacity={0.7}
+                stroke={t.locked ? '#fff' : 'none'}
+                strokeWidth={t.locked ? 1 : 0}
+              >
+                <title>{t.title} — Energy: {Math.round(t.energy * 100)}% Target: {Math.round(t.targetEnergy * 100)}%{t.locked ? ' 🔒' : ''}</title>
+              </circle>
             );
           })}
 

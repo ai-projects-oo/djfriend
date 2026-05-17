@@ -257,7 +257,7 @@ function VinylTrackEditor({ releaseId, data, onChange }: {
               <div className="text-[9px] uppercase tracking-widest text-[#334155] font-semibold mb-1">Side {side}</div>
               {sideTracks.map(track => (
                 <div key={track.id} className="flex flex-col gap-1 mb-1.5 bg-[#0d0d14] rounded-md p-1.5 border border-[#1e1e2e]">
-                  {/* Row 1: position + title + delete */}
+                  {/* Row 1: position · title · delete */}
                   <div className="flex items-center gap-1">
                     <input
                       type="text"
@@ -282,19 +282,19 @@ function VinylTrackEditor({ releaseId, data, onChange }: {
                       </svg>
                     </button>
                   </div>
-                  {/* Row 2: BPM + key + genre */}
+                  {/* Row 2: BPM · key · genre · comment */}
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
                       value={track.bpm ?? ''}
                       onChange={e => updateTrack(track.id, { bpm: e.target.value ? Number(e.target.value) : undefined })}
                       placeholder="BPM"
-                      className={`w-14 tabular-nums ${inputCls}`}
+                      className={`w-12 tabular-nums ${inputCls}`}
                     />
                     <select
                       value={track.camelot ?? ''}
                       onChange={e => updateTrack(track.id, { camelot: e.target.value || undefined })}
-                      className={`w-14 ${inputCls} cursor-pointer`}
+                      className={`w-13 ${inputCls} cursor-pointer`}
                     >
                       <option value="">Key</option>
                       {CAMELOT_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
@@ -304,17 +304,16 @@ function VinylTrackEditor({ releaseId, data, onChange }: {
                       value={track.genre ?? data.genre ?? ''}
                       onChange={e => updateTrack(track.id, { genre: e.target.value || undefined })}
                       placeholder="Genre"
+                      className={`w-16 ${inputCls}`}
+                    />
+                    <input
+                      type="text"
+                      value={track.comment ?? ''}
+                      onChange={e => updateTrack(track.id, { comment: e.target.value || undefined })}
+                      placeholder="Comment…"
                       className={`flex-1 ${inputCls}`}
                     />
                   </div>
-                  {/* Row 3: comment */}
-                  <input
-                    type="text"
-                    value={track.comment ?? ''}
-                    onChange={e => updateTrack(track.id, { comment: e.target.value || undefined })}
-                    placeholder="Comment…"
-                    className={`w-full ${inputCls}`}
-                  />
                 </div>
               ))}
             </div>

@@ -79,10 +79,11 @@ export function DiscogsIcon({ size = 16, className = '' }: IconProps) {
 }
 
 export function BeatportIcon({ size = 16, className = '' }: IconProps) {
+  // hook from left curves up-right into vertical stem, stem meets ring at ~1 o'clock
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <path d="M10 1.5C7.5 1.5 5 3 5 5.5V10"/>
-      <circle cx="10" cy="12.5" r="3.5"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M4 9C4 3.5 9 2 14 3V14"/>
+      <circle cx="11" cy="18" r="5"/>
     </svg>
   );
 }

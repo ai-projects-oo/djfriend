@@ -173,7 +173,7 @@ export interface VinylTrackEntry {
 }
 
 export interface VinylReleaseData {
-  genre?:  string;     // release-level genre override
+  genre?:  string;   // release-level genre override
   tracks:  VinylTrackEntry[];
 }
 

@@ -560,3 +560,88 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
     return null;
   }
 }
+
+/** Analyze audio from a raw Buffer (e.g. fetched from a URL) instead of a local file path. */
+export async function analyzeAudioBuffer(buf: Buffer, bpmHint?: { min: number; max: number }): Promise<LocalAudioFeatures | null> {
+  try {
+    const decodeAudio = (require('audio-decode') as { default: (buf: Buffer) => Promise<AudioBuffer> }).default;
+    let audioBuffer: AudioBuffer;
+    try {
+      audioBuffer = await decodeAudio(buf);
+    } catch (err) {
+      console.warn(`  (audio-decode failed for buffer: ${err instanceof Error ? err.message : String(err)})`);
+      return null;
+    }
+
+    let channelData = audioBuffer.getChannelData(0);
+    if (audioBuffer.sampleRate !== 44100) {
+      channelData = resample(channelData, audioBuffer.sampleRate, 44100);
+    }
+
+    const SKIP_SAMPLES = 30 * 44100;
+    const WINDOW_SAMPLES = 60 * 44100;
+    const grooveData = channelData.length > SKIP_SAMPLES
+      ? channelData.slice(SKIP_SAMPLES, SKIP_SAMPLES + WINDOW_SAMPLES)
+      : channelData.slice(0, WINDOW_SAMPLES);
+
+    const e = getEssentia();
+
+    let bpm = correctBpmWithTag(detectBpm(grooveData.slice(0, 30 * 44100), 44100), null);
+    if (bpmHint) {
+      if (bpm < bpmHint.min || bpm > bpmHint.max) {
+        const halved  = Math.round((bpm / 2)  * 10) / 10;
+        const doubled = Math.round((bpm * 2)  * 10) / 10;
+        if (halved  >= bpmHint.min && halved  <= bpmHint.max) bpm = halved;
+        else if (doubled >= bpmHint.min && doubled <= bpmHint.max) bpm = doubled;
+      }
+    }
+
+    const SEG_SAMPLES = 20 * 44100;
+    const NUM_SEGS = 5;
+    const KEY_PROFILES = ['edma', 'temperley', 'edmm', 'bgate', 'krumhansl', 'noland'] as const;
+    const analysisEnd = Math.floor(channelData.length * 0.75);
+    const keyVotes: Array<{ pitchClass: number; mode: number; strength: number }> = [];
+    for (let seg = 0; seg < NUM_SEGS; seg++) {
+      const start = Math.floor((analysisEnd / NUM_SEGS) * seg);
+      const slice = channelData.slice(start, start + SEG_SAMPLES);
+      if (slice.length < SEG_SAMPLES / 2) break;
+      const vec = e.arrayToVector(slice);
+      for (const profile of KEY_PROFILES) {
+        const r = e.KeyExtractor(vec, true, 4096, 4096, 12, 3500, 60, 25, 0.2, profile);
+        keyVotes.push({ pitchClass: KEY_TO_PITCH[r.key] ?? -1, mode: r.scale === 'major' ? 1 : 0, strength: (r.strength as number) ?? 0 });
+      }
+      vec.delete();
+    }
+
+    const tally = new Map<string, { pitchClass: number; mode: number; count: number; strength: number }>();
+    for (const v of keyVotes) {
+      if (v.pitchClass === -1) continue;
+      const k = `${v.pitchClass}-${v.mode}`;
+      const entry = tally.get(k);
+      if (entry) { entry.count++; entry.strength += v.strength; }
+      else tally.set(k, { pitchClass: v.pitchClass, mode: v.mode, count: 1, strength: v.strength });
+    }
+    let best = { pitchClass: -1, mode: 0, count: 0, strength: 0 };
+    for (const entry of tally.values()) {
+      if (entry.count > best.count || (entry.count === best.count && entry.strength > best.strength)) best = entry;
+    }
+    const pitchClass = best.pitchClass >= 0 ? best.pitchClass : 0;
+    const mode = best.mode;
+
+    const energyData = channelData.slice(0, analysisEnd);
+    const mbFeats = extractMultiBandFeatures(energyData, 44100);
+    const energy = Math.round(Math.max(0, Math.min(1,
+      0.5838
+      + (mbFeats.bassDb    - 37.0  ) / 4.5   * 0.0130
+      + (mbFeats.highMidDb - 28.454) / 5.648 * 0.0107
+      + (mbFeats.highDb    - 26.545) / 6.372 * 0.0209
+      + (mbFeats.midDb     - 32.203) / 4.492 * 0.0141
+      + (mbFeats.zcRate    - 0.064 ) / 0.029 * 0.0016
+    )) * 1000) / 1000;
+
+    return { bpm, tagBpm: null, pitchClass, mode, energy };
+  } catch (err: unknown) {
+    console.warn(`  (buffer analysis failed: ${err instanceof Error ? err.message : String(err)})`);
+    return null;
+  }
+}

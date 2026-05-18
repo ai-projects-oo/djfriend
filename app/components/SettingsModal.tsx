@@ -97,6 +97,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [hasDiscogsConsumerKey, setHasDiscogsConsumerKey] = useState(false)
   const [discogsConnectedAs, setDiscogsConnectedAs] = useState('')
 
+
   const [mlStats, setMlStats] = useState<{ vectorCount: number; negativeCount: number; trainedSamples: number; modelVersion: number } | null>(null)
 
   async function checkPath(folderPath: string, setStatus: (s: PathStatus) => void) {
@@ -119,7 +120,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; tipConfig?: { help: boolean; info: boolean; ai: boolean }; hasDiscogsOAuth?: boolean; discogsUsername?: string; hasDiscogsConsumerKey?: boolean }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; tipConfig?: { help: boolean; info: boolean; ai: boolean }; hasDiscogsOAuth?: boolean; discogsUsername?: string; hasDiscogsConsumerKey?: boolean; hasRapidApiKey?: boolean }) => {
         setMusicFolder(d.musicFolder ?? '')
         loadedMusicFolder.current = d.musicFolder ?? ''
         setRekordboxFolder(d.rekordboxFolder ?? '')
@@ -175,6 +176,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   function triggerSync() {
     if (onSyncDiscogs) onSyncDiscogs()
   }
+
 
   async function clearDatabase() {
     setClearing(true)
@@ -441,7 +443,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           </div>
         </div>
 
-        {/* ── Danger Zone (both platforms) ─────────────────────────── */}
+{/* ── Danger Zone (both platforms) ─────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Danger Zone</h3>
           {!clearConfirm ? (

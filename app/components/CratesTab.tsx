@@ -7,16 +7,27 @@ import { loadVinylStore, saveVinylStore, nextPosition, type VinylStore } from '.
 import { theme } from '../lib/theme';
 
 
+interface PrintSettings { stickerW: number; stickerH: number }
+const DEFAULT_PRINT_SETTINGS: PrintSettings = { stickerW: 50, stickerH: 100 };
+const PRINT_PRESETS: Array<{ label: string; w: number; h: number }> = [
+  { label: '50×100', w: 50,  h: 100 },
+  { label: '74×105', w: 74,  h: 105 },
+  { label: '100×100', w: 100, h: 100 },
+  { label: '100×148', w: 100, h: 148 },
+];
+
 function buildStickerHtml(opts: {
   artist: string; title: string; year?: number;
   genres: string[]; styles: string[];
   comment?: string;
   tracks?: VinylTrackEntry[];
+  w?: number; h?: number;
 }): string {
-  const { artist, title, year, genres, styles, comment, tracks = [] } = opts;
+  const { artist, title, year, genres, styles, comment, tracks = [], w = 50, h = 100 } = opts;
   const genre = [...genres.slice(0, 2), ...styles.slice(0, 1)].join(' · ');
+  const s = w / 50; // scale factor relative to 50mm baseline
+  const inner = w - 6; // usable width (3mm margin each side)
 
-  // Group tracks by side
   const sides = new Map<string, VinylTrackEntry[]>();
   for (const t of tracks) {
     const side = t.position.match(/^([A-Za-z]+)/)?.[1].toUpperCase() ?? '?';
@@ -38,22 +49,22 @@ function buildStickerHtml(opts: {
   `).join('');
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sticker</title><style>
-    @page { size: 50mm 100mm; margin: 3mm; }
+    @page { size: ${w}mm ${h}mm; margin: 3mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { width: 44mm; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; font-size: 6pt; }
+    body { width: ${inner}mm; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; font-size: ${(6*s).toFixed(1)}pt; }
     .header { padding-bottom: 1.5mm; border-bottom: 0.5px solid #ddd; margin-bottom: 1.5mm; }
-    .artist { font-size: 7.5pt; font-weight: 700; line-height: 1.2; }
-    .release-title { font-size: 6.5pt; color: #333; line-height: 1.2; }
-    .sub { font-size: 5.5pt; color: #666; margin-top: 1mm; }
-    .release-comment { font-size: 5pt; color: #555; font-style: italic; margin-top: 1mm; }
-    .side-header { font-size: 5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #999; margin: 1.5mm 0 0.8mm; }
+    .artist { font-size: ${(7.5*s).toFixed(1)}pt; font-weight: 700; line-height: 1.2; }
+    .release-title { font-size: ${(6.5*s).toFixed(1)}pt; color: #333; line-height: 1.2; }
+    .sub { font-size: ${(5.5*s).toFixed(1)}pt; color: #666; margin-top: 1mm; }
+    .release-comment { font-size: ${(5*s).toFixed(1)}pt; color: #555; font-style: italic; margin-top: 1mm; }
+    .side-header { font-size: ${(5*s).toFixed(1)}pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #999; margin: 1.5mm 0 0.8mm; }
     .track { margin-bottom: 1mm; }
     .track-main { display: flex; align-items: baseline; gap: 1mm; }
-    .pos { font-size: 5.5pt; font-weight: 700; min-width: 5mm; color: #555; }
-    .tname { flex: 1; font-size: 6pt; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tmeta { font-size: 5.5pt; color: #777; white-space: nowrap; }
-    .track-comment { font-size: 5pt; color: #888; font-style: italic; padding-left: 6mm; margin-top: 0.5mm; }
-    .logo { font-size: 4.5pt; color: #ccc; text-align: right; margin-top: auto; padding-top: 1.5mm; border-top: 0.5px solid #eee; letter-spacing: 0.04em; }
+    .pos { font-size: ${(5.5*s).toFixed(1)}pt; font-weight: 700; min-width: 5mm; color: #555; }
+    .tname { flex: 1; font-size: ${(6*s).toFixed(1)}pt; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tmeta { font-size: ${(5.5*s).toFixed(1)}pt; color: #777; white-space: nowrap; }
+    .track-comment { font-size: ${(5*s).toFixed(1)}pt; color: #888; font-style: italic; padding-left: 6mm; margin-top: 0.5mm; }
+    .logo { font-size: ${(4.5*s).toFixed(1)}pt; color: #ccc; text-align: right; margin-top: auto; padding-top: 1.5mm; border-top: 0.5px solid #eee; letter-spacing: 0.04em; }
   </style></head><body>
     <div class="header">
       <div class="artist">${artist}</div>
@@ -61,7 +72,7 @@ function buildStickerHtml(opts: {
       <div class="sub">${[genre, year].filter(Boolean).join(' · ')}</div>
       ${comment ? `<div class="release-comment">${comment}</div>` : ''}
     </div>
-    ${tracksHtml || '<div style="color:#aaa;font-size:6.5pt;font-style:italic">No track data</div>'}
+    ${tracksHtml || `<div style="color:#aaa;font-size:${(6.5*s).toFixed(1)}pt;font-style:italic">No track data</div>`}
     <div class="logo">DJFriend</div>
   </body></html>`;
 }
@@ -81,15 +92,15 @@ function printHtml(html: string) {
   setTimeout(() => { win.focus(); win.print(); }, 300);
 }
 
-function buildA4Html(stickers: string[]): string {
-  // A4 190×277mm usable; sticker 50×100mm → 3 cols × 2 rows = 6 per page
+function buildA4Html(stickers: string[], w = 50, h = 100): string {
+  const cols = Math.max(1, Math.floor(190 / (w + 5)));
   const cells = stickers.map(inner => `<div class="cell">${inner}</div>`).join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Stickers</title><style>
     @page { size: A4 portrait; margin: 10mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; }
-    .grid { display: grid; grid-template-columns: repeat(3, 50mm); grid-auto-rows: 100mm; gap: 5mm; }
-    .cell { width: 50mm; height: 100mm; overflow: hidden; border: 0.5px dashed #ccc; padding: 3mm; break-inside: avoid; page-break-inside: avoid; }
+    .grid { display: grid; grid-template-columns: repeat(${cols}, ${w}mm); grid-auto-rows: ${h}mm; gap: 5mm; }
+    .cell { width: ${w}mm; height: ${h}mm; overflow: hidden; border: 0.5px dashed #ccc; padding: 3mm; break-inside: avoid; page-break-inside: avoid; }
   </style></head><body><div class="grid">${cells}</div></body></html>`;
 }
 
@@ -394,6 +405,11 @@ export default function CratesTab({
   const [printPreview, setPrintPreview] = useState<{ html: string; isA4: boolean } | null>(null);
   const [printMode, setPrintMode] = useState(false);
   const [printSelection, setPrintSelection] = useState<Set<number>>(() => new Set());
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(() => {
+    try { return { ...DEFAULT_PRINT_SETTINGS, ...JSON.parse(localStorage.getItem('djfriend-print-settings') ?? '{}') }; }
+    catch { return DEFAULT_PRINT_SETTINGS; }
+  });
+  const [customSize, setCustomSize] = useState(false);
   const [releaseInfoCache, setReleaseInfoCache] = useState<Map<number, {
     label?: string; catno?: string; country?: string; notes?: string;
     formats?: string[]; year?: number;
@@ -404,26 +420,30 @@ export default function CratesTab({
     } catch { return new Map(); }
   });
 
+
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const prevSyncPhase = useRef<string | undefined>(undefined);
   const autoImportRunning = useRef(false);
 
   const runTracklsitImport = useCallback((releases: typeof collection extends null ? never : NonNullable<typeof collection>['releases']) => {
     if (autoImportRunning.current) return () => {};
-    // Fetch releases missing tracks OR missing info cache
     let infoCache: Record<string, object>;
     try { infoCache = JSON.parse(localStorage.getItem('djfriend-release-info') ?? '{}'); } catch { infoCache = {}; }
+    const currentStore = loadVinylStore();
     const toFetch = releases.filter(r =>
-      !loadVinylStore()[r.releaseId]?.tracks.length || !infoCache[String(r.releaseId)]
+      !currentStore[r.releaseId]?.tracks.length || !infoCache[String(r.releaseId)]
     );
     if (!toFetch.length) return () => {};
     let cancelled = false;
     autoImportRunning.current = true;
     (async () => {
-      setAutoImportProgress({ done: 0, total: toFetch.length });
+      const total = toFetch.length;
+      setAutoImportProgress({ done: 0, total });
       const store = loadVinylStore();
       let infoObj: Record<string, object>;
       try { infoObj = JSON.parse(localStorage.getItem('djfriend-release-info') ?? '{}'); } catch { infoObj = {}; }
+
+      // Phase 1: Discogs tracklist + metadata import
       for (let i = 0; i < toFetch.length; i++) {
         if (cancelled) break;
         const release = toFetch[i];
@@ -436,7 +456,6 @@ export default function CratesTab({
               label?: string; catno?: string; country?: string;
               notes?: string; formats?: string[]; year?: number;
             };
-            // Save tracklist
             if (payload.tracklist?.length) {
               const tracks: VinylTrackEntry[] = payload.tracklist.map(t => ({
                 id: `${release.releaseId}-${t.position}-auto`,
@@ -452,14 +471,14 @@ export default function CratesTab({
                   : tracks,
               };
             }
-            // Save release info (label, country, notes, formats, etc.)
             const { label, catno, country, notes, formats, year } = payload;
             infoObj[String(release.releaseId)] = { label, catno, country, notes, formats, year };
           }
         } catch { /* skip */ }
-        setAutoImportProgress({ done: i + 1, total: toFetch.length });
+        setAutoImportProgress({ done: i + 1, total });
         if (i < toFetch.length - 1) await new Promise(res => setTimeout(res, 800));
       }
+
       if (!cancelled) {
         saveVinylStore(store);
         setVinylStore({ ...store });
@@ -679,7 +698,7 @@ export default function CratesTab({
         {autoImportProgress && (
           <div className="flex items-center gap-2 text-[10px] text-[#64748b]">
             <svg className="animate-spin flex-shrink-0" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M8 2a6 6 0 0 1 0 12"/></svg>
-            <span>Importing tracklists from Discogs… {autoImportProgress.done}/{autoImportProgress.total}</span>
+            <span>Syncing from Discogs… {autoImportProgress.done}/{autoImportProgress.total}</span>
             <div className="flex-1 h-1 rounded-full bg-[#1e1e2e] overflow-hidden">
               <div className="h-full rounded-full bg-[#7c3aed] transition-all" style={{ width: `${(autoImportProgress.done / autoImportProgress.total) * 100}%` }} />
             </div>
@@ -827,10 +846,10 @@ export default function CratesTab({
                           className="text-[10px] px-2.5 py-1 rounded border border-[#2a2a3a] text-[#64748b] cursor-pointer hover:text-[#94a3b8] transition-colors">Cancel</button>
                       </div>
                     </div>
-                  ) : comment ? (
-                    <p className="text-[11px] text-white/40 italic line-clamp-2 cursor-pointer hover:text-white/60 transition-colors"
-                      onClick={() => setEditingComment(release.releaseId)}>{comment}</p>
-                  ) : null}
+                  ) : (
+                    <p className={`text-[11px] italic line-clamp-2 cursor-pointer transition-colors ${comment ? 'text-white/40 hover:text-white/60' : 'text-white/20 hover:text-white/40'}`}
+                      onClick={() => setEditingComment(release.releaseId)}>{comment ?? 'Add note…'}</p>
+                  )}
 
                   {/* Release info panel */}
                   {infoOpen === release.releaseId && (() => {
@@ -905,20 +924,6 @@ export default function CratesTab({
                           <path d="M9 7a3 3 0 0 0-4.243 0l-2 2a3 3 0 0 0 4.243 4.243l1-1"/>
                         </svg>
                       </button>
-                      <button type="button" onClick={() => setEditingComment(release.releaseId)}
-                        className="text-white/35 hover:text-[#a78bfa] transition-colors cursor-pointer" title="Add note">
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
-                          <path d="M2 2h12v9H9.5l-2 2.5L5.5 11H2V2zm1 1v7h2.9l1.6 2 1.6-2H13V3H3z"/>
-                        </svg>
-                      </button>
-                      <button type="button"
-                        onClick={() => setPrintPreview({ html: buildStickerHtml({ artist: release.artist, title: release.title, year: release.year, genres: release.genres, styles: release.styles, comment, tracks: vinylStore[release.releaseId]?.tracks }), isA4: false })}
-                        className="text-white/35 hover:text-white/80 transition-colors cursor-pointer" title="Preview sticker">
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
-                          <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
-                          <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
-                        </svg>
-                      </button>
                     </div>
                   </div>
 
@@ -964,41 +969,95 @@ export default function CratesTab({
       {/* Floating print stickers bar */}
       {printMode && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[#1a1a2e] border border-[#7c3aed] shadow-2xl whitespace-nowrap">
-          {printSelection.size === 0
-            ? <span className="text-[12px] text-[#64748b]">Click releases to select</span>
-            : (() => {
-                // 50×100mm: 3 cols × 2 rows = 6 per A4 page; releases with >6 tracks use 2 stickers
-                const totalStickers = [...printSelection].reduce((sum, id) => {
-                  const t = vinylStore[id]?.tracks.length ?? 0;
-                  return sum + Math.ceil(Math.max(t, 1) / 6);
-                }, 0);
-                const pages = Math.ceil(totalStickers / 6);
-                return (
-                  <span className="text-[12px] text-[#a78bfa] font-medium">
-                    {printSelection.size} sticker{printSelection.size !== 1 ? 's' : ''} · ~{pages} A4 page{pages !== 1 ? 's' : ''}
-                  </span>
-                );
-              })()
+          {printSelection.size === 0 ? (
+            <>
+              <span className="text-[12px] text-[#64748b]">Click releases to select</span>
+              <div className="w-px h-4 bg-[#2a2a3a]" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-[#475569]">Size</span>
+                {PRINT_PRESETS.map(p => {
+                  const active = printSettings.stickerW === p.w && printSettings.stickerH === p.h;
+                  return (
+                    <button key={p.label} type="button"
+                      onClick={() => {
+                        const s = { stickerW: p.w, stickerH: p.h };
+                        setPrintSettings(s);
+                        setCustomSize(false);
+                        try { localStorage.setItem('djfriend-print-settings', JSON.stringify(s)); } catch { /* quota */ }
+                      }}
+                      className={`px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer ${active ? 'bg-[#7c3aed] text-white' : 'text-[#64748b] hover:text-[#e2e8f0] border border-[#2a2a3a] hover:border-[#7c3aed]'}`}>
+                      {p.label}
+                    </button>
+                  );
+                })}
+                <button type="button"
+                  onClick={() => setCustomSize(v => !v)}
+                  className={`px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer ${customSize ? 'bg-[#7c3aed] text-white' : 'text-[#64748b] hover:text-[#e2e8f0] border border-[#2a2a3a] hover:border-[#7c3aed]'}`}>
+                  Custom
+                </button>
+                {customSize && (
+                  <>
+                    <input type="number" min={20} max={300}
+                      value={printSettings.stickerW}
+                      onChange={e => {
+                        const s = { ...printSettings, stickerW: Math.max(20, Number(e.target.value)) };
+                        setPrintSettings(s);
+                        try { localStorage.setItem('djfriend-print-settings', JSON.stringify(s)); } catch { /* quota */ }
+                      }}
+                      className="w-12 bg-[#0d0d14] border border-[#2a2a3a] rounded px-1.5 py-0.5 text-[11px] text-[#e2e8f0] text-center focus:outline-none focus:border-[#7c3aed]"
+                    />
+                    <span className="text-[#475569] text-[11px]">×</span>
+                    <input type="number" min={20} max={300}
+                      value={printSettings.stickerH}
+                      onChange={e => {
+                        const s = { ...printSettings, stickerH: Math.max(20, Number(e.target.value)) };
+                        setPrintSettings(s);
+                        try { localStorage.setItem('djfriend-print-settings', JSON.stringify(s)); } catch { /* quota */ }
+                      }}
+                      className="w-12 bg-[#0d0d14] border border-[#2a2a3a] rounded px-1.5 py-0.5 text-[11px] text-[#e2e8f0] text-center focus:outline-none focus:border-[#7c3aed]"
+                    />
+                    <span className="text-[#475569] text-[10px]">mm</span>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (() => {
+              const { stickerW: w, stickerH: h } = printSettings;
+              const tracksPerSticker = Math.max(4, Math.round(h / 100 * 6));
+              const cols = Math.max(1, Math.floor(190 / (w + 5)));
+              const perPage = cols * Math.max(1, Math.floor(277 / (h + 5)));
+              const totalStickers = [...printSelection].reduce((sum, id) => {
+                const t = vinylStore[id]?.tracks.length ?? 0;
+                return sum + Math.ceil(Math.max(t, 1) / tracksPerSticker);
+              }, 0);
+              const pages = Math.ceil(totalStickers / perPage);
+              return (
+                <span className="text-[12px] text-[#a78bfa] font-medium">
+                  {printSelection.size} sticker{printSelection.size !== 1 ? 's' : ''} · ~{pages} A4 page{pages !== 1 ? 's' : ''}
+                </span>
+              );
+            })()
           }
           {printSelection.size > 0 && (
             <button type="button"
               onClick={() => {
+                const { stickerW: w, stickerH: h } = printSettings;
+                const tracksPerSticker = Math.max(4, Math.round(h / 100 * 6));
                 const stickers = [...printSelection].flatMap(id => {
                   const rel = collection!.releases.find(r => r.releaseId === id);
                   if (!rel) return [];
                   const manual = manualData.get(id);
                   const tracks = vinylStore[id]?.tracks ?? [];
                   const toCell = (t: VinylTrackEntry[]) => {
-                    const html = buildStickerHtml({ artist: rel.artist, title: rel.title, year: rel.year, genres: rel.genres, styles: rel.styles, comment: manual?.comment, tracks: t });
+                    const html = buildStickerHtml({ artist: rel.artist, title: rel.title, year: rel.year, genres: rel.genres, styles: rel.styles, comment: manual?.comment, tracks: t, w, h });
                     return `${extractStickerStyle(html)}<div style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:6pt;color:#111">${extractStickerBody(html)}</div>`;
                   };
-                  // Split into multiple stickers if > 6 tracks (50×100mm fits ~6 tracks)
-                  if (tracks.length <= 6) return [toCell(tracks)];
+                  if (tracks.length <= tracksPerSticker) return [toCell(tracks)];
                   const chunks: VinylTrackEntry[][] = [];
-                  for (let i = 0; i < tracks.length; i += 6) chunks.push(tracks.slice(i, i + 6));
+                  for (let i = 0; i < tracks.length; i += tracksPerSticker) chunks.push(tracks.slice(i, i + tracksPerSticker));
                   return chunks.map(toCell);
                 }).filter(Boolean);
-                setPrintPreview({ html: buildA4Html(stickers), isA4: true });
+                setPrintPreview({ html: buildA4Html(stickers, w, h), isA4: true });
                 setPrintMode(false);
                 setPrintSelection(new Set());
               }}
@@ -1006,7 +1065,7 @@ export default function CratesTab({
               OK — Print
             </button>
           )}
-          <button type="button" onClick={() => { setPrintMode(false); setPrintSelection(new Set()); }}
+          <button type="button" onClick={() => { setPrintMode(false); setPrintSelection(new Set()); setCustomSize(false); }}
             className="text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer text-[11px]">
             Cancel
           </button>
@@ -1015,9 +1074,9 @@ export default function CratesTab({
 
       {/* Print preview modal */}
       {printPreview && (() => {
-        // A4 px at 96dpi: 794×1123. Single sticker 50×100mm → 189×378px.
-        const W = printPreview.isA4 ? 560 : 189;
-        const H = printPreview.isA4 ? 793 : 378;
+        const MM_TO_PX = 3.7795;
+        const W = printPreview.isA4 ? 560 : Math.round(printSettings.stickerW * MM_TO_PX);
+        const H = printPreview.isA4 ? 793 : Math.round(printSettings.stickerH * MM_TO_PX);
         // iframe renders at real px size; we scale it down to fit viewport
         const maxH = window.innerHeight * 0.78;
         const scale = Math.min(1, maxH / H);
@@ -1027,7 +1086,7 @@ export default function CratesTab({
               {/* Label */}
               <div className="flex items-center justify-between px-1">
                 <span className="text-[11px] text-[#64748b]">
-                  {printPreview.isA4 ? 'A4 layout preview' : 'Sticker preview (50×100mm)'}
+                  {printPreview.isA4 ? `A4 layout · ${printSettings.stickerW}×${printSettings.stickerH}mm stickers` : `Sticker preview (${printSettings.stickerW}×${printSettings.stickerH}mm)`}
                 </span>
                 <button type="button" onClick={() => setPrintPreview(null)} className="text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer text-[18px] leading-none">×</button>
               </div>

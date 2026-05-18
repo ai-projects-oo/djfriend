@@ -38,22 +38,22 @@ function buildStickerHtml(opts: {
   `).join('');
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sticker</title><style>
-    @page { size: 3.5in 5in; margin: 0.12in; }
+    @page { size: 50mm 100mm; margin: 3mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { width: 3.26in; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; font-size: 7.5pt; }
-    .header { padding-bottom: 0.1in; border-bottom: 1px solid #ddd; margin-bottom: 0.1in; }
-    .artist { font-size: 10pt; font-weight: 700; line-height: 1.2; }
-    .release-title { font-size: 8.5pt; color: #333; line-height: 1.2; }
-    .sub { font-size: 6.5pt; color: #666; margin-top: 2px; }
-    .release-comment { font-size: 6pt; color: #555; font-style: italic; margin-top: 3px; }
-    .side-header { font-size: 6pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #999; margin: 0.08in 0 0.04in; }
-    .track { margin-bottom: 0.05in; }
-    .track-main { display: flex; align-items: baseline; gap: 0.05in; }
-    .pos { font-size: 7pt; font-weight: 700; min-width: 0.2in; color: #555; }
-    .tname { flex: 1; font-size: 7.5pt; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tmeta { font-size: 6.5pt; color: #777; white-space: nowrap; }
-    .track-comment { font-size: 6pt; color: #888; font-style: italic; padding-left: 0.25in; margin-top: 1px; }
-    .logo { font-size: 5pt; color: #ccc; text-align: right; margin-top: 0.1in; padding-top: 0.06in; border-top: 0.5px solid #eee; letter-spacing: 0.04em; }
+    body { width: 44mm; font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; font-size: 6pt; }
+    .header { padding-bottom: 1.5mm; border-bottom: 0.5px solid #ddd; margin-bottom: 1.5mm; }
+    .artist { font-size: 7.5pt; font-weight: 700; line-height: 1.2; }
+    .release-title { font-size: 6.5pt; color: #333; line-height: 1.2; }
+    .sub { font-size: 5.5pt; color: #666; margin-top: 1mm; }
+    .release-comment { font-size: 5pt; color: #555; font-style: italic; margin-top: 1mm; }
+    .side-header { font-size: 5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #999; margin: 1.5mm 0 0.8mm; }
+    .track { margin-bottom: 1mm; }
+    .track-main { display: flex; align-items: baseline; gap: 1mm; }
+    .pos { font-size: 5.5pt; font-weight: 700; min-width: 5mm; color: #555; }
+    .tname { flex: 1; font-size: 6pt; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tmeta { font-size: 5.5pt; color: #777; white-space: nowrap; }
+    .track-comment { font-size: 5pt; color: #888; font-style: italic; padding-left: 6mm; margin-top: 0.5mm; }
+    .logo { font-size: 4.5pt; color: #ccc; text-align: right; margin-top: auto; padding-top: 1.5mm; border-top: 0.5px solid #eee; letter-spacing: 0.04em; }
   </style></head><body>
     <div class="header">
       <div class="artist">${artist}</div>
@@ -82,14 +82,14 @@ function printHtml(html: string) {
 }
 
 function buildA4Html(stickers: string[]): string {
-  // A4 = 210×297mm; 2 columns × N rows, each sticker ~88mm wide × 125mm tall
+  // A4 190×277mm usable; sticker 50×100mm → 3 cols × 2 rows = 6 per page
   const cells = stickers.map(inner => `<div class="cell">${inner}</div>`).join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Stickers</title><style>
     @page { size: A4 portrait; margin: 10mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
-    .cell { border: 0.5px dashed #ccc; padding: 4mm; break-inside: avoid; page-break-inside: avoid; }
+    .grid { display: grid; grid-template-columns: repeat(3, 50mm); grid-auto-rows: 100mm; gap: 5mm; }
+    .cell { width: 50mm; height: 100mm; overflow: hidden; border: 0.5px dashed #ccc; padding: 3mm; break-inside: avoid; page-break-inside: avoid; }
   </style></head><body><div class="grid">${cells}</div></body></html>`;
 }
 
@@ -967,28 +967,12 @@ export default function CratesTab({
           {printSelection.size === 0
             ? <span className="text-[12px] text-[#64748b]">Click releases to select</span>
             : (() => {
-                // Estimate page count: each sticker ~125mm tall (base 40mm + ~7mm per track)
-                // A4 usable height ~277mm, 2 cols → stickers per page depends on tallest in each row
-                const heights = [...printSelection].map(id => {
-                  const tracks = vinylStore[id]?.tracks.length ?? 0;
-                  return 40 + tracks * 7; // mm
-                });
-                const pageH = 277;
-                let pages = 0, rowH = 0, col = 0;
-                if (heights.length) { pages = 1; }
-                for (const h of heights) {
-                  if (col === 2) { col = 0; rowH = 0; }
-                  if (col === 0) rowH = h;
-                  else rowH = Math.max(rowH, h);
-                  col++;
-                  if (col === 2) {
-                    // check if this row fits; simplified: just count pages by total height
-                  }
-                }
-                // Simple: 2 cols, estimate pages = ceil(ceil(n/2) * avgH / pageH)
-                const avgH = heights.reduce((a, b) => a + b, 0) / heights.length;
-                const rows = Math.ceil(heights.length / 2);
-                pages = Math.ceil((rows * avgH) / pageH);
+                // 50×100mm: 3 cols × 2 rows = 6 per A4 page; releases with >6 tracks use 2 stickers
+                const totalStickers = [...printSelection].reduce((sum, id) => {
+                  const t = vinylStore[id]?.tracks.length ?? 0;
+                  return sum + Math.ceil(Math.max(t, 1) / 6);
+                }, 0);
+                const pages = Math.ceil(totalStickers / 6);
                 return (
                   <span className="text-[12px] text-[#a78bfa] font-medium">
                     {printSelection.size} sticker{printSelection.size !== 1 ? 's' : ''} · ~{pages} A4 page{pages !== 1 ? 's' : ''}
@@ -999,12 +983,20 @@ export default function CratesTab({
           {printSelection.size > 0 && (
             <button type="button"
               onClick={() => {
-                const stickers = [...printSelection].map(id => {
+                const stickers = [...printSelection].flatMap(id => {
                   const rel = collection!.releases.find(r => r.releaseId === id);
-                  if (!rel) return '';
+                  if (!rel) return [];
                   const manual = manualData.get(id);
-                  const html = buildStickerHtml({ artist: rel.artist, title: rel.title, year: rel.year, genres: rel.genres, styles: rel.styles, comment: manual?.comment, tracks: vinylStore[id]?.tracks });
-                  return `${extractStickerStyle(html)}<div style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:7.5pt;color:#111">${extractStickerBody(html)}</div>`;
+                  const tracks = vinylStore[id]?.tracks ?? [];
+                  const toCell = (t: VinylTrackEntry[]) => {
+                    const html = buildStickerHtml({ artist: rel.artist, title: rel.title, year: rel.year, genres: rel.genres, styles: rel.styles, comment: manual?.comment, tracks: t });
+                    return `${extractStickerStyle(html)}<div style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:6pt;color:#111">${extractStickerBody(html)}</div>`;
+                  };
+                  // Split into multiple stickers if > 6 tracks (50×100mm fits ~6 tracks)
+                  if (tracks.length <= 6) return [toCell(tracks)];
+                  const chunks: VinylTrackEntry[][] = [];
+                  for (let i = 0; i < tracks.length; i += 6) chunks.push(tracks.slice(i, i + 6));
+                  return chunks.map(toCell);
                 }).filter(Boolean);
                 printHtml(buildA4Html(stickers));
                 setPrintMode(false);
@@ -1025,10 +1017,10 @@ export default function CratesTab({
       {stickerHtml && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setStickerHtml(null)}>
           <div className="flex flex-col gap-3 max-h-[90vh]" onClick={e => e.stopPropagation()}>
-            <div className="bg-white rounded shadow-2xl overflow-hidden" style={{ width: 336, maxHeight: 'calc(90vh - 56px)', overflowY: 'auto' }}>
+            <div className="bg-white rounded shadow-2xl overflow-hidden" style={{ width: 189, height: 378 }}>
               <iframe
                 srcDoc={stickerHtml}
-                style={{ width: 336, height: 480, border: 'none', display: 'block' }}
+                style={{ width: 189, height: 378, border: 'none', display: 'block' }}
                 scrolling="no"
               />
             </div>

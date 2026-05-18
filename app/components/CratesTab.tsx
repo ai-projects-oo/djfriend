@@ -391,7 +391,7 @@ export default function CratesTab({
   const [vinylStore,      setVinylStore]      = useState<VinylStore>(() => loadVinylStore());
   const [autoImportProgress, setAutoImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [infoOpen, setInfoOpen] = useState<number | null>(null);
-  const [stickerHtml, setStickerHtml] = useState<string | null>(null);
+  const [printPreview, setPrintPreview] = useState<{ html: string; isA4: boolean } | null>(null);
   const [printMode, setPrintMode] = useState(false);
   const [printSelection, setPrintSelection] = useState<Set<number>>(() => new Set());
   const [releaseInfoCache, setReleaseInfoCache] = useState<Map<number, {
@@ -912,7 +912,7 @@ export default function CratesTab({
                         </svg>
                       </button>
                       <button type="button"
-                        onClick={() => setStickerHtml(buildStickerHtml({ artist: release.artist, title: release.title, year: release.year, genres: release.genres, styles: release.styles, comment, tracks: vinylStore[release.releaseId]?.tracks }))}
+                        onClick={() => setPrintPreview({ html: buildStickerHtml({ artist: release.artist, title: release.title, year: release.year, genres: release.genres, styles: release.styles, comment, tracks: vinylStore[release.releaseId]?.tracks }), isA4: false })}
                         className="text-white/35 hover:text-white/80 transition-colors cursor-pointer" title="Preview sticker">
                         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
                           <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
@@ -998,7 +998,7 @@ export default function CratesTab({
                   for (let i = 0; i < tracks.length; i += 6) chunks.push(tracks.slice(i, i + 6));
                   return chunks.map(toCell);
                 }).filter(Boolean);
-                printHtml(buildA4Html(stickers));
+                setPrintPreview({ html: buildA4Html(stickers), isA4: true });
                 setPrintMode(false);
                 setPrintSelection(new Set());
               }}
@@ -1013,34 +1013,55 @@ export default function CratesTab({
         </div>
       )}
 
-      {/* Sticker preview modal */}
-      {stickerHtml && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setStickerHtml(null)}>
-          <div className="flex flex-col gap-3 max-h-[90vh]" onClick={e => e.stopPropagation()}>
-            <div className="bg-white rounded shadow-2xl overflow-hidden" style={{ width: 189, height: 378 }}>
-              <iframe
-                srcDoc={stickerHtml}
-                style={{ width: 189, height: 378, border: 'none', display: 'block' }}
-                scrolling="no"
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => setStickerHtml(null)}
-                className="px-3 py-1.5 rounded border border-[#2a2a3a] text-[#64748b] text-[12px] hover:text-[#e2e8f0] transition-colors cursor-pointer">
-                Cancel
-              </button>
-              <button type="button" onClick={() => { printHtml(stickerHtml); setStickerHtml(null); }}
-                className="px-4 py-1.5 rounded bg-[#7c3aed] text-white text-[12px] hover:bg-[#6d28d9] transition-colors cursor-pointer flex items-center gap-1.5">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
-                  <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
-                  <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
-                </svg>
-                Print
-              </button>
+      {/* Print preview modal */}
+      {printPreview && (() => {
+        // A4 px at 96dpi: 794×1123. Single sticker 50×100mm → 189×378px.
+        const W = printPreview.isA4 ? 560 : 189;
+        const H = printPreview.isA4 ? 793 : 378;
+        // iframe renders at real px size; we scale it down to fit viewport
+        const maxH = window.innerHeight * 0.78;
+        const scale = Math.min(1, maxH / H);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75" onClick={() => setPrintPreview(null)}>
+            <div className="flex flex-col gap-3" onClick={e => e.stopPropagation()}>
+              {/* Label */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[11px] text-[#64748b]">
+                  {printPreview.isA4 ? 'A4 layout preview' : 'Sticker preview (50×100mm)'}
+                </span>
+                <button type="button" onClick={() => setPrintPreview(null)} className="text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer text-[18px] leading-none">×</button>
+              </div>
+
+              {/* Scaled preview */}
+              <div className="bg-white rounded shadow-2xl overflow-hidden" style={{ width: W * scale, height: H * scale }}>
+                <div style={{ width: W, height: H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+                  <iframe
+                    srcDoc={printPreview.html}
+                    style={{ width: W, height: H, border: 'none', display: 'block' }}
+                    scrolling="no"
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={() => setPrintPreview(null)}
+                  className="px-3 py-1.5 rounded border border-[#2a2a3a] text-[#64748b] text-[12px] hover:text-[#e2e8f0] transition-colors cursor-pointer">
+                  Cancel
+                </button>
+                <button type="button" onClick={() => { printHtml(printPreview.html); setPrintPreview(null); }}
+                  className="px-4 py-1.5 rounded bg-[#7c3aed] text-white text-[12px] hover:bg-[#6d28d9] transition-colors cursor-pointer flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+                    <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
+                    <path d="M1 6h14a1 1 0 011 1v5a1 1 0 01-1 1h-2v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1H1a1 1 0 01-1-1V7a1 1 0 011-1zm2 3.5a.5.5 0 100 1 .5.5 0 000-1zM4 11h8v3H4v-3z"/>
+                  </svg>
+                  Print
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

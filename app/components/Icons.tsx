@@ -80,8 +80,9 @@ export function DiscogsIcon({ size = 16, className = '' }: IconProps) {
 
 export function BeatportIcon({ size = 16, className = '' }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.5 5H12c2.21 0 4 1.79 4 4 0 1.48-.81 2.77-2 3.46V17h-1.5v-2h-2v-1.5H12c1.38 0 2.5-1.12 2.5-2.5S13.38 8.5 12 8.5h-1.5V13H9V7h1.5z"/>
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M10 1.5C7.5 1.5 5 3 5 5.5V10"/>
+      <circle cx="10" cy="12.5" r="3.5"/>
     </svg>
   );
 }

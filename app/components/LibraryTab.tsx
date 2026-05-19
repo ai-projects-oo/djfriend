@@ -231,6 +231,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   const [dupSelections, setDupSelections] = useState<Record<string, Set<string>>>({});
   const [selected, setSelected]         = useState<Set<string>>(new Set());
   const [editMode, setEditMode]         = useState(false);
+  const [inlineEdit, setInlineEdit]     = useState<{ file: string; field: 'title' | 'artist' | 'year' | 'comment' } | null>(null);
   const [bulkBpmOpen, setBulkBpmOpen]   = useState(false);
   const [bulkBpmMin, setBulkBpmMin]     = useState('');
   const [bulkBpmMax, setBulkBpmMax]     = useState('');
@@ -700,7 +701,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                   key={song.file}
                   ref={isFirst ? missingRowRef : undefined}
                   className={`group transition-colors cursor-default select-none ${isSelected ? "bg-[#7c3aed]/10" : isPlaying ? "bg-[#7c3aed]/5" : "hover:bg-[#0d0d14]"}`}
-                  onClick={e => handleRowClick(e, song, idx)}
+                  onClick={e => { setInlineEdit(null); handleRowClick(e, song, idx); }}
                   onDoubleClick={() => { setNowPlaying(song); }}
                   onContextMenu={e => handleRowContextMenu(e, song)}
                 >
@@ -714,8 +715,12 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                     )}
                   </td>
                   {/* Title + waveform + missing chips */}
-                  <td className="px-3 py-1.5 max-w-[200px]">
-                    <span className="text-sm text-[#cbd5e1] block truncate">{song.title || "—"}</span>
+                  <td className="px-3 py-1.5 max-w-[200px]" onClick={e => e.stopPropagation()}>
+                    {inlineEdit?.file === song.file && inlineEdit.field === 'title' ? (
+                      <input autoFocus defaultValue={song.title} onBlur={e => { void handleSave(song.file, { title: e.target.value.trim() || song.title }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-sm text-[#cbd5e1] outline-none pb-0.5" />
+                    ) : (
+                      <span className="text-sm text-[#cbd5e1] block truncate cursor-text hover:text-white transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'title' })}>{song.title || "—"}</span>
+                    )}
                     {song.waveform && song.waveform.length > 0 && (
                       <WaveformBar waveform={song.waveform} frequencyWaveform={song.frequencyWaveform} height={18} className="mt-0.5 opacity-60 group-hover:opacity-90 transition-opacity" />
                     )}
@@ -725,7 +730,13 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 max-w-[160px]"><span className="text-sm text-[#94a3b8] block truncate">{song.artist || "—"}</span></td>
+                  <td className="px-3 py-1.5 max-w-[160px]" onClick={e => e.stopPropagation()}>
+                    {inlineEdit?.file === song.file && inlineEdit.field === 'artist' ? (
+                      <input autoFocus defaultValue={song.artist} onBlur={e => { void handleSave(song.file, { artist: e.target.value.trim() || song.artist }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-sm text-[#94a3b8] outline-none pb-0.5" />
+                    ) : (
+                      <span className="text-sm text-[#94a3b8] block truncate cursor-text hover:text-[#cbd5e1] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'artist' })}>{song.artist || "—"}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-1.5 whitespace-nowrap">
                     <span className={`text-xs tabular-nums font-medium ${song.bpm === 0 ? "text-[#ef4444]/70" : "text-[#94a3b8]"}`}>{song.bpm === 0 ? "—" : Math.round(song.bpm)}</span>
                   </td>
@@ -744,8 +755,24 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                   </td>
                   <td className="px-3 py-1.5 max-w-[180px]"><span className="text-xs text-[#64748b] block truncate">{song.genres.join(", ") || "—"}</span></td>
                   {visibleCols.has("duration")  && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#475569] tabular-nums">{song.duration != null ? fmt(song.duration) : "—"}</span></td>}
-                  {visibleCols.has("year")      && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#475569] tabular-nums">{song.year ?? "—"}</span></td>}
-                  {visibleCols.has("comment")   && <td className="px-3 py-1.5 max-w-[200px]"><span className="text-xs text-[#475569] block truncate" title={song.comment}>{song.comment || "—"}</span></td>}
+                  {visibleCols.has("year") && (
+                    <td className="px-3 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      {inlineEdit?.file === song.file && inlineEdit.field === 'year' ? (
+                        <input autoFocus type="number" defaultValue={song.year ?? ''} onBlur={e => { const y = parseInt(e.target.value); void handleSave(song.file, { year: y > 0 ? y : undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-16 bg-transparent border-b border-[#7c3aed] text-xs text-[#475569] outline-none tabular-nums pb-0.5" />
+                      ) : (
+                        <span className="text-xs text-[#475569] tabular-nums cursor-text hover:text-[#94a3b8] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'year' })}>{song.year ?? "—"}</span>
+                      )}
+                    </td>
+                  )}
+                  {visibleCols.has("comment") && (
+                    <td className="px-3 py-1.5 max-w-[200px]" onClick={e => e.stopPropagation()}>
+                      {inlineEdit?.file === song.file && inlineEdit.field === 'comment' ? (
+                        <input autoFocus defaultValue={song.comment ?? ''} onBlur={e => { void handleSave(song.file, { comment: e.target.value.trim() || undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-xs text-[#475569] outline-none pb-0.5" />
+                      ) : (
+                        <span className="text-xs text-[#475569] block truncate cursor-text hover:text-[#94a3b8] transition-colors" title={song.comment} onClick={() => setInlineEdit({ file: song.file, field: 'comment' })}>{song.comment || "—"}</span>
+                      )}
+                    </td>
+                  )}
                   {visibleCols.has("dateAdded") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#475569] tabular-nums">{song.dateAdded != null ? fmtDate(song.dateAdded) : "—"}</span></td>}
                   {visibleCols.has("vibeTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#64748b] block truncate">{song.semanticTags?.vibeTags.join(", ") || "—"}</span></td>}
                   {visibleCols.has("moodTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#64748b] block truncate">{song.semanticTags?.moodTags.join(", ") || "—"}</span></td>}

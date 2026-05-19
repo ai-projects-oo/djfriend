@@ -87,12 +87,17 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
 
     ctx.fillStyle = '#090910';
     ctx.fillRect(0, 0, w, h);
+    // Red baseline floor
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(0, h - 1, w, 1);
+    ctx.globalAlpha = 1;
 
     const wf   = adaptWaveform(waveform, w);
     const fw   = frequencyWaveform ? adaptFreq(frequencyWaveform, w) : null;
     const n    = wf.length;
     const barW = w / n;
-    const bw   = Math.ceil(barW);
+    const bw   = Math.max(1, barW - 1);
     const px   = progressRef.current * w;
     const vocalInterp = vocalTimeline && vocalTimeline.length > 0 ? interp(vocalTimeline, n) : null;
 

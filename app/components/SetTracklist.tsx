@@ -15,13 +15,17 @@ export interface FitInfo {
 
 // ─── Column definitions ────────────────────────────────────────────────────────
 
-export type ColumnKey = 'time' | 'genre' | 'year' | 'comment';
+export type ColumnKey = 'time' | 'genre' | 'year' | 'comment' | 'dateAdded' | 'vibeTags' | 'moodTags' | 'vocalType';
 
 const OPTIONAL_COLUMNS: { key: ColumnKey; label: string }[] = [
-  { key: 'time',    label: 'Time' },
-  { key: 'genre',   label: 'Genre' },
-  { key: 'year',    label: 'Year' },
-  { key: 'comment', label: 'Comments' },
+  { key: 'time',      label: 'Time' },
+  { key: 'genre',     label: 'Genre' },
+  { key: 'year',      label: 'Year' },
+  { key: 'dateAdded', label: 'Date Added' },
+  { key: 'comment',   label: 'Comments' },
+  { key: 'vibeTags',  label: 'Vibe Tags' },
+  { key: 'moodTags',  label: 'Mood Tags' },
+  { key: 'vocalType', label: 'Vocal Type' },
 ];
 
 const LS_KEY = 'djfriend:visibleColumns';
@@ -675,8 +679,20 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                 {visibleColumns.has('year') && (
                   <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Year</th>
                 )}
+                {visibleColumns.has('dateAdded') && (
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">Added</th>
+                )}
                 {visibleColumns.has('comment') && (
                   <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Comments</th>
+                )}
+                {visibleColumns.has('vibeTags') && (
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Vibe</th>
+                )}
+                {visibleColumns.has('moodTags') && (
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Mood</th>
+                )}
+                {visibleColumns.has('vocalType') && (
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Vocal</th>
                 )}
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">→ Transition</th>
                 <th className="py-2 pl-2 pr-4 text-right text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Actions</th>

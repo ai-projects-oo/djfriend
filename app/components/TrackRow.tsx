@@ -45,6 +45,10 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function fmtDate(ts: number): string {
+  return new Date(ts * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 function camelotStep(num: number, delta: number): number {
   return ((num - 1 + delta + 120) % 12) + 1;
 }
@@ -525,6 +529,42 @@ async function handleReanalyze() {
             ) : (
               <span className="text-[10px] text-[#2a2a3a]">—</span>
             )}
+          </td>
+        )}
+
+        {/* Date Added — optional */}
+        {visibleColumns.has('dateAdded') && (
+          <td className="py-3 px-2 whitespace-nowrap">
+            <span className="text-[10px] text-[#475569] tabular-nums">
+              {track.dateAdded != null ? fmtDate(track.dateAdded) : <span className="text-[#2a2a3a]">—</span>}
+            </span>
+          </td>
+        )}
+
+        {/* Vibe Tags — optional */}
+        {visibleColumns.has('vibeTags') && (
+          <td className="py-3 px-2 max-w-[140px]">
+            <span className="text-[10px] text-[#64748b] truncate block">
+              {track.semanticTags?.vibeTags.join(', ') || <span className="text-[#2a2a3a]">—</span>}
+            </span>
+          </td>
+        )}
+
+        {/* Mood Tags — optional */}
+        {visibleColumns.has('moodTags') && (
+          <td className="py-3 px-2 max-w-[140px]">
+            <span className="text-[10px] text-[#64748b] truncate block">
+              {track.semanticTags?.moodTags.join(', ') || <span className="text-[#2a2a3a]">—</span>}
+            </span>
+          </td>
+        )}
+
+        {/* Vocal Type — optional */}
+        {visibleColumns.has('vocalType') && (
+          <td className="py-3 px-2 whitespace-nowrap">
+            <span className="text-[10px] text-[#64748b]">
+              {track.semanticTags?.vocalType ?? <span className="text-[#2a2a3a]">—</span>}
+            </span>
           </td>
         )}
 

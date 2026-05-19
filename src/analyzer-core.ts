@@ -28,9 +28,9 @@ export interface EnergyProfile {
 }
 
 export interface FrequencyWaveform {
-  bass: number[]; // ~400 values 0–1, energy in 20–250 Hz per time window
-  mid:  number[]; // ~400 values 0–1, energy in 250–4000 Hz per time window
-  high: number[]; // ~400 values 0–1, energy in 4000+ Hz per time window
+  bass: number[]; // ~2000 values 0–1, energy in 20–250 Hz per time window
+  mid:  number[]; // ~2000 values 0–1, energy in 250–4000 Hz per time window
+  high: number[]; // ~2000 values 0–1, energy in 4000+ Hz per time window
 }
 
 export interface LocalAudioFeatures {
@@ -40,7 +40,7 @@ export interface LocalAudioFeatures {
   mode: number;       // 1=major, 0=minor
   energy: number;     // 0–1 normalized via dBFS
   energyProfile?: EnergyProfile;
-  waveform?: number[]; // ~400 normalized RMS values (0–1) for waveform display
+  waveform?: number[]; // ~1200 normalized RMS values (0–1) for waveform display
   frequencyWaveform?: FrequencyWaveform; // per-window band energies for frequency-colored waveform
   vocalTimeline?: number[]; // per-patch vocal probability (~1 value per 3 s)
   year?: number;      // ID3 year tag
@@ -417,7 +417,7 @@ async function afconvertDecode(
   }
 }
 
-export function computeWaveform(channelData: Float32Array, points = 400): number[] {
+export function computeWaveform(channelData: Float32Array, points = 2000): number[] {
   const blockSize = Math.floor(channelData.length / points);
   const raw: number[] = [];
   for (let i = 0; i < points; i++) {
@@ -436,7 +436,7 @@ export function computeWaveform(channelData: Float32Array, points = 400): number
  * Reuses the existing fft() — no second decodeAudioData call.
  * Returns three normalized arrays (bass / mid / high), each with `points` values.
  */
-export function computeFrequencyWaveform(channelData: Float32Array, sampleRate: number, points = 400): FrequencyWaveform {
+export function computeFrequencyWaveform(channelData: Float32Array, sampleRate: number, points = 2000): FrequencyWaveform {
   const N    = channelData.length;
   const WIN  = 2048;
   const half = WIN >> 1;

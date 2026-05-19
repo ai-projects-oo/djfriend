@@ -690,7 +690,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                 <tr
                   key={song.file}
                   ref={isFirst ? missingRowRef : undefined}
-                  className={`group transition-colors cursor-default select-none ${isMissing ? "border-l-2 border-[#ef4444]/60" : ""} ${isSelected ? "bg-[#7c3aed]/10" : isPlaying ? "bg-[#7c3aed]/5" : "hover:bg-[#0d0d14]"}`}
+                  className={`group transition-colors cursor-default select-none ${isSelected ? "bg-[#7c3aed]/10" : isPlaying ? "bg-[#7c3aed]/5" : "hover:bg-[#0d0d14]"}`}
                   onClick={e => handleRowClick(e, song, idx)}
                   onDoubleClick={() => { setNowPlaying(song); }}
                   onContextMenu={e => handleRowContextMenu(e, song)}

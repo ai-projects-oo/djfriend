@@ -1390,7 +1390,7 @@ function AppInner() {
               >
                 <span className="flex items-center gap-1.5">
                   {tab === "Crates"
-                    ? <img src={new URL('./assets/discogs-white.png', import.meta.url).href} alt="Discogs" className="h-3.5 w-auto" style={{ opacity: isCratesLocked ? 0.12 : activeTab === 'Crates' ? 0.88 : 0.20 }} />
+                    ? <img src={new URL('./assets/discogs-logo.svg', import.meta.url).href} alt="Discogs" className="h-3.5 w-auto" style={{ filter: 'invert(1)', opacity: isCratesLocked ? 0.12 : activeTab === 'Crates' ? 0.88 : 0.28 }} />
                     : tab}
                   {isCratesLocked && (
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-50"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>

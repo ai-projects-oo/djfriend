@@ -3,11 +3,10 @@ import { useEffect, useRef } from 'react';
 interface Props {
   waveform: number[];
   height?: number;
-  color?: string;
   className?: string;
 }
 
-export default function WaveformBar({ waveform, height = 28, color = '#7c3aed', className = '' }: Props) {
+export default function WaveformBar({ waveform, height = 28, className = '' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -26,15 +25,25 @@ export default function WaveformBar({ waveform, height = 28, color = '#7c3aed', 
     ctx.clearRect(0, 0, w, h);
 
     const barW = w / waveform.length;
-    const mid = h / 2;
+    const mid  = h / 2;
+
+    // Vertical gradient: bass (bottom) → mids → highs (top)
+    const grad = ctx.createLinearGradient(0, h, 0, 0);
+    grad.addColorStop(0.00, '#ff5500'); // bass — orange-red
+    grad.addColorStop(0.35, '#ffcc00'); // low-mids — yellow
+    grad.addColorStop(0.65, '#44dd88'); // upper-mids — green
+    grad.addColorStop(1.00, '#00aaff'); // highs — cyan-blue
 
     waveform.forEach((v, i) => {
-      const half = Math.max(1, v * mid);
-      const alpha = 0.4 + v * 0.6;
-      ctx.fillStyle = color + Math.round(alpha * 255).toString(16).padStart(2, '0');
+      const half  = Math.max(1, v * mid);
+      const alpha = 0.35 + v * 0.65;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle   = grad;
       ctx.fillRect(i * barW, mid - half, Math.max(1, barW - 0.5), half * 2);
     });
-  }, [waveform, height, color]);
+
+    ctx.globalAlpha = 1;
+  }, [waveform, height]);
 
   return (
     <canvas

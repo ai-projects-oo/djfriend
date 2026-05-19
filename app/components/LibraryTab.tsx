@@ -229,6 +229,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   const [deleting, setDeleting]         = useState(false);
   const [dupSelections, setDupSelections] = useState<Record<string, Set<string>>>({});
   const [selected, setSelected]         = useState<Set<string>>(new Set());
+  const [editMode, setEditMode]         = useState(false);
   const [bulkBpmOpen, setBulkBpmOpen]   = useState(false);
   const [bulkBpmMin, setBulkBpmMin]     = useState('');
   const [bulkBpmMax, setBulkBpmMax]     = useState('');
@@ -305,6 +306,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
   // ── Row selection (no checkboxes — macOS style) ────────────────────────────
   const handleRowClick = useCallback((e: React.MouseEvent, song: Song, idx: number) => {
+    if (!editMode) return;
     if (e.metaKey || e.ctrlKey) {
       // Toggle individual
       setSelected(prev => { const n = new Set(prev); if (n.has(song.file)) { n.delete(song.file); } else { n.add(song.file); } return n; });
@@ -319,7 +321,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
       setSelected(new Set([song.file]));
       lastClickedIdx.current = idx;
     }
-  }, [rows]);
+  }, [rows, editMode]);
 
   const handleSave = useCallback(async (file: string, patch: { artist?: string; title?: string; genres?: string[]; year?: number; comment?: string }) => {
     await patchTrackMeta(file, patch);
@@ -593,6 +595,10 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
         <input type="text" placeholder="Search title or artist…" value={search} onChange={e => setSearch(e.target.value)}
           className="flex-1 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors" />
         {(search || activeFilters) && <span className="text-[10px] text-[#475569] whitespace-nowrap">{rows.length} / {library.length}</span>}
+        <button type="button" onClick={() => { setEditMode(o => { if (o) setSelected(new Set()); return !o; }); }}
+          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${editMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
+          Edit
+        </button>
         <button type="button" onClick={() => setFiltersOpen(o => !o)}
           className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${activeFilters ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
           Filter{activeFilters ? " ●" : ""}
@@ -709,7 +715,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                   <td className="px-3 py-1.5 max-w-[200px]">
                     <span className="text-sm text-[#cbd5e1] block truncate">{song.title || "—"}</span>
                     {song.waveform && song.waveform.length > 0 && (
-                      <WaveformBar waveform={song.waveform} height={18} color="#7c3aed" className="mt-0.5 opacity-60 group-hover:opacity-90 transition-opacity" />
+                      <WaveformBar waveform={song.waveform} height={18} className="mt-0.5 opacity-60 group-hover:opacity-90 transition-opacity" />
                     )}
                     {isMissing && (
                       <div className="flex gap-1 mt-0.5 flex-wrap">

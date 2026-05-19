@@ -4,6 +4,7 @@ import type { SetTrack } from '../types';
 import { parseCamelot } from '../lib/camelot';
 import { camelotColor } from '../lib/camelotColors';
 import type { FitInfo, ColumnKey, TransitionInfo } from './SetTracklist';
+import WaveformBar from './WaveformBar';
 
 interface Props {
   track: SetTrack;
@@ -565,6 +566,17 @@ async function handleReanalyze() {
             <span className="text-[10px] text-[#64748b]">
               {track.semanticTags?.vocalType ?? <span className="text-[#2a2a3a]">—</span>}
             </span>
+          </td>
+        )}
+
+        {/* Waveform — optional */}
+        {visibleColumns.has('waveform') && (
+          <td className="py-3 px-2" style={{ minWidth: 120 }}>
+            {track.waveform && track.waveform.length > 0 ? (
+              <WaveformBar waveform={track.waveform} frequencyWaveform={track.frequencyWaveform} height={20} className="opacity-70 group-hover:opacity-100 transition-opacity" />
+            ) : (
+              <span className="text-[10px] text-[#2a2a3a]">—</span>
+            )}
           </td>
         )}
 

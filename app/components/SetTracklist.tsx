@@ -15,7 +15,7 @@ export interface FitInfo {
 
 // ─── Column definitions ────────────────────────────────────────────────────────
 
-export type ColumnKey = 'time' | 'genre' | 'year' | 'comment' | 'dateAdded' | 'vibeTags' | 'moodTags' | 'vocalType';
+export type ColumnKey = 'time' | 'genre' | 'year' | 'comment' | 'dateAdded' | 'vibeTags' | 'moodTags' | 'vocalType' | 'waveform';
 
 const OPTIONAL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'time',      label: 'Time' },
@@ -26,6 +26,7 @@ const OPTIONAL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'vibeTags',  label: 'Vibe Tags' },
   { key: 'moodTags',  label: 'Mood Tags' },
   { key: 'vocalType', label: 'Vocal Type' },
+  { key: 'waveform',  label: 'Waveform' },
 ];
 
 const LS_KEY = 'djfriend:visibleColumns';
@@ -693,6 +694,9 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                 )}
                 {visibleColumns.has('vocalType') && (
                   <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Vocal</th>
+                )}
+                {visibleColumns.has('waveform') && (
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Waveform</th>
                 )}
                 <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider whitespace-nowrap">→ Transition</th>
                 <th className="py-2 pl-2 pr-4 text-right text-[10px] font-semibold text-[#475569] uppercase tracking-wider">Actions</th>

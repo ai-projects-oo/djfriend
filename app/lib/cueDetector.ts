@@ -2,11 +2,10 @@ import type { Song } from '../types';
 
 export interface CuePoint {
   name: string;
-  time: number; // seconds (beat-snapped)
+  time: number; // seconds (bar-snapped)
   num: number;  // Rekordbox hot cue slot 0–7 (A–H)
 }
 
-// Slide a small average window over the waveform to smooth noise
 function smooth(arr: number[], win: number): number[] {
   return arr.map((_, i) => {
     const lo = Math.max(0, i - win), hi = Math.min(arr.length - 1, i + win);
@@ -15,9 +14,8 @@ function smooth(arr: number[], win: number): number[] {
   });
 }
 
-// Round a time to the nearest bar boundary (4 beats)
 function snapToBar(time: number, bpm: number): number {
-  if (bpm <= 0) return time;
+  if (bpm <= 0) return Math.round(time * 10) / 10;
   const barDur = (4 * 60) / bpm;
   return Math.round(time / barDur) * barDur;
 }
@@ -26,93 +24,119 @@ function idx2time(idx: number, total: number, duration: number): number {
   return (idx / total) * duration;
 }
 
+function bar(idx: number, n: number, duration: number, bpm: number): number {
+  return snapToBar(idx2time(idx, n, duration), bpm);
+}
+
 /**
- * Auto-detect up to 5 musical cue points from amplitude waveform + energy profile.
- * All returned times are beat-snapped to the nearest bar boundary.
+ * Detect up to 8 hot cue points (A–H) from waveform + energy profile.
+ * Covers the full structural anatomy of an electronic track:
+ *   A Mix-in  · B Intro end  · C Buildup  · D Break
+ *   E Drop    · F Body       · G 2nd break · H Outro
  */
 export function detectCuePoints(song: Song): CuePoint[] {
   const { bpm, duration, waveform, energyProfile } = song;
   if (!duration || duration < 15) return [];
 
-  // ── Fallback when no waveform ──────────────────────────────────────────────
+  const barDur = bpm > 0 ? (4 * 60) / bpm : 8;
+
+  // ── Fallback: no waveform ──────────────────────────────────────────────────
   if (!waveform || waveform.length < 20) {
-    const cues: CuePoint[] = [
-      { name: 'Intro',  time: snapToBar(duration * 0.00, bpm), num: 0 },
-      { name: 'Drop',   time: snapToBar(duration * 0.20, bpm), num: 1 },
-      { name: 'Outro',  time: snapToBar(duration * 0.83, bpm), num: 2 },
+    const s = (ratio: number) => snapToBar(duration * ratio, bpm);
+    const hasBreak = energyProfile && energyProfile.dropStrength > 0.12;
+    return [
+      { name: 'Mix-in',   time: 0,          num: 0 },
+      { name: 'Intro',    time: s(0.12),     num: 1 },
+      { name: 'Buildup',  time: s(hasBreak ? 0.35 : 0.25), num: 2 },
+      { name: 'Break',    time: s(hasBreak ? 0.45 : 0.40), num: 3 },
+      { name: 'Drop',     time: s(hasBreak ? 0.55 : 0.50), num: 4 },
+      { name: 'Body',     time: s(0.62),     num: 5 },
+      { name: '2nd Break',time: s(0.75),     num: 6 },
+      { name: 'Outro',    time: s(0.83),     num: 7 },
     ];
-    if (energyProfile && energyProfile.dropStrength > 0.15) {
-      cues.splice(1, 0, { name: 'Break', time: snapToBar(duration * 0.50, bpm), num: 2 });
-      cues[2].num = 3; cues[3] = { name: 'Outro', time: snapToBar(duration * 0.83, bpm), num: 3 };
-    }
-    return cues.slice(0, 5);
   }
 
-  // ── Waveform-based detection ───────────────────────────────────────────────
-  const n   = waveform.length;
-  const sm  = smooth(waveform, 6); // ~3% window
-  const t   = (i: number) => idx2time(i, n, duration);
-  const bar = (i: number) => snapToBar(t(i), bpm);
+  // ── Waveform analysis ──────────────────────────────────────────────────────
+  const n  = waveform.length;
+  const sm = smooth(waveform, 6);
+  const b  = (i: number) => bar(i, n, duration, bpm);
 
-  const cues: CuePoint[] = [];
+  // ── A: Mix-in — always bar 0 ──────────────────────────────────────────────
+  const mixIn = 0;
 
-  // 1. Intro end — first bar where sustained energy crosses 0.28 (in first 35%)
-  let introIdx = Math.floor(n * 0.05);
+  // ── B: Intro end — first bar where energy locks in above 0.28 ────────────
+  let introIdx = Math.floor(n * 0.08);
   for (let i = Math.floor(n * 0.02); i < Math.floor(n * 0.35); i++) {
     if (sm[i] > 0.28) { introIdx = i; break; }
   }
-  cues.push({ name: 'Intro', time: bar(introIdx), num: 0 });
 
-  // 2. Breakdown — largest sustained energy drop in 35–75% zone
-  let breakIdx = -1, maxDrop = 0.10; // require at least 0.10 drop to count
-  for (let i = Math.floor(n * 0.35); i < Math.floor(n * 0.72); i++) {
-    const before = sm[Math.max(0, i - 6)];
-    const after  = sm[Math.min(n - 1, i + 6)];
+  // ── D: Breakdown — largest sustained drop in 35–75% zone ─────────────────
+  let breakIdx = -1, maxDrop = 0.08;
+  for (let i = Math.floor(n * 0.35); i < Math.floor(n * 0.75); i++) {
+    const before = sm[Math.max(0, i - 8)];
+    const after  = sm[Math.min(n - 1, i + 8)];
     const drop   = before - after;
-    if (drop > maxDrop && before > 0.35) { maxDrop = drop; breakIdx = i; }
+    if (drop > maxDrop && before > 0.30) { maxDrop = drop; breakIdx = i; }
+  }
+  // If no breakdown found, use 48% mark
+  if (breakIdx < 0) breakIdx = Math.floor(n * 0.48);
+
+  // ── C: Buildup — sustained rise ≥ 1.5 bars before the breakdown ──────────
+  // Walk back from breakdown to find where energy starts its climb
+  const buildupFrames = Math.max(4, Math.round((barDur * 1.5) / duration * n));
+  let buildupIdx = Math.max(introIdx + 4, breakIdx - buildupFrames);
+  for (let i = breakIdx - 4; i > introIdx; i--) {
+    if (sm[i] < sm[breakIdx - 2] * 0.75) { buildupIdx = i; break; }
   }
 
-  if (breakIdx >= 0) {
-    cues.push({ name: 'Break', time: bar(breakIdx), num: 1 });
-
-    // 3. Drop — first sustained rise ≥ 0.45 after the breakdown
-    let dropIdx = breakIdx + Math.floor(n * 0.02);
-    for (let i = breakIdx + 4; i < Math.min(breakIdx + Math.floor(n * 0.30), n); i++) {
-      if (sm[i] >= 0.45) { dropIdx = i; break; }
-    }
-    cues.push({ name: 'Drop', time: bar(dropIdx), num: 2 });
-  } else {
-    // No breakdown found — add a mid-track marker instead
-    cues.push({ name: 'Mid', time: bar(Math.floor(n * 0.50)), num: 1 });
+  // ── E: Drop — first sustained rise ≥ 0.42 after breakdown ────────────────
+  let dropIdx = breakIdx + Math.floor(n * 0.02);
+  for (let i = breakIdx + 3; i < Math.min(breakIdx + Math.floor(n * 0.35), n); i++) {
+    if (sm[i] >= 0.42) { dropIdx = i; break; }
   }
 
-  // 4. Second breakdown (if dropStrength is high and track is long enough)
-  if (energyProfile && energyProfile.dropStrength > 0.20 && duration > 240) {
-    let break2Idx = -1, maxDrop2 = 0.10;
-    const searchFrom = breakIdx >= 0 ? Math.floor(n * 0.65) : Math.floor(n * 0.55);
-    for (let i = searchFrom; i < Math.floor(n * 0.78); i++) {
-      const before = sm[Math.max(0, i - 6)];
-      const after  = sm[Math.min(n - 1, i + 6)];
-      const drop   = before - after;
-      if (drop > maxDrop2 && before > 0.35 && i !== breakIdx) { maxDrop2 = drop; break2Idx = i; }
-    }
-    if (break2Idx >= 0) cues.push({ name: 'Break 2', time: bar(break2Idx), num: cues.length });
-  }
+  // ── F: Body — 2 bars after drop (groove locked in) ───────────────────────
+  const twoBarsFrames = Math.round((barDur * 2) / duration * n);
+  const bodyIdx = Math.min(n - 1, dropIdx + twoBarsFrames);
 
-  // 5. Outro — first bar in last 18% where energy drops below 0.35 for a sustained stretch
-  let outroIdx = Math.floor(n * 0.82);
+  // ── G: Second break — largest drop in 68–82% zone (excluding first break) ─
+  let break2Idx = -1, maxDrop2 = 0.08;
+  const searchFrom2 = Math.max(dropIdx + Math.floor(n * 0.05), Math.floor(n * 0.60));
+  for (let i = searchFrom2; i < Math.floor(n * 0.82); i++) {
+    if (Math.abs(i - breakIdx) < Math.floor(n * 0.08)) continue; // too close to first break
+    const before = sm[Math.max(0, i - 8)];
+    const after  = sm[Math.min(n - 1, i + 8)];
+    const drop   = before - after;
+    if (drop > maxDrop2 && before > 0.28) { maxDrop2 = drop; break2Idx = i; }
+  }
+  // Fallback: use 75% mark if no second break found
+  if (break2Idx < 0) break2Idx = Math.floor(n * 0.75);
+
+  // ── H: Outro — first bar in 78–92% where energy drops below 0.35 ─────────
+  let outroIdx = Math.floor(n * 0.83);
   for (let i = Math.floor(n * 0.78); i < Math.floor(n * 0.92); i++) {
     if (sm[i] < 0.35) { outroIdx = i; break; }
   }
-  cues.push({ name: 'Outro', time: bar(outroIdx), num: cues.length });
 
-  // Re-number sequentially and dedupe (remove cues < 2 s apart)
-  const deduped: CuePoint[] = [];
-  for (const c of cues) {
-    if (c.time < 0) continue;
-    if (deduped.length && Math.abs(c.time - deduped[deduped.length - 1].time) < 2) continue;
-    deduped.push({ ...c, num: deduped.length });
+  // ── Assemble, dedupe (< 1.5 bars apart → drop the later one) ─────────────
+  const minGap = barDur * 1.5;
+  const raw: CuePoint[] = [
+    { name: 'Mix-in',    time: mixIn,         num: 0 },
+    { name: 'Intro',     time: b(introIdx),   num: 1 },
+    { name: 'Buildup',   time: b(buildupIdx), num: 2 },
+    { name: 'Break',     time: b(breakIdx),   num: 3 },
+    { name: 'Drop',      time: b(dropIdx),    num: 4 },
+    { name: 'Body',      time: b(bodyIdx),    num: 5 },
+    { name: '2nd Break', time: b(break2Idx),  num: 6 },
+    { name: 'Outro',     time: b(outroIdx),   num: 7 },
+  ];
+
+  const out: CuePoint[] = [];
+  for (const c of raw) {
+    if (c.time < 0 || c.time > duration) continue;
+    if (out.length && c.time - out[out.length - 1].time < minGap) continue;
+    out.push({ ...c, num: out.length });
   }
 
-  return deduped.slice(0, 8); // Rekordbox supports 8 hot cues max
+  return out; // up to 8 slots, already numbered 0–7
 }

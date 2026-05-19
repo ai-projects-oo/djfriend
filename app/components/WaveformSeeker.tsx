@@ -56,7 +56,7 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
 
     const n    = waveform.length;
     const barW = w / n;
-    const bw   = Math.max(1, barW - 0.8);
+    const bw   = Math.max(1, barW * 0.55);
     const px   = progressRef.current * w;
     const vocalInterp = vocalTimeline && vocalTimeline.length > 0 ? interp(vocalTimeline, n) : null;
 

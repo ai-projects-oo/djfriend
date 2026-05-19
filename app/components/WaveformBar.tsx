@@ -46,7 +46,7 @@ export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline
 
     const n    = waveform.length;
     const barW = w / n;
-    const bw   = Math.max(1, barW - 0.8);
+    const bw   = Math.max(1, barW * 0.55);
     const vocalInterp = vocalTimeline && vocalTimeline.length > 0 ? interp(vocalTimeline, n) : null;
 
     for (let i = 0; i < n; i++) {

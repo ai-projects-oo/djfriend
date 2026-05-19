@@ -7,7 +7,7 @@ import { camelotColor } from "../lib/camelotColors";
 import WaveformBar from "./WaveformBar";
 import { apiFetch } from "../lib/apiFetch";
 import { downloadM3U } from "../lib/m3uExport";
-import { downloadLibraryRekordboxXml, downloadRekordboxXml } from "../lib/rekordboxExport";
+import { downloadRekordboxXml } from "../lib/rekordboxExport";
 import { patchTrackMeta } from "../lib/trackMeta";
 import type { SetTrack } from "../types";
 import { BEATPORT_UMBRELLAS } from "../lib/genreUtils";
@@ -231,6 +231,9 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   const [dupSelections, setDupSelections] = useState<Record<string, Set<string>>>({});
   const [selected, setSelected]         = useState<Set<string>>(new Set());
   const [editMode, setEditMode]         = useState(false);
+  const [playlistMode, setPlaylistMode] = useState(false);
+  const [playlistName, setPlaylistName] = useState('My Playlist');
+  const [playlistFormat, setPlaylistFormat] = useState<'M3U' | 'XML'>('M3U');
   const [inlineEdit, setInlineEdit]     = useState<{ file: string; field: 'title' | 'artist' | 'year' | 'comment' } | null>(null);
   const [bulkBpmOpen, setBulkBpmOpen]   = useState(false);
   const [bulkBpmMin, setBulkBpmMin]     = useState('');
@@ -242,8 +245,6 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   const lastClickedIdx = useRef<number>(-1);
 
   const colMenuRef    = useRef<HTMLDivElement>(null);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const missingRowRef = useRef<HTMLTableRowElement>(null);
 
   const uniqueKeys = useMemo(() => {
@@ -256,12 +257,6 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
   useEffect(() => {
     const h = (e: MouseEvent) => { if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setExportMenuOpen(false); };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
@@ -316,7 +311,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
   // ── Row selection (no checkboxes — macOS style) ────────────────────────────
   const handleRowClick = useCallback((e: React.MouseEvent, song: Song, idx: number) => {
-    if (!editMode) return;
+    if (!editMode && !playlistMode) return;
     if (e.metaKey || e.ctrlKey) {
       // Toggle individual
       setSelected(prev => { const n = new Set(prev); if (n.has(song.file)) { n.delete(song.file); } else { n.add(song.file); } return n; });
@@ -331,7 +326,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
       setSelected(new Set([song.file]));
       lastClickedIdx.current = idx;
     }
-  }, [rows, editMode]);
+  }, [rows, editMode, playlistMode]);
 
   const handleSave = useCallback(async (file: string, patch: { artist?: string; title?: string; genres?: string[]; year?: number; comment?: string }) => {
     await patchTrackMeta(file, patch);
@@ -355,19 +350,6 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
   const handleExportM3U = useCallback((song: Song) => { downloadM3U([toSetTrack(song)], `${song.artist} - ${song.title}`); }, []);
 
-  const handleExportSelectedM3U = useCallback(() => {
-    const tracks = rows.filter(s => selected.has(s.file)).map(toSetTrack);
-    if (!tracks.length) return;
-    downloadM3U(tracks, `DJFriend Selection (${tracks.length} tracks)`);
-  }, [rows, selected]);
-
-  const handleExportM3UAll   = useCallback(() => { downloadM3U(library.map(toSetTrack), `DJFriend Library (${library.length} tracks)`); }, [library]);
-  const handleExportXmlSel   = useCallback(() => {
-    const songs = rows.filter(s => selected.has(s.file));
-    if (!songs.length) return;
-    downloadRekordboxXml(songs, `DJFriend Selection (${songs.length} tracks)`);
-  }, [rows, selected]);
-  const handleExportXmlAll   = useCallback(() => { downloadLibraryRekordboxXml(library); }, [library]);
 
   const toggleDupSelection = (gk: string, file: string) => {
     setDupSelections(prev => { const s = new Set(prev[gk] ?? []); if (s.has(file)) { s.delete(file); } else { s.add(file); } return { ...prev, [gk]: s }; });
@@ -471,8 +453,52 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
         </div>
       )}
 
+      {/* Playlist creation panel */}
+      {playlistMode && (
+        <div className="flex-shrink-0 mx-4 mt-2 flex flex-col gap-3 px-4 py-3 rounded-xl bg-[#0d0d14] border border-[#7c3aed]/50">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-[#a78bfa]">Create Playlist</span>
+            <span className="text-[10px] text-[#6b7280]">— click rows to select tracks</span>
+            <span className="ml-auto text-[10px] text-[#a78bfa] font-medium">{selected.size} track{selected.size !== 1 ? 's' : ''} selected</span>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              type="text"
+              value={playlistName}
+              onChange={e => setPlaylistName(e.target.value)}
+              placeholder="Playlist name"
+              className="flex-1 min-w-[160px] px-2.5 py-1.5 rounded-md bg-[#12121a] border border-[#2a2a3a] text-xs text-[#e2e8f0] placeholder-[#4b5563] focus:outline-none focus:border-[#7c3aed]/60"
+            />
+            <div className="flex rounded-md border border-[#2a2a3a] overflow-hidden flex-shrink-0">
+              {(['M3U', 'XML'] as const).map(fmt => (
+                <button key={fmt} type="button" onClick={() => setPlaylistFormat(fmt)}
+                  className={`px-3 py-1.5 text-xs transition-colors cursor-pointer ${playlistFormat === fmt ? 'bg-[#7c3aed] text-white' : 'bg-[#12121a] text-[#6b7280] hover:text-[#94a3b8]'}`}>
+                  {fmt === 'XML' ? 'Rekordbox XML' : 'M3U'}
+                </button>
+              ))}
+            </div>
+            <button type="button" disabled={!playlistName.trim() || selected.size === 0}
+              onClick={() => {
+                const name = playlistName.trim() || 'My Playlist';
+                const songs = rows.filter(s => selected.has(s.file));
+                if (playlistFormat === 'M3U') downloadM3U(songs.map(toSetTrack), name);
+                else downloadRekordboxXml(songs, name);
+                setPlaylistMode(false); setEditMode(false); setSelected(new Set());
+              }}
+              className="px-3 py-1.5 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+              Create
+            </button>
+            <button type="button"
+              onClick={() => { setPlaylistMode(false); setEditMode(false); setSelected(new Set()); }}
+              className="px-3 py-1.5 text-xs rounded-md border border-[#2a2a3a] text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer flex-shrink-0">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Selection toolbar */}
-      {selected.size > 0 && (
+      {!playlistMode && selected.size > 0 && (
         <div className="flex-shrink-0 mx-4 mt-2 flex flex-col gap-2 px-3 py-2 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/30">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-semibold text-[#a78bfa]">{selected.size} track{selected.size > 1 ? "s" : ""} selected</span>
@@ -618,24 +644,11 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
           className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${activeFilters ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
           Filter{activeFilters ? " ●" : ""}
         </button>
-        <div className="relative flex-shrink-0" ref={exportMenuRef}>
-          <button type="button" onClick={() => setExportMenuOpen(o => !o)} className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${selected.size > 0 ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
-            Create Playlist{selected.size > 0 ? ` (${selected.size})` : ""} ▾
-          </button>
-          {exportMenuOpen && (
-            <div className="absolute right-0 top-full mt-1 bg-[#12121a] border border-[#2a2a3a] rounded-xl shadow-xl z-50 py-1 min-w-[200px]">
-              {selected.size > 0 && (<>
-                <div className="px-3 py-1 text-[10px] text-[#4b5563] uppercase tracking-wide">Selection ({selected.size})</div>
-                <button type="button" onClick={() => { handleExportSelectedM3U(); setExportMenuOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-white transition-colors cursor-pointer">Export as M3U</button>
-                <button type="button" onClick={() => { handleExportXmlSel(); setExportMenuOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-white transition-colors cursor-pointer">Export as Rekordbox XML</button>
-                <div className="border-t border-[#2a2a3a] my-1" />
-              </>)}
-              <div className="px-3 py-1 text-[10px] text-[#4b5563] uppercase tracking-wide">Full library ({library.length})</div>
-              <button type="button" onClick={() => { handleExportM3UAll(); setExportMenuOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-white transition-colors cursor-pointer">Export as M3U</button>
-              <button type="button" onClick={() => { handleExportXmlAll(); setExportMenuOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-white transition-colors cursor-pointer">Export as Rekordbox XML</button>
-            </div>
-          )}
-        </div>
+        <button type="button"
+          onClick={() => { setPlaylistMode(true); setEditMode(true); setSelected(new Set()); setPlaylistName('My Playlist'); setPlaylistFormat('M3U'); }}
+          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${playlistMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
+          Create Playlist
+        </button>
         <div className="relative flex-shrink-0" ref={colMenuRef}>
           <button type="button" onClick={() => setColMenuOpen(o => !o)} className="px-3 py-1.5 text-xs border border-[#1e1e2e] rounded-lg text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Columns</button>
           {colMenuOpen && (

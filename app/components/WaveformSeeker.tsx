@@ -29,7 +29,7 @@ function interp(arr: number[], n: number): number[] {
 }
 
 // Downsample to at most one bar per `targetBarPx` pixels — max-pool for peaks
-function adaptWaveform(arr: number[], canvasW: number, targetBarPx = 2): number[] {
+function adaptWaveform(arr: number[], canvasW: number, targetBarPx = 1): number[] {
   const maxBars = Math.max(1, Math.floor(canvasW / targetBarPx));
   if (arr.length <= maxBars) return arr;
   const ratio = arr.length / maxBars;
@@ -42,7 +42,7 @@ function adaptWaveform(arr: number[], canvasW: number, targetBarPx = 2): number[
   });
 }
 
-function adaptFreq(fw: { bass: number[]; mid: number[]; high: number[] }, canvasW: number, targetBarPx = 2) {
+function adaptFreq(fw: { bass: number[]; mid: number[]; high: number[] }, canvasW: number, targetBarPx = 1) {
   const maxBars = Math.max(1, Math.floor(canvasW / targetBarPx));
   if (fw.bass.length <= maxBars) return fw;
   const ratio = fw.bass.length / maxBars;
@@ -92,7 +92,7 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
     const fw   = frequencyWaveform ? adaptFreq(frequencyWaveform, w) : null;
     const n    = wf.length;
     const barW = w / n;
-    const bw   = Math.max(1, barW * 0.7);
+    const bw   = Math.ceil(barW);
     const px   = progressRef.current * w;
     const vocalInterp = vocalTimeline && vocalTimeline.length > 0 ? interp(vocalTimeline, n) : null;
 

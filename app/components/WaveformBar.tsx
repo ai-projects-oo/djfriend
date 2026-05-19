@@ -6,6 +6,23 @@ interface Props {
   className?: string;
 }
 
+function barGradient(ctx: CanvasRenderingContext2D, h: number, v: number): CanvasGradient {
+  const g = ctx.createLinearGradient(0, h, 0, 0);
+  if (v < 0.22) {
+    g.addColorStop(0, '#006688');
+    g.addColorStop(1, '#33ccff');
+  } else if (v < 0.42) {
+    g.addColorStop(0, '#116644');
+    g.addColorStop(1, '#44ee99');
+  } else {
+    g.addColorStop(0,    '#cc2200');
+    g.addColorStop(0.35, '#ff5500');
+    g.addColorStop(0.70, '#ff8844');
+    g.addColorStop(1,    '#ffbb77');
+  }
+  return g;
+}
+
 export default function WaveformBar({ waveform, height = 28, className = '' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -22,24 +39,17 @@ export default function WaveformBar({ waveform, height = 28, className = '' }: P
     canvas.height = h * dpr;
     ctx.scale(dpr, dpr);
 
-    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#090910';
+    ctx.fillRect(0, 0, w, h);
 
     const barW = w / waveform.length;
-    const mid  = h / 2;
-
-    // Vertical gradient: bass (bottom) → mids → highs (top)
-    const grad = ctx.createLinearGradient(0, h, 0, 0);
-    grad.addColorStop(0.00, '#ff5500'); // bass — orange-red
-    grad.addColorStop(0.35, '#ffcc00'); // low-mids — yellow
-    grad.addColorStop(0.65, '#44dd88'); // upper-mids — green
-    grad.addColorStop(1.00, '#00aaff'); // highs — cyan-blue
+    const gap  = barW > 2 ? 0.8 : 0.3;
 
     waveform.forEach((v, i) => {
-      const half  = Math.max(1, v * mid);
-      const alpha = 0.35 + v * 0.65;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle   = grad;
-      ctx.fillRect(i * barW, mid - half, Math.max(1, barW - 0.5), half * 2);
+      const barH = Math.max(1, v * h * 0.95);
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle   = barGradient(ctx, h, v);
+      ctx.fillRect(i * barW, h - barH, Math.max(1, barW - gap), barH);
     });
 
     ctx.globalAlpha = 1;
@@ -49,7 +59,7 @@ export default function WaveformBar({ waveform, height = 28, className = '' }: P
     <canvas
       ref={canvasRef}
       height={height}
-      className={`w-full block ${className}`}
+      className={`w-full block rounded-sm ${className}`}
       style={{ height }}
     />
   );

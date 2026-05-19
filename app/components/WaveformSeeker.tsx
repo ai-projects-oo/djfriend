@@ -8,9 +8,30 @@ interface Props {
   className?: string;
 }
 
-export default function WaveformSeeker({ waveform, progress, height = 40, onSeek, className = '' }: Props) {
-  const canvasRef  = useRef<HTMLCanvasElement>(null);
-  const frameRef   = useRef<number>(0);
+// Pick bar color based on amplitude — mimics Rekordbox frequency-zone tinting
+function barGradient(ctx: CanvasRenderingContext2D, h: number, v: number): CanvasGradient {
+  const g = ctx.createLinearGradient(0, h, 0, 0);
+  if (v < 0.22) {
+    // Sparse / transient-only → cyan (hi-hat zone)
+    g.addColorStop(0, '#006688');
+    g.addColorStop(1, '#33ccff');
+  } else if (v < 0.42) {
+    // Mid energy → green-teal
+    g.addColorStop(0, '#116644');
+    g.addColorStop(1, '#44ee99');
+  } else {
+    // Full energy → warm orange/salmon (bass dominant)
+    g.addColorStop(0,    '#cc2200');
+    g.addColorStop(0.35, '#ff5500');
+    g.addColorStop(0.70, '#ff8844');
+    g.addColorStop(1,    '#ffbb77');
+  }
+  return g;
+}
+
+export default function WaveformSeeker({ waveform, progress, height = 56, onSeek, className = '' }: Props) {
+  const canvasRef   = useRef<HTMLCanvasElement>(null);
+  const frameRef    = useRef<number>(0);
   const progressRef = useRef(progress);
 
   progressRef.current = progress;
@@ -30,40 +51,30 @@ export default function WaveformSeeker({ waveform, progress, height = 40, onSeek
       canvas.height = h * dpr;
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
+
+    // Near-black background
+    ctx.fillStyle = '#090910';
+    ctx.fillRect(0, 0, w, h);
 
     const barW = w / waveform.length;
-    const mid  = h / 2;
+    const gap  = barW > 2 ? 0.8 : 0.3;
     const px   = progressRef.current * w;
 
-    // Frequency gradient (bass→highs)
-    const grad = ctx.createLinearGradient(0, h, 0, 0);
-    grad.addColorStop(0.00, '#ff5500');
-    grad.addColorStop(0.35, '#ffcc00');
-    grad.addColorStop(0.65, '#44dd88');
-    grad.addColorStop(1.00, '#00aaff');
-
-    // Dim gradient for played portion
-    const dimGrad = ctx.createLinearGradient(0, h, 0, 0);
-    dimGrad.addColorStop(0.00, '#ff5500');
-    dimGrad.addColorStop(0.35, '#ffcc00');
-    dimGrad.addColorStop(0.65, '#44dd88');
-    dimGrad.addColorStop(1.00, '#00aaff');
-
     waveform.forEach((v, i) => {
-      const x    = i * barW;
-      const half = Math.max(1, v * mid);
+      const x      = i * barW;
+      const barH   = Math.max(2, v * h * 0.95);
       const played = x < px;
-      ctx.globalAlpha = played ? 0.3 + v * 0.25 : 0.55 + v * 0.45;
-      ctx.fillStyle   = played ? dimGrad : grad;
-      ctx.fillRect(x, mid - half, Math.max(1, barW - 0.5), half * 2);
+
+      ctx.globalAlpha = played ? 0.28 : 0.9;
+      ctx.fillStyle   = barGradient(ctx, h, v);
+      ctx.fillRect(x, h - barH, Math.max(1, barW - gap), barH);
     });
 
     ctx.globalAlpha = 1;
 
-    // Playhead line
+    // Playhead — thin white line
     if (px > 0 && px < w) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth   = 1.5;
       ctx.beginPath();
       ctx.moveTo(px, 0);
@@ -72,35 +83,32 @@ export default function WaveformSeeker({ waveform, progress, height = 40, onSeek
     }
   }, [waveform, height]);
 
-  // Redraw whenever progress changes (called from animation frame loop)
   useEffect(() => {
     cancelAnimationFrame(frameRef.current);
     frameRef.current = requestAnimationFrame(draw);
   }, [progress, draw]);
 
-  // Initial draw + resize observer
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ro = new ResizeObserver(() => { draw(); });
+    const ro = new ResizeObserver(() => draw());
     ro.observe(canvas);
     draw();
     return () => { ro.disconnect(); cancelAnimationFrame(frameRef.current); };
   }, [draw]);
 
-  const handlePointer = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!onSeek) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    onSeek(frac);
+    onSeek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
   }, [onSeek]);
 
   return (
     <canvas
       ref={canvasRef}
       height={height}
-      onClick={handlePointer}
-      className={`w-full block ${onSeek ? 'cursor-pointer' : ''} ${className}`}
+      onClick={handleClick}
+      className={`w-full block rounded-sm ${onSeek ? 'cursor-pointer' : ''} ${className}`}
       style={{ height }}
     />
   );

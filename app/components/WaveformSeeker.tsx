@@ -73,9 +73,9 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
         const bassH = Math.max(1, (frequencyWaveform.bass[i] ?? 0) * h * 0.95);
         const midH  = Math.max(1, (frequencyWaveform.mid[i]  ?? 0) * h * 0.95);
         const highH = Math.max(1, (frequencyWaveform.high[i] ?? 0) * h * 0.95);
-        ctx.fillStyle = '#ff0000'; ctx.fillRect(x, h - bassH, bw, bassH);
-        ctx.fillStyle = '#00e040'; ctx.fillRect(x, h - midH,  bw, midH);
-        ctx.fillStyle = '#0088ff'; ctx.fillRect(x, h - highH, bw, highH);
+        ctx.globalAlpha = alpha;          ctx.fillStyle = '#ff0000'; ctx.fillRect(x, h - bassH, bw, bassH);
+        ctx.globalAlpha = alpha * 0.72;   ctx.fillStyle = '#00e040'; ctx.fillRect(x, h - midH,  bw, midH);
+        ctx.globalAlpha = alpha * 0.58;   ctx.fillStyle = '#0088ff'; ctx.fillRect(x, h - highH, bw, highH);
       } else {
         const barH = Math.max(2, v * h * 0.95);
         ctx.fillStyle = v < 0.25 ? '#0088ff' : v < 0.45 ? '#00e040' : '#ff0000';

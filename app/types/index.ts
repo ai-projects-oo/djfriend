@@ -55,6 +55,7 @@ export interface Song {
   energyProfile?: EnergyProfile;
   waveform?: number[];
   frequencyWaveform?: FrequencyWaveform;
+  vocalTimeline?: number[]; // per-patch vocal probability (~1 value per 3 s of audio)
   discogsReleaseId?: number;
   discogsFromAPI?:   boolean;
   spotifyOnly?:      boolean; // true = no local file; sourced entirely from Spotify audio features

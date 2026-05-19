@@ -177,6 +177,7 @@ export interface AppSong {
   semanticTags?: SemanticTags
   waveform?: number[]
   frequencyWaveform?: { bass: number[]; mid: number[]; high: number[] }
+  vocalTimeline?: number[]
 }
 
 interface DiscogsRawRelease {
@@ -535,6 +536,7 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
         ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}),
         ...(features.waveform ? { waveform: features.waveform } : {}),
         ...(features.frequencyWaveform ? { frequencyWaveform: features.frequencyWaveform } : {}),
+        ...(features.vocalTimeline ? { vocalTimeline: features.vocalTimeline } : {}),
       }
     } catch (err) {
       failures.exception++
@@ -1898,12 +1900,13 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, semanticTags,
         ...(features.waveform ? { waveform: features.waveform } : {}),
         ...(features.frequencyWaveform ? { frequencyWaveform: features.frequencyWaveform } : {}),
+        ...(features.vocalTimeline ? { vocalTimeline: features.vocalTimeline } : {}),
       }
 
       if (songsFolder) patchResultsFile(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'), patch)
       patchResultsFile(APPLE_RESULTS_PATH, absolutePath, patch)
 
-      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, waveform: features.waveform, frequencyWaveform: features.frequencyWaveform }))
+      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, waveform: features.waveform, frequencyWaveform: features.frequencyWaveform, vocalTimeline: features.vocalTimeline }))
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Reanalysis failed' })) }
   })
 
@@ -1949,6 +1952,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           if (features.energyProfile) (song as unknown as Record<string, unknown>).energyProfile = features.energyProfile
           if (features.waveform) (song as unknown as Record<string, unknown>).waveform = features.waveform
           if (features.frequencyWaveform) (song as unknown as Record<string, unknown>).frequencyWaveform = features.frequencyWaveform
+          if (features.vocalTimeline) (song as unknown as Record<string, unknown>).vocalTimeline = features.vocalTimeline
           song.semanticTags = deriveSemanticTags({ bpm, camelot: keyInfo.camelot, energy: features.energy, genres: song.genres ?? [], ...features.spectral })
           updated++
         } catch { /* skip failed tracks */ }

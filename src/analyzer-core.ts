@@ -4,7 +4,7 @@ import path from 'path';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { createRequire } from 'module';
-import { detectVocalProbability } from './vocal-detector.js';
+import { detectVocalProbability, detectVocalTimeline } from './vocal-detector.js';
 
 const execFile = promisify(execFileCb);
 
@@ -42,6 +42,7 @@ export interface LocalAudioFeatures {
   energyProfile?: EnergyProfile;
   waveform?: number[]; // ~400 normalized RMS values (0–1) for waveform display
   frequencyWaveform?: FrequencyWaveform; // per-window band energies for frequency-colored waveform
+  vocalTimeline?: number[]; // per-patch vocal probability (~1 value per 3 s)
   year?: number;      // ID3 year tag
   comment?: string;   // ID3 first comment frame
   // Spectral features for local semantic tag derivation (no API key needed)
@@ -632,10 +633,13 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
 
     // ML vocal detection — runs after main analysis, replaces spectral estimate when available.
     // Returns -1 on first call (model not yet loaded) or error; spectral value is the fallback.
-    const mlVocalProb = await detectVocalProbability(channelData, 44100);
+    const [mlVocalProb, vocalTimeline] = await Promise.all([
+      detectVocalProbability(channelData, 44100),
+      detectVocalTimeline(channelData, 44100),
+    ]);
     const vocalLikelihood = mlVocalProb >= 0 ? mlVocalProb : mbFeats.vocalLikelihood;
 
-    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, waveform, frequencyWaveform, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb, spectralCentroid: mbFeats.spectralCentroid, spectralFlatness: mbFeats.spectralFlatness, spectralFlux: mbFeats.spectralFlux, vocalLikelihood } };
+    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, waveform, frequencyWaveform, vocalTimeline: vocalTimeline.length > 0 ? vocalTimeline : undefined, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb, spectralCentroid: mbFeats.spectralCentroid, spectralFlatness: mbFeats.spectralFlatness, spectralFlux: mbFeats.spectralFlux, vocalLikelihood } };
   } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;

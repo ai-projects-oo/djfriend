@@ -143,6 +143,39 @@ async function initialize(): Promise<void> {
   }
 }
 
+/** Run model on an audio slice. Returns per-patch vocal probabilities (col 0 = voice). */
+async function runPatches(audio: Float32Array): Promise<number[] | null> {
+  if (!graphModel || !essentiaExtractor || !tf) return null;
+  const features = essentiaExtractor.computeFrameWise(audio);
+  const frames: Float32Array[] = features.melSpectrum;
+  const totalFrames: number = features.frameSize;
+  if (!frames || totalFrames < PATCH_SIZE) return null;
+
+  const numPatches = Math.floor(totalFrames / PATCH_SIZE);
+  const flat = new Float32Array(numPatches * PATCH_SIZE * MEL_BANDS);
+  for (let b = 0; b < numPatches; b++) {
+    for (let f = 0; f < PATCH_SIZE; f++) {
+      flat.set(frames[b * PATCH_SIZE + f], (b * PATCH_SIZE + f) * MEL_BANDS);
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const inputTensor  = (tf as any).tensor3d(flat, [numPatches, PATCH_SIZE, MEL_BANDS]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const outputTensor = (graphModel as any).execute(inputTensor) as any;
+  inputTensor.dispose();
+  const predictions: number[][] = await outputTensor.array();
+  outputTensor.dispose();
+  return predictions.map(row => Math.round(row[0] * 100) / 100);
+}
+
+function downsample(channelData: Float32Array, sampleRate: number): Float32Array {
+  const ratio = sampleRate / TARGET_SR;
+  const dsLen = Math.floor(channelData.length / ratio);
+  const out = new Float32Array(dsLen);
+  for (let i = 0; i < dsLen; i++) out[i] = channelData[Math.round(i * ratio)];
+  return out;
+}
+
 /**
  * Compute voice probability for a decoded audio track.
  * Returns a value 0–1 (1 = definitely vocal), or -1 if model unavailable (use spectral fallback).
@@ -153,54 +186,37 @@ export async function detectVocalProbability(
   sampleRate: number,
 ): Promise<number> {
   await initialize();
-  if (initState !== 'ready' || !graphModel || !essentiaExtractor || !tf) return -1;
-
+  if (initState !== 'ready') return -1;
   try {
-    // Downsample to 16 kHz (nearest-neighbour — fast, sufficient for mel features)
-    const ratio = sampleRate / TARGET_SR;
-    const dsLen = Math.floor(channelData.length / ratio);
-    const downsampled = new Float32Array(dsLen);
-    for (let i = 0; i < dsLen; i++) downsampled[i] = channelData[Math.round(i * ratio)];
-
-    // Analyse 30 s from the body of the track (skip intro/outro)
-    const windowSamples = Math.min(30 * TARGET_SR, downsampled.length);
-    const startSample = Math.max(0, Math.floor((downsampled.length - windowSamples) / 2));
-    const audio = downsampled.slice(startSample, startSample + windowSamples);
-
-    // Compute MusiCNN mel features (187 frames × 96 bands per frame)
-    const features = essentiaExtractor.computeFrameWise(audio);
-    const frames: Float32Array[] = features.melSpectrum;
-    const totalFrames = features.frameSize;
-
-    if (!frames || totalFrames < PATCH_SIZE) return -1;
-
-    // Build [numPatches, PATCH_SIZE, MEL_BANDS] tensor
-    const numPatches = Math.floor(totalFrames / PATCH_SIZE);
-    const flat = new Float32Array(numPatches * PATCH_SIZE * MEL_BANDS);
-    for (let b = 0; b < numPatches; b++) {
-      for (let f = 0; f < PATCH_SIZE; f++) {
-        const src = frames[b * PATCH_SIZE + f];
-        flat.set(src, (b * PATCH_SIZE + f) * MEL_BANDS);
-      }
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tf types
-    const inputTensor = (tf as any).tensor3d(flat, [numPatches, PATCH_SIZE, MEL_BANDS]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tf types
-    const outputTensor = (graphModel as any).execute(inputTensor) as any;
-    inputTensor.dispose();
-
-    // output shape: [numPatches, 2]  — col 0 = voice, col 1 = instrumental
-    const predictions: number[][] = await outputTensor.array();
-    outputTensor.dispose();
-
-    if (!predictions || predictions.length === 0) return -1;
-
-    const avgVoice = predictions.reduce((s, row) => s + row[0], 0) / predictions.length;
-    return Math.round(avgVoice * 1000) / 1000;
-
+    const ds = downsample(channelData, sampleRate);
+    const windowSamples = Math.min(30 * TARGET_SR, ds.length);
+    const start = Math.max(0, Math.floor((ds.length - windowSamples) / 2));
+    const patches = await runPatches(ds.slice(start, start + windowSamples));
+    if (!patches || patches.length === 0) return -1;
+    return Math.round(patches.reduce((s, v) => s + v, 0) / patches.length * 1000) / 1000;
   } catch (err) {
     console.warn('[vocal-ml] Inference error:', err instanceof Error ? err.message : String(err));
     return -1;
+  }
+}
+
+/**
+ * Compute per-patch vocal probability timeline across the full track.
+ * Returns one value per ~3 s of audio, or [] if model unavailable.
+ * Audio must be mono 44100 Hz Float32Array.
+ */
+export async function detectVocalTimeline(
+  channelData: Float32Array,
+  sampleRate: number,
+): Promise<number[]> {
+  await initialize();
+  if (initState !== 'ready') return [];
+  try {
+    const ds = downsample(channelData, sampleRate);
+    const patches = await runPatches(ds);
+    return patches ?? [];
+  } catch (err) {
+    console.warn('[vocal-ml] Timeline error:', err instanceof Error ? err.message : String(err));
+    return [];
   }
 }

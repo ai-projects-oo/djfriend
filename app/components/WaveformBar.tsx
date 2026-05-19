@@ -49,17 +49,13 @@ export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline
       ctx.globalAlpha = 0.88 + v * 0.12;
 
       if (frequencyWaveform) {
-        const bass = frequencyWaveform.bass[i] ?? 0;
-        const mid  = frequencyWaveform.mid[i]  ?? 0;
-        const high = frequencyWaveform.high[i] ?? 0;
-        const total = bass + mid + high + 1e-6;
-        const bassH = (bass / total) * barH;
-        const midH  = (mid  / total) * barH;
-        const highH = Math.max(0, barH - bassH - midH);
-
-        if (bassH > 0.5) { ctx.fillStyle = '#ff4400'; ctx.fillRect(x, h - bassH, bw, bassH); }
-        if (midH  > 0.5) { ctx.fillStyle = '#44dd55'; ctx.fillRect(x, h - bassH - midH, bw, midH); }
-        if (highH > 0.5) { ctx.fillStyle = '#00bbff'; ctx.fillRect(x, h - barH, bw, highH); }
+        // All bands start from the bottom, overlapping — same as Rekordbox
+        const bassH = Math.max(1, (frequencyWaveform.bass[i] ?? 0) * h * 0.95);
+        const midH  = Math.max(1, (frequencyWaveform.mid[i]  ?? 0) * h * 0.95);
+        const highH = Math.max(1, (frequencyWaveform.high[i] ?? 0) * h * 0.95);
+        ctx.fillStyle = '#ff4400'; ctx.fillRect(x, h - bassH, bw, bassH);
+        ctx.fillStyle = '#44dd55'; ctx.fillRect(x, h - midH,  bw, midH);
+        ctx.fillStyle = '#00bbff'; ctx.fillRect(x, h - highH, bw, highH);
       } else {
         ctx.fillStyle = v < 0.25 ? '#00bbff' : v < 0.45 ? '#44dd55' : '#ff4400';
         ctx.fillRect(x, h - barH, bw, barH);

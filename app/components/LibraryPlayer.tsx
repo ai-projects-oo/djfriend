@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import type { Song } from "../types";
 import { camelotColor } from "../lib/camelotColors";
 import WaveformSeeker from "./WaveformSeeker";
+import { detectCuePoints } from "../lib/cueDetector";
+import type { CuePoint } from "../lib/cueDetector";
 
 interface Props {
   song: Song | null;
@@ -43,6 +45,7 @@ export default function LibraryPlayer({ song, onPrev, onNext }: Props) {
   const [current, setCurrent]   = useState(0);
   const [duration, setDuration] = useState(0);
   const [loading, setLoading]   = useState(false);
+  const [cuePoints, setCuePoints] = useState<CuePoint[]>([]);
 
   // Reset when song changes
   useEffect(() => {
@@ -51,8 +54,9 @@ export default function LibraryPlayer({ song, onPrev, onNext }: Props) {
     setPlaying(false);
     setCurrent(0);
     setDuration(0);
-    if (!song?.filePath) { el.src = ""; return; }
+    if (!song?.filePath) { el.src = ""; setCuePoints([]); return; }
     el.src = `/api/audio-stream?path=${encodeURIComponent(song.filePath)}`;
+    setCuePoints(detectCuePoints(song));
   }, [song?.file]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = useCallback(() => {
@@ -114,6 +118,8 @@ export default function LibraryPlayer({ song, onPrev, onNext }: Props) {
               frequencyWaveform={song.frequencyWaveform}
               vocalTimeline={song.vocalTimeline}
               progress={duration > 0 ? current / duration : 0}
+              duration={duration > 0 ? duration : song.duration}
+              cuePoints={cuePoints}
               height={36}
               onSeek={frac => {
                 const el = audioRef.current;

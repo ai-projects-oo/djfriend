@@ -573,7 +573,7 @@ async function handleReanalyze() {
         {visibleColumns.has('waveform') && (
           <td className="py-3 px-2" style={{ minWidth: 120 }}>
             {track.waveform && track.waveform.length > 0 ? (
-              <WaveformBar waveform={track.waveform} frequencyWaveform={track.frequencyWaveform} height={20} className="opacity-70 group-hover:opacity-100 transition-opacity" />
+              <WaveformBar waveform={track.waveform} frequencyWaveform={track.frequencyWaveform} vocalTimeline={track.vocalTimeline} height={20} className="opacity-70 group-hover:opacity-100 transition-opacity" />
             ) : (
               <span className="text-[10px] text-[#2a2a3a]">—</span>
             )}

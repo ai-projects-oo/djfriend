@@ -722,7 +722,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                       <span className="text-sm text-[#cbd5e1] block truncate cursor-text hover:text-white transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'title' })}>{song.title || "—"}</span>
                     )}
                     {song.waveform && song.waveform.length > 0 && (
-                      <WaveformBar waveform={song.waveform} frequencyWaveform={song.frequencyWaveform} height={18} className="mt-0.5 opacity-60 group-hover:opacity-90 transition-opacity" />
+                      <WaveformBar waveform={song.waveform} frequencyWaveform={song.frequencyWaveform} vocalTimeline={song.vocalTimeline} height={18} className="mt-0.5 opacity-60 group-hover:opacity-90 transition-opacity" />
                     )}
                     {isMissing && (
                       <div className="flex gap-1 mt-0.5 flex-wrap">

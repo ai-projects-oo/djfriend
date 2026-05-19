@@ -11,51 +11,6 @@ interface Props {
   className?: string;
 }
 
-// Draw one bar as vertically stacked frequency bands (bass bottom → high top)
-function drawBar(
-  ctx: CanvasRenderingContext2D,
-  x: number, barW: number, h: number,
-  barH: number,
-  bass: number, mid: number, high: number,
-  alpha: number,
-) {
-  const total = bass + mid + high + 1e-6;
-  const bassH = (bass / total) * barH;
-  const midH  = (mid  / total) * barH;
-  const highH = Math.max(0, barH - bassH - midH);
-  const bw    = Math.max(1, barW - 0.8);
-
-  ctx.globalAlpha = alpha;
-
-  // Bass — orange/red at the bottom
-  if (bassH > 0.5) {
-    ctx.fillStyle = '#ff4400';
-    ctx.fillRect(x, h - bassH, bw, bassH);
-  }
-  // Mid — green above bass
-  if (midH > 0.5) {
-    ctx.fillStyle = '#44dd55';
-    ctx.fillRect(x, h - bassH - midH, bw, midH);
-  }
-  // High — cyan at the top
-  if (highH > 0.5) {
-    ctx.fillStyle = '#00bbff';
-    ctx.fillRect(x, h - barH, bw, highH);
-  }
-}
-
-// Amplitude fallback: single gradient bar
-function drawBarAmplitude(
-  ctx: CanvasRenderingContext2D,
-  x: number, barW: number, h: number,
-  barH: number, v: number, alpha: number,
-) {
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = v < 0.25 ? '#00bbff' : v < 0.45 ? '#44dd55' : '#ff4400';
-  ctx.fillRect(x, h - barH, Math.max(1, barW - 0.8), barH);
-}
-
-// Interpolate a short array (e.g. vocalTimeline) to n points
 function interp(arr: number[], n: number): number[] {
   if (!arr.length) return new Array(n).fill(0);
   return Array.from({ length: n }, (_, i) => {
@@ -64,8 +19,6 @@ function interp(arr: number[], n: number): number[] {
     return arr[lo] + (arr[hi] - arr[lo]) * (pos - lo);
   });
 }
-
-const VOCAL_STRIP_H = 5; // px reserved at top for vocal presence strip
 
 export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimeline, progress, height = 56, onSeek, className = '' }: Props) {
   const canvasRef   = useRef<HTMLCanvasElement>(null);
@@ -95,57 +48,50 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
 
     const n    = waveform.length;
     const barW = w / n;
+    const bw   = Math.max(1, barW - 0.8);
     const px   = progressRef.current * w;
-
-    // Waveform area starts below the vocal strip
-    const waveTop = vocalTimeline && vocalTimeline.length > 0 ? VOCAL_STRIP_H + 1 : 0;
-    const waveH   = h - waveTop;
+    const vocalInterp = vocalTimeline && vocalTimeline.length > 0 ? interp(vocalTimeline, n) : null;
 
     for (let i = 0; i < n; i++) {
-      const v     = waveform[i];
-      const x     = i * barW;
-      const barH  = Math.max(2, v * waveH * 0.95);
+      const v      = waveform[i];
+      const x      = i * barW;
+      const barH   = Math.max(2, v * h * 0.95);
       const played = x < px;
       const alpha  = played ? 0.25 : 0.88 + v * 0.12;
 
-      // Offset bars down so they sit below the vocal strip
-      const ctxShifted = { ...ctx };
-      void ctxShifted;
+      ctx.globalAlpha = alpha;
 
       if (frequencyWaveform) {
-        // Temporarily translate for the bar area
-        ctx.save();
-        ctx.translate(0, waveTop);
-        drawBar(ctx, x, barW, waveH, barH,
-          frequencyWaveform.bass[i] ?? 0,
-          frequencyWaveform.mid[i]  ?? 0,
-          frequencyWaveform.high[i] ?? 0,
-          alpha);
-        ctx.restore();
+        const bass = frequencyWaveform.bass[i] ?? 0;
+        const mid  = frequencyWaveform.mid[i]  ?? 0;
+        const high = frequencyWaveform.high[i] ?? 0;
+        const total = bass + mid + high + 1e-6;
+        const bassH = (bass / total) * barH;
+        const midH  = (mid  / total) * barH;
+        const highH = Math.max(0, barH - bassH - midH);
+
+        if (bassH > 0.5) { ctx.fillStyle = '#ff4400'; ctx.fillRect(x, h - bassH, bw, bassH); }
+        if (midH  > 0.5) { ctx.fillStyle = '#44dd55'; ctx.fillRect(x, h - bassH - midH, bw, midH); }
+        if (highH > 0.5) { ctx.fillStyle = '#00bbff'; ctx.fillRect(x, h - barH, bw, highH); }
       } else {
-        ctx.save();
-        ctx.translate(0, waveTop);
-        drawBarAmplitude(ctx, x, barW, waveH, barH, v, alpha);
-        ctx.restore();
+        ctx.fillStyle = v < 0.25 ? '#00bbff' : v < 0.45 ? '#44dd55' : '#ff4400';
+        ctx.fillRect(x, h - barH, bw, barH);
+      }
+
+      // Vocal overlay — drawn on top of frequency layers
+      if (vocalInterp) {
+        const vp = vocalInterp[i];
+        if (vp > 0.2) {
+          ctx.globalAlpha = played
+            ? (vp - 0.2) * 0.25
+            : (vp - 0.2) * 0.7;
+          ctx.fillStyle = '#dd66ff';
+          ctx.fillRect(x, h - barH, bw, barH);
+        }
       }
     }
 
     ctx.globalAlpha = 1;
-
-    // Vocal presence strip
-    if (vocalTimeline && vocalTimeline.length > 0) {
-      const vocalInterp = interp(vocalTimeline, n);
-      for (let i = 0; i < n; i++) {
-        const v = vocalInterp[i];
-        if (v < 0.25) continue; // below threshold — leave dark
-        const x = i * barW;
-        const played = x < px;
-        ctx.globalAlpha = played ? (v - 0.25) * 0.4 : (v - 0.25) * 1.3;
-        ctx.fillStyle = '#dd88ff'; // soft purple
-        ctx.fillRect(x, 0, Math.max(1, barW - 0.5), VOCAL_STRIP_H);
-      }
-      ctx.globalAlpha = 1;
-    }
 
     // Playhead
     if (px > 0 && px < w) {

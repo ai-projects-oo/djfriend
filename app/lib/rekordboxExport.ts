@@ -1,4 +1,5 @@
 import type { Song } from '../types';
+import { detectCuePoints } from './cueDetector';
 
 declare const __SONGS_FOLDER__: string;
 
@@ -73,6 +74,15 @@ export function generateRekordboxXml(tracks: Song[], playlistName = 'DJFriend Se
     const added    = t.dateAdded ? isoDate(t.dateAdded) : today;
     const kind     = t.spotifyOnly ? 'Streaming' : 'MP3 File';
 
+    const cues = detectCuePoints(t);
+    const tempoEl = t.bpm > 0
+      ? `      <TEMPO Inizio="0.000" Bpm="${bpm}" Metro="4/4" Battito="1"/>`
+      : null;
+    const cueEls = cues.map(c =>
+      `      <POSITION_MARK Name="${escapeXml(c.name)}" Type="0" Start="${c.time.toFixed(3)}" Num="${c.num}"/>`
+    );
+    const children = [tempoEl, ...cueEls].filter(Boolean) as string[];
+
     return [
       `    <TRACK`,
       `      TrackID="${id}"`,
@@ -86,7 +96,9 @@ export function generateRekordboxXml(tracks: Song[], playlistName = 'DJFriend Se
       `      DateAdded="${added}"`,
       `      Tonality="${tonality}"`,
       `      Location="${location}"`,
-      `    />`,
+      `    >`,
+      ...children,
+      `    </TRACK>`,
     ].join('\n');
   });
 

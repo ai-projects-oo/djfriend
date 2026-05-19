@@ -1,13 +1,20 @@
 import { useEffect, useRef } from 'react';
 import type { FrequencyWaveform } from '../types';
 
+interface CueMark { name: string; time: number; num: number; }
+
 interface Props {
   waveform: number[];
   frequencyWaveform?: FrequencyWaveform;
   vocalTimeline?: number[];
+  cuePoints?: CueMark[];
+  duration?: number;
   height?: number;
   className?: string;
 }
+
+const CUE_COLOR = '#39ff14';
+const CUE_LETTERS = ['A','B','C','D','E','F','G','H'];
 
 function interp(arr: number[], n: number): number[] {
   if (!arr.length) return new Array(n).fill(0);
@@ -18,7 +25,7 @@ function interp(arr: number[], n: number): number[] {
   });
 }
 
-export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline, height = 28, className = '' }: Props) {
+export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline, cuePoints, duration, height = 28, className = '' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -49,7 +56,6 @@ export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline
       ctx.globalAlpha = 0.88 + v * 0.12;
 
       if (frequencyWaveform) {
-        // All bands start from the bottom, overlapping — same as Rekordbox
         const bassH = Math.max(1, (frequencyWaveform.bass[i] ?? 0) * h * 0.95);
         const midH  = Math.max(1, (frequencyWaveform.mid[i]  ?? 0) * h * 0.95);
         const highH = Math.max(1, (frequencyWaveform.high[i] ?? 0) * h * 0.95);
@@ -61,7 +67,6 @@ export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline
         ctx.fillRect(x, h - barH, bw, barH);
       }
 
-      // Vocal overlay — on top of frequency layers
       if (vocalInterp) {
         const vp = vocalInterp[i];
         if (vp > 0.2) {
@@ -73,7 +78,40 @@ export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline
     }
 
     ctx.globalAlpha = 1;
-  }, [waveform, frequencyWaveform, vocalTimeline, height]);
+
+    // Cue point markers
+    if (cuePoints && cuePoints.length > 0 && duration && duration > 0) {
+      const fontSize = Math.max(6, Math.round(h * 0.32));
+      const pad = 1;
+      ctx.font = `bold ${fontSize}px monospace`;
+      ctx.textBaseline = 'top';
+      for (const cue of cuePoints) {
+        const cx = (cue.time / duration) * w;
+        if (cx < 0 || cx > w) continue;
+        const letter = CUE_LETTERS[cue.num % CUE_LETTERS.length];
+
+        // Tick line
+        ctx.strokeStyle = CUE_COLOR;
+        ctx.lineWidth = 0.8;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(cx, 0);
+        ctx.lineTo(cx, h);
+        ctx.stroke();
+
+        // Label box
+        const lw = fontSize * 0.7 + pad * 2;
+        const lh = fontSize + pad * 2;
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = CUE_COLOR;
+        ctx.fillRect(cx, 0, lw, lh);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#000';
+        ctx.fillText(letter, cx + pad, pad);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }, [waveform, frequencyWaveform, vocalTimeline, cuePoints, duration, height]);
 
   return (
     <canvas

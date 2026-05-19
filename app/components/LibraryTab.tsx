@@ -7,7 +7,7 @@ import { camelotColor } from "../lib/camelotColors";
 import WaveformBar from "./WaveformBar";
 import { apiFetch } from "../lib/apiFetch";
 import { downloadM3U } from "../lib/m3uExport";
-import { downloadLibraryRekordboxXml } from "../lib/rekordboxExport";
+import { downloadLibraryRekordboxXml, downloadRekordboxXml } from "../lib/rekordboxExport";
 import { patchTrackMeta } from "../lib/trackMeta";
 import type { SetTrack } from "../types";
 import { BEATPORT_UMBRELLAS } from "../lib/genreUtils";
@@ -241,7 +241,9 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   const [nowPlaying, setNowPlaying]     = useState<Song | null>(null);
   const lastClickedIdx = useRef<number>(-1);
 
-  const colMenuRef  = useRef<HTMLDivElement>(null);
+  const colMenuRef    = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const missingRowRef = useRef<HTMLTableRowElement>(null);
 
   const uniqueKeys = useMemo(() => {
@@ -254,6 +256,12 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
   useEffect(() => {
     const h = (e: MouseEvent) => { if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setExportMenuOpen(false); };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
@@ -352,6 +360,14 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
     if (!tracks.length) return;
     downloadM3U(tracks, `DJFriend Selection (${tracks.length} tracks)`);
   }, [rows, selected]);
+
+  const handleExportM3UAll   = useCallback(() => { downloadM3U(library.map(toSetTrack), `DJFriend Library (${library.length} tracks)`); }, [library]);
+  const handleExportXmlSel   = useCallback(() => {
+    const songs = rows.filter(s => selected.has(s.file));
+    if (!songs.length) return;
+    downloadRekordboxXml(songs, `DJFriend Selection (${songs.length} tracks)`);
+  }, [rows, selected]);
+  const handleExportXmlAll   = useCallback(() => { downloadLibraryRekordboxXml(library); }, [library]);
 
   const toggleDupSelection = (gk: string, file: string) => {
     setDupSelections(prev => { const s = new Set(prev[gk] ?? []); if (s.has(file)) { s.delete(file); } else { s.add(file); } return { ...prev, [gk]: s }; });
@@ -526,9 +542,6 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                 {mult === 2 ? '×2 BPM' : '÷2 BPM'}
               </button>
             ))}
-            <button type="button" onClick={handleExportSelectedM3U} className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151] transition-colors cursor-pointer">
-              Export M3U
-            </button>
             <button type="button" onClick={() => { setSelected(new Set()); setBulkBpmOpen(false); }} className="ml-auto text-[10px] text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Clear</button>
           </div>
           {bulkBpmOpen && (
@@ -605,9 +618,26 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
           className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${activeFilters ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
           Filter{activeFilters ? " ●" : ""}
         </button>
+        <div className="relative flex-shrink-0" ref={exportMenuRef}>
+          <button type="button" onClick={() => setExportMenuOpen(o => !o)} className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${selected.size > 0 ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
+            Create Playlist{selected.size > 0 ? ` (${selected.size})` : ""} ▾
+          </button>
+          {exportMenuOpen && (
+            <div className="absolute right-0 top-full mt-1 bg-[#12121a] border border-[#2a2a3a] rounded-xl shadow-xl z-50 py-1 min-w-[200px]">
+              {selected.size > 0 && (<>
+                <div className="px-3 py-1 text-[10px] text-[#4b5563] uppercase tracking-wide">Selection ({selected.size})</div>
+                <button type="button" onClick={() => { handleExportSelectedM3U(); setExportMenuOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-white transition-colors cursor-pointer">Export as M3U</button>
+                <button type="button" onClick={() => { handleExportXmlSel(); setExportMenuOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-white transition-colors cursor-pointer">Export as Rekordbox XML</button>
+                <div className="border-t border-[#2a2a3a] my-1" />
+              </>)}
+              <div className="px-3 py-1 text-[10px] text-[#4b5563] uppercase tracking-wide">Full library ({library.length})</div>
+              <button type="button" onClick={() => { handleExportM3UAll(); setExportMenuOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-white transition-colors cursor-pointer">Export as M3U</button>
+              <button type="button" onClick={() => { handleExportXmlAll(); setExportMenuOpen(false); }} className="w-full text-left px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-white transition-colors cursor-pointer">Export as Rekordbox XML</button>
+            </div>
+          )}
+        </div>
         <div className="relative flex-shrink-0" ref={colMenuRef}>
           <button type="button" onClick={() => setColMenuOpen(o => !o)} className="px-3 py-1.5 text-xs border border-[#1e1e2e] rounded-lg text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Columns</button>
-          <button type="button" onClick={() => downloadLibraryRekordboxXml(library)} title={`Export all ${library.length} tracks to Rekordbox XML`} className="px-3 py-1.5 text-xs border border-[#1e1e2e] rounded-lg text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer flex-shrink-0">Export XML</button>
           {colMenuOpen && (
             <div className="absolute right-0 top-full mt-1 bg-[#12121a] border border-[#2a2a3a] rounded-xl shadow-xl z-50 py-1 min-w-[150px]">
               {OPTIONAL_COLS.map(col => (

@@ -1,4 +1,4 @@
-import type { SetTrack } from '../types';
+import type { Song } from '../types';
 
 declare const __SONGS_FOLDER__: string;
 
@@ -25,7 +25,7 @@ function isAbsolutePath(p: string): boolean {
   return p.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(p);
 }
 
-function resolveTrackPath(track: SetTrack, songsFolder: string): string {
+function resolveTrackPath(track: Song, songsFolder: string): string {
   if (track.spotifyOnly && track.spotifyId) return `spotify:track:${track.spotifyId}`;
   const src = (track.filePath ?? track.file).trim();
   if (!src) return src;
@@ -59,7 +59,7 @@ function isoDate(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toISOString().slice(0, 10);
 }
 
-export function generateRekordboxXml(tracks: SetTrack[], playlistName = 'DJFriend Set'): string {
+export function generateRekordboxXml(tracks: Song[], playlistName = 'DJFriend Set'): string {
   const songsFolder = __SONGS_FOLDER__;
   const today = new Date().toISOString().slice(0, 10);
 
@@ -110,15 +110,9 @@ export function generateRekordboxXml(tracks: SetTrack[], playlistName = 'DJFrien
   ].join('\n');
 }
 
-export function downloadRekordboxXml(
-  tracks: SetTrack[],
-  playlistName = 'DJFriend Set',
-  filename = 'djfriend-set.xml',
-): void {
-  const content = generateRekordboxXml(tracks, playlistName);
+function triggerDownload(content: string, filename: string): void {
   const blob = new Blob([content], { type: 'application/xml' });
   const url = URL.createObjectURL(blob);
-
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
@@ -126,4 +120,17 @@ export function downloadRekordboxXml(
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export function downloadRekordboxXml(
+  tracks: Song[],
+  playlistName = 'DJFriend Set',
+  filename = 'djfriend-set.xml',
+): void {
+  triggerDownload(generateRekordboxXml(tracks, playlistName), filename);
+}
+
+export function downloadLibraryRekordboxXml(library: Song[]): void {
+  const today = new Date().toISOString().slice(0, 10);
+  triggerDownload(generateRekordboxXml(library, 'DJFriend Library'), `djfriend-library-${today}.xml`);
 }

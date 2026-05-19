@@ -7,6 +7,7 @@ import { camelotColor } from "../lib/camelotColors";
 import WaveformBar from "./WaveformBar";
 import { apiFetch } from "../lib/apiFetch";
 import { downloadM3U } from "../lib/m3uExport";
+import { downloadLibraryRekordboxXml } from "../lib/rekordboxExport";
 import { patchTrackMeta } from "../lib/trackMeta";
 import type { SetTrack } from "../types";
 import { BEATPORT_UMBRELLAS } from "../lib/genreUtils";
@@ -605,6 +606,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
         </button>
         <div className="relative flex-shrink-0" ref={colMenuRef}>
           <button type="button" onClick={() => setColMenuOpen(o => !o)} className="px-3 py-1.5 text-xs border border-[#1e1e2e] rounded-lg text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Columns</button>
+          <button type="button" onClick={() => downloadLibraryRekordboxXml(library)} title={`Export all ${library.length} tracks to Rekordbox XML`} className="px-3 py-1.5 text-xs border border-[#1e1e2e] rounded-lg text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer flex-shrink-0">Export XML</button>
           {colMenuOpen && (
             <div className="absolute right-0 top-full mt-1 bg-[#12121a] border border-[#2a2a3a] rounded-xl shadow-xl z-50 py-1 min-w-[150px]">
               {OPTIONAL_COLS.map(col => (

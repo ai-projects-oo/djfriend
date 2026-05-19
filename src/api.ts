@@ -1792,6 +1792,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (typeof tags.artist === 'string') id3Tags.artist = tags.artist.trim()
       if (typeof tags.genre === 'string') id3Tags.genre = tags.genre.trim()
       if (typeof tags.bpm === 'number') id3Tags.bpm = String(Math.round(tags.bpm))
+      if (typeof tags.year === 'number' && tags.year > 0) id3Tags.year = String(tags.year)
+      if (typeof tags.year === 'string' && tags.year.trim()) id3Tags.year = tags.year.trim()
+      if (typeof tags.comment === 'string') id3Tags.comment = { language: 'eng', text: tags.comment.trim() }
       if (Object.keys(id3Tags).length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: 'No tags to update' })); return }
       if (path.extname(absolutePath).toLowerCase() !== '.mp3') { res.statusCode = 400; res.end(JSON.stringify({ error: 'Tag editing only supported for MP3' })); return }
       let result: true | Error
@@ -1812,6 +1815,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           if (typeof tags.artist === 'string' && tags.artist.trim()) entry.artist = tags.artist.trim()
           if (typeof tags.genre === 'string') { entry.genres = tags.genre.trim() ? tags.genre.split(',').map((g: string) => g.trim()).filter(Boolean) : []; delete entry.genresFromSpotify }
           if (typeof tags.bpm === 'number') entry.bpm = tags.bpm
+          if (typeof tags.year === 'number' && tags.year > 0) entry.year = tags.year
+          if (typeof tags.year === 'string' && tags.year.trim()) entry.year = parseInt(tags.year, 10) || entry.year
+          if (typeof tags.comment === 'string') entry.comment = tags.comment.trim() || undefined
           fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
         } catch { /* ignore */ }
       }
@@ -1989,7 +1995,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch { res.statusCode = 500; res.end('Error reading artwork') }
   })
 
-  // Patch track metadata in results.json (title, artist, genres) — does not touch ID3 tags
+  // Patch track metadata — writes ID3 tags to the file (MP3 only) AND patches results.json
   middlewares.use('/api/track-meta', async (req, res, next) => {
     if (req.method !== 'PATCH') { next(); return }
     let body: { file?: string; patch?: Partial<AppSong> }
@@ -2000,6 +2006,34 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const safePatch: Partial<AppSong> = {}
     for (const k of allowed) { if (k in patch) (safePatch as Record<string, unknown>)[k] = patch[k] }
     if (Object.keys(safePatch).length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: 'No patchable fields' })); return }
+
+    // Write ID3 tags to the actual file if it is a local MP3
+    const resolvedPath = (() => {
+      if (path.isAbsolute(file) && fs.existsSync(file)) return file
+      if (songsFolder) { const p = path.join(songsFolder, file); if (fs.existsSync(p)) return p }
+      return null
+    })()
+    if (resolvedPath && path.extname(resolvedPath).toLowerCase() === '.mp3' && isPathAllowed(resolvedPath, songsFolder, path.dirname(APPLE_RESULTS_PATH))) {
+      try {
+        const id3Tags: NodeID3.Tags = {}
+        if (typeof safePatch.title === 'string') id3Tags.title = safePatch.title
+        if (typeof safePatch.artist === 'string') id3Tags.artist = safePatch.artist
+        if (Array.isArray(safePatch.genres)) id3Tags.genre = safePatch.genres.join(', ')
+        if (typeof safePatch.year === 'number' && safePatch.year > 0) id3Tags.year = String(safePatch.year)
+        if (typeof safePatch.comment === 'string') id3Tags.comment = { language: 'eng', text: safePatch.comment }
+        if (typeof safePatch.bpm === 'number') id3Tags.bpm = String(Math.round(safePatch.bpm))
+        if (Object.keys(id3Tags).length > 0) {
+          try { NodeID3.update(id3Tags, resolvedPath) }
+          catch {
+            const existing = NodeID3.read(resolvedPath)
+            const merged = { ...existing, ...id3Tags } as Record<string, unknown>
+            delete merged.raw; delete merged.uniqueFileIdentifier; delete merged.generalObject; delete merged.privateFrames
+            NodeID3.write(merged as NodeID3.Tags, resolvedPath)
+          }
+        }
+      } catch { /* non-fatal — results.json still gets patched */ }
+    }
+
     const patchFile = (resultsPath: string, key: string): void => {
       if (!fs.existsSync(resultsPath)) return
       try {

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { Song } from "../types";
 import { camelotColor } from "../lib/camelotColors";
+import WaveformSeeker from "./WaveformSeeker";
 
 interface Props {
   song: Song | null;
@@ -104,19 +105,32 @@ export default function LibraryPlayer({ song, onPrev, onNext }: Props) {
           {song.bpm > 0 && <span className="text-[10px] text-[#475569] flex-shrink-0 tabular-nums">{Math.round(song.bpm)}</span>}
         </div>
         <p className="text-xs text-[#64748b] truncate">{song.artist}</p>
-        {/* Progress bar */}
+        {/* Waveform / progress */}
         <div className="flex items-center gap-2 mt-1.5">
           <span className="text-[10px] text-[#374151] tabular-nums w-6 flex-shrink-0">{fmt(current)}</span>
-          <input
-            type="range"
-            min={0}
-            max={duration || 1}
-            step={0.5}
-            value={current}
-            onChange={seek}
-            className="flex-1 h-1 accent-[#7c3aed] cursor-pointer"
-            style={{ WebkitAppearance: "none" }}
-          />
+          {song.waveform && song.waveform.length > 0 ? (
+            <WaveformSeeker
+              waveform={song.waveform}
+              progress={duration > 0 ? current / duration : 0}
+              height={36}
+              onSeek={frac => {
+                const el = audioRef.current;
+                if (el && duration > 0) el.currentTime = frac * duration;
+              }}
+              className="flex-1"
+            />
+          ) : (
+            <input
+              type="range"
+              min={0}
+              max={duration || 1}
+              step={0.5}
+              value={current}
+              onChange={seek}
+              className="flex-1 h-1 accent-[#7c3aed] cursor-pointer"
+              style={{ WebkitAppearance: "none" }}
+            />
+          )}
           <span className="text-[10px] text-[#374151] tabular-nums w-6 flex-shrink-0 text-right">{fmt(duration)}</span>
         </div>
       </div>

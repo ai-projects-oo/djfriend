@@ -138,6 +138,7 @@ export default function TrackRow({ track, index, fitInfo, transition, visibleCol
   const [editGenre, setEditGenre] = useState('');
   const [editBpm, setEditBpm] = useState('');
   const [editCamelot, setEditCamelot] = useState('');
+  const [inlineGenreEdit, setInlineGenreEdit] = useState(false);
 
   const barColor = energyBarColor(track.energy);
   const isLocal = Boolean(track.filePath);
@@ -228,6 +229,23 @@ async function handleReanalyze() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveInlineGenre(value: string) {
+    setInlineGenreEdit(false);
+    const trimmed = value.trim();
+    if (trimmed === track.genres.join(', ')) return;
+    try {
+      if (isLocal && isMp3) {
+        const res = await fetch('/api/update-tags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath: track.filePath, tags: { genre: trimmed } }),
+        });
+        if (!res.ok) throw new Error('Save failed');
+      }
+      onUpdateTrack({ genre: trimmed });
+    } catch { /* silently ignore */ }
   }
 
   const rowStyle: React.CSSProperties = {
@@ -496,19 +514,30 @@ async function handleReanalyze() {
           </div>
         </td>
 
-        {/* Genre — optional */}
+        {/* Genre — optional, inline editable */}
         {visibleColumns.has('genre') && (
-          <td className="py-3 px-2">
-            {track.genres && track.genres.length > 0 ? (
-              <span
-                className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
-                title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
-              >
-                {track.genres.slice(0, 2).join(' · ')}
-                {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
-              </span>
+          <td className="py-3 px-2" onClick={e => e.stopPropagation()}>
+            {inlineGenreEdit ? (
+              <input
+                autoFocus
+                defaultValue={track.genres.join(', ')}
+                onBlur={e => { void saveInlineGenre(e.target.value); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                  if (e.key === 'Escape') setInlineGenreEdit(false);
+                }}
+                className="w-full min-w-[100px] bg-transparent border-b border-[#7c3aed] text-[10px] text-[#e2e8f0] outline-none pb-0.5"
+              />
             ) : (
-              <span className="text-[10px] text-[#2a2a3a]">—</span>
+              <span
+                className={`text-[10px] truncate max-w-[140px] block cursor-text hover:text-[#94a3b8] ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#475569]'}`}
+                title={(track.genres.length > 0 ? track.genres.join(', ') : '—') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '') + ' · click to edit'}
+                onClick={() => { setEditGenre(track.genres.join(', ')); setInlineGenreEdit(true); }}
+              >
+                {track.genres.length > 0
+                  ? <>{track.genres.slice(0, 2).join(' · ')}{track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}</>
+                  : <span className="text-[#2a2a3a]">—</span>}
+              </span>
             )}
           </td>
         )}

@@ -176,6 +176,7 @@ export interface AppSong {
   comment?: string
   semanticTags?: SemanticTags
   waveform?: number[]
+  frequencyWaveform?: { bass: number[]; mid: number[]; high: number[] }
 }
 
 interface DiscogsRawRelease {
@@ -533,6 +534,7 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
         ...(features.comment ? { comment: features.comment } : {}),
         ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}),
         ...(features.waveform ? { waveform: features.waveform } : {}),
+        ...(features.frequencyWaveform ? { frequencyWaveform: features.frequencyWaveform } : {}),
       }
     } catch (err) {
       failures.exception++
@@ -1613,7 +1615,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           const camelot = keyInfo.camelot
           const resolvedYear = finalFeatures.year ?? localYear
           const resolvedComment = finalFeatures.comment ?? localComment
-          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizedBpm, key: keyInfo.keyName, camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(resolvedYear != null ? { year: resolvedYear } : {}), ...(resolvedComment ? { comment: resolvedComment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}), semanticTags: deriveSemanticTags({ bpm: normalizedBpm, camelot, energy: finalFeatures.energy, genres, ...finalFeatures.spectral }) }
+          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizedBpm, key: keyInfo.keyName, camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(resolvedYear != null ? { year: resolvedYear } : {}), ...(resolvedComment ? { comment: resolvedComment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}), ...(finalFeatures.waveform ? { waveform: finalFeatures.waveform } : {}), ...(finalFeatures.frequencyWaveform ? { frequencyWaveform: finalFeatures.frequencyWaveform } : {}), semanticTags: deriveSemanticTags({ bpm: normalizedBpm, camelot, energy: finalFeatures.energy, genres, ...finalFeatures.spectral }) }
         } catch { /* skip */ }
       }
       for (const song of Object.values(resultsJson)) {
@@ -1892,12 +1894,16 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
 
       const bpm = normalizeBpm(features.bpm, features.energy, cachedGenres, features.tagBpm)
       const semanticTags = deriveSemanticTags({ bpm, camelot: keyInfo.camelot, energy: features.energy, genres: cachedGenres, ...features.spectral })
-      const patch: Partial<AppSong> = { bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, semanticTags }
+      const patch: Partial<AppSong> = {
+        bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, semanticTags,
+        ...(features.waveform ? { waveform: features.waveform } : {}),
+        ...(features.frequencyWaveform ? { frequencyWaveform: features.frequencyWaveform } : {}),
+      }
 
       if (songsFolder) patchResultsFile(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'), patch)
       patchResultsFile(APPLE_RESULTS_PATH, absolutePath, patch)
 
-      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy }))
+      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, waveform: features.waveform, frequencyWaveform: features.frequencyWaveform }))
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Reanalysis failed' })) }
   })
 
@@ -1941,6 +1947,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           song.camelot = keyInfo.camelot
           song.energy = features.energy
           if (features.energyProfile) (song as unknown as Record<string, unknown>).energyProfile = features.energyProfile
+          if (features.waveform) (song as unknown as Record<string, unknown>).waveform = features.waveform
+          if (features.frequencyWaveform) (song as unknown as Record<string, unknown>).frequencyWaveform = features.frequencyWaveform
           song.semanticTags = deriveSemanticTags({ bpm, camelot: keyInfo.camelot, energy: features.energy, genres: song.genres ?? [], ...features.spectral })
           updated++
         } catch { /* skip failed tracks */ }

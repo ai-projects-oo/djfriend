@@ -27,6 +27,12 @@ export interface EnergyProfile {
   dropStrength: number;
 }
 
+export interface FrequencyWaveform {
+  bass: number[]; // ~400 values 0–1, energy in 20–250 Hz per time window
+  mid:  number[]; // ~400 values 0–1, energy in 250–4000 Hz per time window
+  high: number[]; // ~400 values 0–1, energy in 4000+ Hz per time window
+}
+
 export interface LocalAudioFeatures {
   bpm: number;
   tagBpm: number | null; // Raw ID3/metadata BPM tag — null if absent
@@ -35,6 +41,7 @@ export interface LocalAudioFeatures {
   energy: number;     // 0–1 normalized via dBFS
   energyProfile?: EnergyProfile;
   waveform?: number[]; // ~400 normalized RMS values (0–1) for waveform display
+  frequencyWaveform?: FrequencyWaveform; // per-window band energies for frequency-colored waveform
   year?: number;      // ID3 year tag
   comment?: string;   // ID3 first comment frame
   // Spectral features for local semantic tag derivation (no API key needed)
@@ -423,6 +430,63 @@ export function computeWaveform(channelData: Float32Array, points = 400): number
   return raw.map(v => Math.round((v / max) * 100) / 100);
 }
 
+/**
+ * Per-window frequency band energy for waveform display.
+ * Reuses the existing fft() — no second decodeAudioData call.
+ * Returns three normalized arrays (bass / mid / high), each with `points` values.
+ */
+export function computeFrequencyWaveform(channelData: Float32Array, sampleRate: number, points = 400): FrequencyWaveform {
+  const N    = channelData.length;
+  const WIN  = 2048;
+  const half = WIN >> 1;
+  const freqPerBin = sampleRate / WIN;
+
+  const bassHiBin = Math.min(half - 1, Math.floor(250  / freqPerBin)); // 20–250 Hz
+  const midHiBin  = Math.min(half - 1, Math.floor(4000 / freqPerBin)); // 250–4000 Hz
+  // high: midHiBin+1 … half-1                                           4000+ Hz
+
+  const nBass = Math.max(1, bassHiBin);
+  const nMid  = Math.max(1, midHiBin - bassHiBin);
+  const nHigh = Math.max(1, half - 1 - midHiBin);
+
+  const hann = new Float32Array(WIN);
+  for (let i = 0; i < WIN; i++) hann[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (WIN - 1)));
+
+  const re = new Float64Array(WIN);
+  const im = new Float64Array(WIN);
+  const blockSize = Math.floor(N / points);
+
+  const rawBass = new Float32Array(points);
+  const rawMid  = new Float32Array(points);
+  const rawHigh = new Float32Array(points);
+
+  for (let p = 0; p < points; p++) {
+    const center = Math.floor((p + 0.5) * blockSize);
+    const s0 = Math.max(0, Math.min(N - WIN, center - half));
+    for (let i = 0; i < WIN; i++) { re[i] = channelData[s0 + i] * hann[i]; im[i] = 0; }
+    fft(re, im);
+
+    let bassE = 0, midE = 0, highE = 0;
+    for (let k = 1; k < half; k++) {
+      const power = re[k] * re[k] + im[k] * im[k];
+      if      (k <= bassHiBin) bassE += power;
+      else if (k <= midHiBin)  midE  += power;
+      else                     highE += power;
+    }
+    rawBass[p] = Math.sqrt(bassE / nBass);
+    rawMid[p]  = Math.sqrt(midE  / nMid);
+    rawHigh[p] = Math.sqrt(highE / nHigh);
+  }
+
+  const norm = (arr: Float32Array): number[] => {
+    let mx = 1e-10;
+    for (let i = 0; i < arr.length; i++) if (arr[i] > mx) mx = arr[i];
+    return Array.from(arr, v => Math.round(v / mx * 100) / 100);
+  };
+
+  return { bass: norm(rawBass), mid: norm(rawMid), high: norm(rawHigh) };
+}
+
 export async function analyzeAudio(filePath: string, bpmHint?: { min: number; max: number }): Promise<LocalAudioFeatures | null> {
   try {
     const decodeAudio = (require('audio-decode') as { default: (buf: Buffer) => Promise<AudioBuffer> }).default;
@@ -562,15 +626,16 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
       + (mbFeats.zcRate    - 0.064 ) / 0.029 * 0.0016
     )) * 1000) / 1000;
 
-    const energyProfile = computeEnergyProfile(channelData, 44100);
-    const waveform = computeWaveform(channelData);
+    const energyProfile      = computeEnergyProfile(channelData, 44100);
+    const waveform           = computeWaveform(channelData);
+    const frequencyWaveform  = computeFrequencyWaveform(channelData, 44100);
 
     // ML vocal detection — runs after main analysis, replaces spectral estimate when available.
     // Returns -1 on first call (model not yet loaded) or error; spectral value is the fallback.
     const mlVocalProb = await detectVocalProbability(channelData, 44100);
     const vocalLikelihood = mlVocalProb >= 0 ? mlVocalProb : mbFeats.vocalLikelihood;
 
-    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, waveform, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb, spectralCentroid: mbFeats.spectralCentroid, spectralFlatness: mbFeats.spectralFlatness, spectralFlux: mbFeats.spectralFlux, vocalLikelihood } };
+    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, waveform, frequencyWaveform, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb, spectralCentroid: mbFeats.spectralCentroid, spectralFlatness: mbFeats.spectralFlatness, spectralFlux: mbFeats.spectralFlux, vocalLikelihood } };
   } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;

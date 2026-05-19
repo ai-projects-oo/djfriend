@@ -27,6 +27,12 @@ export interface SemanticTags {
   timeOfNightTags: string[]; // e.g. ["peak-time", "closing"]
 }
 
+export interface FrequencyWaveform {
+  bass: number[]; // ~400 values 0–1, energy in 20–250 Hz per time window
+  mid:  number[]; // ~400 values 0–1, energy in 250–4000 Hz per time window
+  high: number[]; // ~400 values 0–1, energy in 4000+ Hz per time window
+}
+
 export interface Song {
   file: string;
   filePath?: string;
@@ -48,6 +54,7 @@ export interface Song {
   semanticTags?: SemanticTags;
   energyProfile?: EnergyProfile;
   waveform?: number[];
+  frequencyWaveform?: FrequencyWaveform;
   discogsReleaseId?: number;
   discogsFromAPI?:   boolean;
   spotifyOnly?:      boolean; // true = no local file; sourced entirely from Spotify audio features

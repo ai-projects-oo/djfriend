@@ -111,6 +111,7 @@ export default function LibraryPlayer({ song, onPrev, onNext }: Props) {
           {song.waveform && song.waveform.length > 0 ? (
             <WaveformSeeker
               waveform={song.waveform}
+              frequencyWaveform={song.frequencyWaveform}
               progress={duration > 0 ? current / duration : 0}
               height={36}
               onSeek={frac => {

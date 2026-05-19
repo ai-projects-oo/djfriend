@@ -1,35 +1,34 @@
 import { useEffect, useRef, useCallback } from 'react';
+import type { FrequencyWaveform } from '../types';
 
 interface Props {
   waveform: number[];
+  frequencyWaveform?: FrequencyWaveform;
   progress: number;      // 0–1
   height?: number;
   onSeek?: (progress: number) => void;
   className?: string;
 }
 
-// Pick bar color based on amplitude — mimics Rekordbox frequency-zone tinting
-function barGradient(ctx: CanvasRenderingContext2D, h: number, v: number): CanvasGradient {
-  const g = ctx.createLinearGradient(0, h, 0, 0);
-  if (v < 0.22) {
-    // Sparse / transient-only → cyan (hi-hat zone)
-    g.addColorStop(0, '#006688');
-    g.addColorStop(1, '#33ccff');
-  } else if (v < 0.42) {
-    // Mid energy → green-teal
-    g.addColorStop(0, '#116644');
-    g.addColorStop(1, '#44ee99');
-  } else {
-    // Full energy → warm orange/salmon (bass dominant)
-    g.addColorStop(0,    '#cc2200');
-    g.addColorStop(0.35, '#ff5500');
-    g.addColorStop(0.70, '#ff8844');
-    g.addColorStop(1,    '#ffbb77');
-  }
-  return g;
+// Blend bass/mid/high into a single RGB string
+function bandColor(bass: number, mid: number, high: number): string {
+  const total = bass + mid + high + 1e-6;
+  const b = bass / total, m = mid / total, h = high / total;
+  // Bass=orange-red, Mid=green, High=cyan-blue
+  const r = Math.round(255 * b +  68 * m +   0 * h);
+  const g = Math.round( 68 * b + 210 * m + 170 * h);
+  const c = Math.round(  0 * b +  68 * m + 255 * h);
+  return `rgb(${r},${g},${c})`;
 }
 
-export default function WaveformSeeker({ waveform, progress, height = 56, onSeek, className = '' }: Props) {
+// Amplitude-only fallback color
+function amplitudeColor(v: number): string {
+  if (v < 0.22) return '#33ccff';   // sparse → cyan
+  if (v < 0.42) return '#44ee88';   // mid    → green
+  return `rgb(${Math.round(200 + 55 * v)},${Math.round(68 + 20 * v)},0)`; // bass → orange-red
+}
+
+export default function WaveformSeeker({ waveform, frequencyWaveform, progress, height = 56, onSeek, className = '' }: Props) {
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const frameRef    = useRef<number>(0);
   const progressRef = useRef(progress);
@@ -52,27 +51,32 @@ export default function WaveformSeeker({ waveform, progress, height = 56, onSeek
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Near-black background
     ctx.fillStyle = '#090910';
     ctx.fillRect(0, 0, w, h);
 
-    const barW = w / waveform.length;
+    const n    = waveform.length;
+    const barW = w / n;
     const gap  = barW > 2 ? 0.8 : 0.3;
     const px   = progressRef.current * w;
 
-    waveform.forEach((v, i) => {
-      const x      = i * barW;
-      const barH   = Math.max(2, v * h * 0.95);
-      const played = x < px;
+    for (let i = 0; i < n; i++) {
+      const v    = waveform[i];
+      const x    = i * barW;
+      const barH = Math.max(2, v * h * 0.95);
 
-      ctx.globalAlpha = played ? 0.28 : 0.9;
-      ctx.fillStyle   = barGradient(ctx, h, v);
+      // Color from real frequency data if available, else amplitude approximation
+      const color = frequencyWaveform
+        ? bandColor(frequencyWaveform.bass[i] ?? 0, frequencyWaveform.mid[i] ?? 0, frequencyWaveform.high[i] ?? 0)
+        : amplitudeColor(v);
+
+      ctx.globalAlpha = x < px ? 0.28 : 0.85 + v * 0.15;
+      ctx.fillStyle   = color;
       ctx.fillRect(x, h - barH, Math.max(1, barW - gap), barH);
-    });
+    }
 
     ctx.globalAlpha = 1;
 
-    // Playhead — thin white line
+    // Playhead
     if (px > 0 && px < w) {
       ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth   = 1.5;
@@ -81,7 +85,7 @@ export default function WaveformSeeker({ waveform, progress, height = 56, onSeek
       ctx.lineTo(px, h);
       ctx.stroke();
     }
-  }, [waveform, height]);
+  }, [waveform, frequencyWaveform, height]);
 
   useEffect(() => {
     cancelAnimationFrame(frameRef.current);

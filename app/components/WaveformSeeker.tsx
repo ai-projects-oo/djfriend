@@ -1,23 +1,16 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { FrequencyWaveform } from '../types';
 
-interface CueMark { name: string; time: number; num: number; }
-
 interface Props {
   waveform: number[];
   frequencyWaveform?: FrequencyWaveform;
   vocalTimeline?: number[];
   progress: number;      // 0–1
-  duration?: number;     // seconds — required for cue point rendering
-  cuePoints?: CueMark[];
+  duration?: number;
   height?: number;
   onSeek?: (progress: number) => void;
   className?: string;
 }
-
-// Cue slot colours A–H (green → yellow → orange → red gradient like Rekordbox)
-const CUE_COLOR = '#39ff14'; // neon green — same for all cue points, matching Rekordbox
-const CUE_LETTERS = ['A','B','C','D','E','F','G','H'];
 
 function interp(arr: number[], n: number): number[] {
   if (!arr.length) return new Array(n).fill(0);
@@ -62,7 +55,7 @@ function adaptFreq(fw: { bass: number[]; mid: number[]; high: number[] }, canvas
 }
 
 
-export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimeline, progress, duration, cuePoints, height = 56, onSeek, className = '' }: Props) {
+export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimeline, progress, duration, height = 56, onSeek, className = '' }: Props) {
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const frameRef    = useRef<number>(0);
   const progressRef = useRef(progress);
@@ -87,9 +80,9 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
 
     ctx.fillStyle = '#090910';
     ctx.fillRect(0, 0, w, h);
-    // Red baseline floor
-    ctx.globalAlpha = 0.7;
-    ctx.fillStyle = '#ff0000';
+    // Green baseline floor
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#00e040';
     ctx.fillRect(0, h - 1, w, 1);
     ctx.globalAlpha = 1;
 
@@ -139,42 +132,6 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
 
     ctx.globalAlpha = 1;
 
-    // Cue point markers
-    if (cuePoints && cuePoints.length > 0 && duration && duration > 0) {
-      ctx.font = `bold ${Math.max(8, Math.round(height * 0.22))}px monospace`;
-      ctx.textBaseline = 'top';
-      for (const cue of cuePoints) {
-        const cx = (cue.time / duration) * w;
-        if (cx < 0 || cx > w) continue;
-        const color = CUE_COLOR;
-        const letter = CUE_LETTERS[cue.num % CUE_LETTERS.length];
-
-        // Vertical tick line
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1;
-        ctx.globalAlpha = 0.85;
-        ctx.beginPath();
-        ctx.moveTo(cx, 0);
-        ctx.lineTo(cx, h);
-        ctx.stroke();
-
-        // Label box
-        const fontSize = Math.max(8, Math.round(height * 0.22));
-        const pad = 2;
-        const lw = fontSize * 0.72 + pad * 2;
-        const lh = fontSize + pad * 2;
-        ctx.globalAlpha = 0.92;
-        ctx.fillStyle = color;
-        ctx.fillRect(cx, 0, lw, lh);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = '#000';
-        ctx.font = `bold ${fontSize}px monospace`;
-        ctx.fillText(letter, cx + pad, pad);
-      }
-    }
-
-    ctx.globalAlpha = 1;
-
     // Playhead
     if (px > 0 && px < w) {
       ctx.strokeStyle = 'rgba(255,255,255,0.9)';
@@ -184,7 +141,7 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
       ctx.lineTo(px, h);
       ctx.stroke();
     }
-  }, [waveform, frequencyWaveform, vocalTimeline, cuePoints, duration, height]);
+  }, [waveform, frequencyWaveform, vocalTimeline, duration, height]);
 
   useEffect(() => {
     cancelAnimationFrame(frameRef.current);

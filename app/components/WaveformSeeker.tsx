@@ -16,7 +16,7 @@ interface Props {
 }
 
 // Cue slot colours A–H (green → yellow → orange → red gradient like Rekordbox)
-const CUE_COLORS = ['#00ff88','#00e5ff','#ffdd00','#ff9900','#ff4466','#cc44ff','#44bbff','#ffffff'];
+const CUE_COLOR = '#39ff14'; // neon green — same for all cue points, matching Rekordbox
 const CUE_LETTERS = ['A','B','C','D','E','F','G','H'];
 
 function interp(arr: number[], n: number): number[] {
@@ -74,11 +74,11 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
         const midH  = Math.max(1, (frequencyWaveform.mid[i]  ?? 0) * h * 0.95);
         const highH = Math.max(1, (frequencyWaveform.high[i] ?? 0) * h * 0.95);
         ctx.fillStyle = '#ff4400'; ctx.fillRect(x, h - bassH, bw, bassH);
-        ctx.fillStyle = '#44dd55'; ctx.fillRect(x, h - midH,  bw, midH);
+        ctx.fillStyle = '#ffcc00'; ctx.fillRect(x, h - midH,  bw, midH);
         ctx.fillStyle = '#00bbff'; ctx.fillRect(x, h - highH, bw, highH);
       } else {
         const barH = Math.max(2, v * h * 0.95);
-        ctx.fillStyle = v < 0.25 ? '#00bbff' : v < 0.45 ? '#44dd55' : '#ff4400';
+        ctx.fillStyle = v < 0.25 ? '#00bbff' : v < 0.45 ? '#ffcc00' : '#ff4400';
         ctx.fillRect(x, h - barH, bw, barH);
       }
 
@@ -105,7 +105,7 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
       for (const cue of cuePoints) {
         const cx = (cue.time / duration) * w;
         if (cx < 0 || cx > w) continue;
-        const color = CUE_COLORS[cue.num % CUE_COLORS.length];
+        const color = CUE_COLOR;
         const letter = CUE_LETTERS[cue.num % CUE_LETTERS.length];
 
         // Vertical tick line

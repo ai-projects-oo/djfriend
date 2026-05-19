@@ -54,10 +54,10 @@ export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline
         const midH  = Math.max(1, (frequencyWaveform.mid[i]  ?? 0) * h * 0.95);
         const highH = Math.max(1, (frequencyWaveform.high[i] ?? 0) * h * 0.95);
         ctx.fillStyle = '#ff4400'; ctx.fillRect(x, h - bassH, bw, bassH);
-        ctx.fillStyle = '#44dd55'; ctx.fillRect(x, h - midH,  bw, midH);
+        ctx.fillStyle = '#ffcc00'; ctx.fillRect(x, h - midH,  bw, midH);
         ctx.fillStyle = '#00bbff'; ctx.fillRect(x, h - highH, bw, highH);
       } else {
-        ctx.fillStyle = v < 0.25 ? '#00bbff' : v < 0.45 ? '#44dd55' : '#ff4400';
+        ctx.fillStyle = v < 0.25 ? '#00bbff' : v < 0.45 ? '#ffcc00' : '#ff4400';
         ctx.fillRect(x, h - barH, bw, barH);
       }
 

@@ -100,32 +100,34 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
       const played = x < px;
       const alpha  = played ? 0.25 : 0.88 + v * 0.12;
 
-      ctx.globalAlpha = alpha;
-
       if (fw) {
-        // All bands start from bottom, overlapping — same as Rekordbox
-        const bassH = Math.max(1, (fw.bass[i] ?? 0) * h * 0.95);
-        const midH  = Math.max(1, (fw.mid[i]  ?? 0) * h * 0.95);
-        const highH = Math.max(1, (fw.high[i] ?? 0) * h * 0.95);
-        ctx.globalAlpha = alpha;          ctx.fillStyle = '#ff0000'; ctx.fillRect(x, h - bassH, bw, bassH);
-        ctx.globalAlpha = alpha * 0.72;   ctx.fillStyle = '#00e040'; ctx.fillRect(x, h - midH,  bw, midH);
-        ctx.globalAlpha = alpha * 0.58;   ctx.fillStyle = '#0088ff'; ctx.fillRect(x, h - highH, bw, highH);
+        const r = Math.min(255, Math.round((fw.bass[i] ?? 0) * 380));
+        const g = Math.min(255, Math.round((fw.mid[i]  ?? 0) * 380));
+        const b = Math.min(255, Math.round((fw.high[i] ?? 0) * 380));
+        const barH = Math.max(1, v * h * 0.95);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, h - barH, bw, barH);
+        if (vocalInterp) {
+          const vp = vocalInterp[i];
+          if (vp > 0.2) {
+            ctx.globalAlpha = played ? (vp - 0.2) * 0.2 : (vp - 0.2) * 0.55;
+            ctx.fillStyle = '#cc44ff';
+            ctx.fillRect(x, h - barH, bw, barH);
+          }
+        }
       } else {
         const barH = Math.max(2, v * h * 0.95);
+        ctx.globalAlpha = alpha;
         ctx.fillStyle = v < 0.25 ? '#0088ff' : v < 0.45 ? '#00e040' : '#ff0000';
         ctx.fillRect(x, h - barH, bw, barH);
-      }
-
-      // Vocal overlay — on top of frequency layers
-      if (vocalInterp) {
-        const vp = vocalInterp[i];
-        if (vp > 0.2) {
-          const barH = fw
-            ? Math.max(fw.bass[i] ?? 0, fw.mid[i] ?? 0, fw.high[i] ?? 0) * h * 0.95
-            : v * h * 0.95;
-          ctx.globalAlpha = played ? (vp - 0.2) * 0.25 : (vp - 0.2) * 0.7;
-          ctx.fillStyle = '#dd66ff';
-          ctx.fillRect(x, h - Math.max(2, barH), bw, Math.max(2, barH));
+        if (vocalInterp) {
+          const vp = vocalInterp[i];
+          if (vp > 0.2) {
+            ctx.globalAlpha = played ? (vp - 0.2) * 0.2 : (vp - 0.2) * 0.55;
+            ctx.fillStyle = '#cc44ff';
+            ctx.fillRect(x, h - barH, bw, barH);
+          }
         }
       }
     }

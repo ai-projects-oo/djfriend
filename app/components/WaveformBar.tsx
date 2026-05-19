@@ -87,17 +87,16 @@ export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline
       const v    = wf[i];
       const barH = Math.max(1, v * h * 0.95);
       const x    = i * barW;
-      ctx.globalAlpha = 0.88 + v * 0.12;
 
       if (fw) {
-        const baseA = 0.88 + v * 0.12;
-        const bassH = Math.max(1, (fw.bass[i] ?? 0) * h * 0.95);
-        const midH  = Math.max(1, (fw.mid[i]  ?? 0) * h * 0.95);
-        const highH = Math.max(1, (fw.high[i] ?? 0) * h * 0.95);
-        ctx.globalAlpha = baseA;          ctx.fillStyle = '#ff0000'; ctx.fillRect(x, h - bassH, bw, bassH);
-        ctx.globalAlpha = baseA * 0.72;   ctx.fillStyle = '#00e040'; ctx.fillRect(x, h - midH,  bw, midH);
-        ctx.globalAlpha = baseA * 0.58;   ctx.fillStyle = '#0088ff'; ctx.fillRect(x, h - highH, bw, highH);
+        const r = Math.min(255, Math.round((fw.bass[i] ?? 0) * 380));
+        const g = Math.min(255, Math.round((fw.mid[i]  ?? 0) * 380));
+        const b = Math.min(255, Math.round((fw.high[i] ?? 0) * 380));
+        ctx.globalAlpha = 0.88 + v * 0.12;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, h - barH, bw, barH);
       } else {
+        ctx.globalAlpha = 0.88 + v * 0.12;
         ctx.fillStyle = v < 0.25 ? '#0088ff' : v < 0.45 ? '#00e040' : '#ff0000';
         ctx.fillRect(x, h - barH, bw, barH);
       }
@@ -105,8 +104,8 @@ export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline
       if (vocalInterp) {
         const vp = vocalInterp[i];
         if (vp > 0.2) {
-          ctx.globalAlpha = (vp - 0.2) * 0.7;
-          ctx.fillStyle = '#dd66ff';
+          ctx.globalAlpha = (vp - 0.2) * 0.55;
+          ctx.fillStyle = '#cc44ff';
           ctx.fillRect(x, h - barH, bw, barH);
         }
       }

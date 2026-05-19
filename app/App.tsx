@@ -1427,7 +1427,7 @@ function AppInner() {
               }`}
             >
               <SpotifyIcon size={13} className="text-[#1db954]" />
-              Imports
+              Spotify
               {importHistory.length > 0 && (
                 <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
                   {importHistory.length}
@@ -1467,7 +1467,7 @@ function AppInner() {
                         onClick={() => setActiveTab("Imports")}
                         className="mt-1 self-start px-2.5 py-1 rounded-md text-xs text-[#7c3aed] border border-[#7c3aed33] bg-[#7c3aed0d] hover:bg-[#7c3aed1a] transition-colors cursor-pointer"
                       >
-                        Open Imports →
+                        Open Spotify →
                       </button>
                     )}
                   </div>

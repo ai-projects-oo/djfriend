@@ -47,6 +47,7 @@ export interface Song {
   comment?: string;            // ID3 comment tag (first COMM frame)
   semanticTags?: SemanticTags;
   energyProfile?: EnergyProfile;
+  waveform?: number[];
   discogsReleaseId?: number;
   discogsFromAPI?:   boolean;
   spotifyOnly?:      boolean; // true = no local file; sourced entirely from Spotify audio features

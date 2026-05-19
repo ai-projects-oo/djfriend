@@ -175,6 +175,7 @@ export interface AppSong {
   year?: number
   comment?: string
   semanticTags?: SemanticTags
+  waveform?: number[]
 }
 
 interface DiscogsRawRelease {
@@ -531,6 +532,7 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
         ...(features.year != null ? { year: features.year } : {}),
         ...(features.comment ? { comment: features.comment } : {}),
         ...(features.energyProfile ? { energyProfile: features.energyProfile } : {}),
+        ...(features.waveform ? { waveform: features.waveform } : {}),
       }
     } catch (err) {
       failures.exception++

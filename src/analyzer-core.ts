@@ -34,6 +34,7 @@ export interface LocalAudioFeatures {
   mode: number;       // 1=major, 0=minor
   energy: number;     // 0–1 normalized via dBFS
   energyProfile?: EnergyProfile;
+  waveform?: number[]; // ~400 normalized RMS values (0–1) for waveform display
   year?: number;      // ID3 year tag
   comment?: string;   // ID3 first comment frame
   // Spectral features for local semantic tag derivation (no API key needed)
@@ -408,6 +409,20 @@ async function afconvertDecode(
   }
 }
 
+export function computeWaveform(channelData: Float32Array, points = 400): number[] {
+  const blockSize = Math.floor(channelData.length / points);
+  const raw: number[] = [];
+  for (let i = 0; i < points; i++) {
+    const start = i * blockSize;
+    const end = Math.min(start + blockSize, channelData.length);
+    let sum = 0;
+    for (let j = start; j < end; j++) sum += channelData[j] * channelData[j];
+    raw.push(Math.sqrt(sum / (end - start)));
+  }
+  const max = Math.max(...raw, 1e-6);
+  return raw.map(v => Math.round((v / max) * 100) / 100);
+}
+
 export async function analyzeAudio(filePath: string, bpmHint?: { min: number; max: number }): Promise<LocalAudioFeatures | null> {
   try {
     const decodeAudio = (require('audio-decode') as { default: (buf: Buffer) => Promise<AudioBuffer> }).default;
@@ -548,13 +563,14 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
     )) * 1000) / 1000;
 
     const energyProfile = computeEnergyProfile(channelData, 44100);
+    const waveform = computeWaveform(channelData);
 
     // ML vocal detection — runs after main analysis, replaces spectral estimate when available.
     // Returns -1 on first call (model not yet loaded) or error; spectral value is the fallback.
     const mlVocalProb = await detectVocalProbability(channelData, 44100);
     const vocalLikelihood = mlVocalProb >= 0 ? mlVocalProb : mbFeats.vocalLikelihood;
 
-    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb, spectralCentroid: mbFeats.spectralCentroid, spectralFlatness: mbFeats.spectralFlatness, spectralFlux: mbFeats.spectralFlux, vocalLikelihood } };
+    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, waveform, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb, spectralCentroid: mbFeats.spectralCentroid, spectralFlatness: mbFeats.spectralFlatness, spectralFlux: mbFeats.spectralFlux, vocalLikelihood } };
   } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;

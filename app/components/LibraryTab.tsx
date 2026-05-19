@@ -4,6 +4,7 @@ import LibraryStatsBar from "./LibraryStatsBar";
 import LibraryPlayer from "./LibraryPlayer";
 import TrackInfoModal from "./TrackInfoModal";
 import { camelotColor } from "../lib/camelotColors";
+import WaveformBar from "./WaveformBar";
 import { apiFetch } from "../lib/apiFetch";
 import { downloadM3U } from "../lib/m3uExport";
 import { patchTrackMeta } from "../lib/trackMeta";
@@ -704,9 +705,12 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                       </div>
                     )}
                   </td>
-                  {/* Title + missing chips */}
+                  {/* Title + waveform + missing chips */}
                   <td className="px-3 py-1.5 max-w-[200px]">
                     <span className="text-sm text-[#cbd5e1] block truncate">{song.title || "—"}</span>
+                    {song.waveform && song.waveform.length > 0 && (
+                      <WaveformBar waveform={song.waveform} height={18} color="#7c3aed" className="mt-0.5 opacity-60 group-hover:opacity-90 transition-opacity" />
+                    )}
                     {isMissing && (
                       <div className="flex gap-1 mt-0.5 flex-wrap">
                         {missingFields.map(f => <span key={f} className="text-[10px] px-1 py-0.5 rounded bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30 leading-none font-medium">No {f}</span>)}

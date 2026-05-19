@@ -89,9 +89,9 @@ export default function WaveformBar({ waveform, frequencyWaveform, vocalTimeline
       const x    = i * barW;
 
       if (fw) {
-        const r = Math.min(255, Math.round((fw.bass[i] ?? 0) * 380));
-        const g = Math.min(255, Math.round((fw.mid[i]  ?? 0) * 380));
-        const b = Math.min(255, Math.round((fw.high[i] ?? 0) * 380));
+        const r = Math.min(255, Math.round((fw.bass[i] ?? 0) * 520));
+        const g = Math.min(255, Math.round((fw.mid[i]  ?? 0) * 340));
+        const b = Math.min(255, Math.round((fw.high[i] ?? 0) * 340));
         ctx.globalAlpha = 0.88 + v * 0.12;
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.fillRect(x, h - barH, bw, barH);

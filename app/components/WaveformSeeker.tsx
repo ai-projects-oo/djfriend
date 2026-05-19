@@ -101,9 +101,9 @@ export default function WaveformSeeker({ waveform, frequencyWaveform, vocalTimel
       const alpha  = played ? 0.25 : 0.88 + v * 0.12;
 
       if (fw) {
-        const r = Math.min(255, Math.round((fw.bass[i] ?? 0) * 380));
-        const g = Math.min(255, Math.round((fw.mid[i]  ?? 0) * 380));
-        const b = Math.min(255, Math.round((fw.high[i] ?? 0) * 380));
+        const r = Math.min(255, Math.round((fw.bass[i] ?? 0) * 520));
+        const g = Math.min(255, Math.round((fw.mid[i]  ?? 0) * 340));
+        const b = Math.min(255, Math.round((fw.high[i] ?? 0) * 340));
         const barH = Math.max(1, v * h * 0.95);
         ctx.globalAlpha = alpha;
         ctx.fillStyle = `rgb(${r},${g},${b})`;

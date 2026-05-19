@@ -1389,12 +1389,9 @@ function AppInner() {
                 title={isCratesLocked ? "Connect Discogs in Settings to unlock Crates" : undefined}
               >
                 <span className="flex items-center gap-1.5">
-                  {tab === "Crates" && (
-                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
-                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4c5.302 0 9.6 4.298 9.6 9.6s-4.298 9.6-9.6 9.6S2.4 17.302 2.4 12 6.698 2.4 12 2.4zm0 3.6a6 6 0 100 12A6 6 0 0012 6zm0 2.4a3.6 3.6 0 110 7.2A3.6 3.6 0 0112 8.4zm0 2.4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z"/>
-                    </svg>
-                  )}
-                  {tab}
+                  {tab === "Crates"
+                    ? <img src="https://www.discogs.com/images/discogs-white.png" alt="Discogs" className="h-3.5 w-auto" style={{ filter: isCratesLocked ? 'opacity(0.25)' : activeTab === 'Crates' ? 'opacity(1)' : 'opacity(0.45)' }} />
+                    : tab}
                   {isCratesLocked && (
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-50"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   )}

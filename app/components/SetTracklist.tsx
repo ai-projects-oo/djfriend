@@ -124,6 +124,7 @@ interface Props {
   onReorderTrack: (fromIdx: number, toIdx: number) => void;
   onUpdateTrack: (index: number, tags: { title?: string; artist?: string; genre?: string; bpm?: number; camelot?: string; key?: string; energy?: number }) => void;
   onExport?: () => void;
+  onSendToRekordbox?: () => Promise<{ isFirstTime: boolean } | null>;
   onExportSpotify?: () => void;
   onBulkReanalyze?: (indices: number[], bpmHint?: { min: number; max: number }) => Promise<void>;
   onBulkPatchBpm?: (indices: number[], multiplier: 2 | 0.5) => Promise<void>;
@@ -146,8 +147,9 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onExportSpotify, isElectron = false, isMacOS = false, hasAttemptedGenerate = false }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onSendToRekordbox, onExportSpotify, isElectron = false, isMacOS = false, hasAttemptedGenerate = false }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
+  const [rekordboxStatus, setRekordboxStatus] = useState<'idle' | 'sending' | 'done' | 'first-time'>('idle');
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [setStartTime, setSetStartTime] = useState<string>(''); // HH:MM
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -342,6 +344,23 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
 
   return (
     <>
+    {rekordboxStatus !== 'idle' && (
+      <div className={`mx-1 mb-2 px-4 py-3 rounded-xl text-sm flex items-start gap-3 ${rekordboxStatus === 'first-time' ? 'bg-[#7c3aed]/15 border border-[#7c3aed]/40' : 'bg-[#1a1a2e] border border-[#2a2a3a]'}`}>
+        {rekordboxStatus === 'sending' && <span className="w-4 h-4 rounded-full border-2 border-[#7c3aed]/30 border-t-[#7c3aed] animate-spin shrink-0 mt-0.5" />}
+        {rekordboxStatus === 'done'    && <span className="text-[#00e040] shrink-0">✓</span>}
+        {rekordboxStatus === 'first-time' && <span className="text-[#a78bfa] shrink-0">↗</span>}
+        <div>
+          {rekordboxStatus === 'sending' && <span className="text-[#94a3b8]">Sending to Rekordbox…</span>}
+          {rekordboxStatus === 'done'    && <span className="text-[#94a3b8]">Sent. Open Rekordbox and import from <code className="text-[#e2e8f0]">~/Music/rekordbox/rekordbox.xml</code></span>}
+          {rekordboxStatus === 'first-time' && (
+            <span className="text-[#cbd5e1]">
+              File written to <code className="text-[#a78bfa]">~/Music/rekordbox/rekordbox.xml</code>
+              <br /><span className="text-[#94a3b8] text-xs">First time? In Rekordbox → Preferences → Advanced → set the rekordbox xml path to that file, then click the XML icon in the sidebar to import.</span>
+            </span>
+          )}
+        </div>
+      </div>
+    )}
     <div className="flex flex-col gap-4">
       {/* Stats bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
@@ -529,14 +548,30 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                   <M3UIcon size={14} className="shrink-0 opacity-60" />
                   Export as M3U
                 </button>
+                {showRekordboxExport && onSendToRekordbox && (
+                  <button
+                    onClick={async () => {
+                      setRekordboxStatus('sending');
+                      setExportOpen(false);
+                      const result = await onSendToRekordbox();
+                      if (result) setRekordboxStatus(result.isFirstTime ? 'first-time' : 'done');
+                      else setRekordboxStatus('idle');
+                      setTimeout(() => setRekordboxStatus('idle'), result?.isFirstTime ? 12000 : 3000);
+                    }}
+                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    <RekordboxIcon size={14} className="shrink-0 opacity-60" />
+                    Send to Rekordbox
+                  </button>
+                )}
                 {showRekordboxExport && (
-                <button
-                  onClick={() => { downloadRekordboxXml(tracks); onExport?.(); setExportOpen(false); }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
-                >
-                  <RekordboxIcon size={14} className="shrink-0 opacity-60" />
-                  Export to Rekordbox
-                </button>
+                  <button
+                    onClick={() => { downloadRekordboxXml(tracks); onExport?.(); setExportOpen(false); }}
+                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    <RekordboxIcon size={14} className="shrink-0 opacity-60 opacity-40" />
+                    Download Rekordbox XML
+                  </button>
                 )}
                 {onExportSpotify && (
                   <button

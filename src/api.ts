@@ -1996,6 +1996,45 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
   })
 
   // Patch track metadata — writes ID3 tags to the file (MP3 only) AND patches results.json
+  // DJ software status — detect installed Rekordbox / Serato
+  // Cross-platform Rekordbox xml output path
+  const getRekordboxXmlPath = (): string => {
+    const home = os.homedir()
+    if (process.platform === 'win32') {
+      const musicDir = process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'Music', 'rekordbox') : path.join(home, 'Music', 'rekordbox')
+      return path.join(musicDir, 'rekordbox.xml')
+    }
+    return path.join(home, 'Music', 'rekordbox', 'rekordbox.xml')
+  }
+
+  middlewares.use('/api/dj-software-status', (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    const home = os.homedir()
+    const rekordbox = fs.existsSync(path.join(home, 'Library', 'Pioneer', 'rekordbox')) ||
+                      fs.existsSync(path.join(home, 'AppData', 'Roaming', 'Pioneer', 'rekordbox'))
+    const serato    = fs.existsSync(path.join(home, 'Music', 'Serato')) ||
+                      fs.existsSync(path.join(home, 'Documents', 'Serato'))
+    const xmlPath   = getRekordboxXmlPath()
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ rekordbox, serato, rekordboxXmlPath: xmlPath, rekordboxXmlExists: fs.existsSync(xmlPath) }))
+  })
+
+  // Send set directly to Rekordbox XML watched folder
+  middlewares.use('/api/send-to-rekordbox', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const body = await readJsonBody(req) as { xml?: string }
+      if (typeof body.xml !== 'string' || !body.xml.trim()) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing xml' })); return }
+      const xmlPath = getRekordboxXmlPath()
+      const xmlDir  = path.dirname(xmlPath)
+      const isFirstTime = !fs.existsSync(xmlPath)
+      if (!fs.existsSync(xmlDir)) fs.mkdirSync(xmlDir, { recursive: true })
+      fs.writeFileSync(xmlPath, body.xml, 'utf-8')
+      res.end(JSON.stringify({ ok: true, path: xmlPath, isFirstTime }))
+    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Write failed' })) }
+  })
+
   middlewares.use('/api/track-meta', async (req, res, next) => {
     if (req.method !== 'PATCH') { next(); return }
     let body: { file?: string; patch?: Partial<AppSong> }

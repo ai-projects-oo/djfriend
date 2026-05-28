@@ -753,6 +753,10 @@ function AppInner() {
 
   useEffect(() => {
     loadSettings();
+    apiFetch('/api/dj-software-status')
+      .then(r => r.ok ? r.json() as Promise<{ rekordbox: boolean }> : null)
+      .then(d => { if (d?.rekordbox) setHasRekordboxFolder(true); })
+      .catch(() => {});
   }, [loadSettings]);
 
   // Handle Discogs OAuth callback — /discogs-callback?oauth_token=…&oauth_verifier=…
@@ -2483,6 +2487,15 @@ function AppInner() {
                   onReorderTrack={handleReorderTrack}
                   onUpdateTrack={handleUpdateTrack}
                   onExport={handleExportM3U}
+                  onSendToRekordbox={hasRekordboxFolder ? async () => {
+                    try {
+                      const { generateRekordboxXml } = await import('./lib/rekordboxExport');
+                      const xml = generateRekordboxXml(generatedSet);
+                      const res = await apiFetch('/api/send-to-rekordbox', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ xml }) });
+                      if (!res.ok) return null;
+                      return await res.json() as { isFirstTime: boolean };
+                    } catch { return null; }
+                  } : undefined}
                   onExportSpotify={
                     hasSpotifyCredentials
                       ? () => {

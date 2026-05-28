@@ -666,6 +666,7 @@ function AppInner() {
     handleConfirmSpotifyExport,
     handleRenameEntry,
     handleRateEntry,
+    handleNoteEntry,
   } = useSpotifyExport({ generatedSet, prefs, curve, setHistory });
 
   const handleExportImportM3U = useCallback(
@@ -2715,6 +2716,7 @@ function AppInner() {
             }
             handleRenameEntry={handleRenameEntry}
             handleRateEntry={handleRateEntry}
+            handleNoteEntry={handleNoteEntry}
             onLoadEntry={handleLoadHistoryEntry}
           />
         </main>

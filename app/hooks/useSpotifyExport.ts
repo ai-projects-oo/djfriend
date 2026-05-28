@@ -168,6 +168,10 @@ export function useSpotifyExport({
     );
   }, [setHistory]);
 
+  const handleNoteEntry = useCallback((id: string, notes: string) => {
+    setHistory((prev) => prev.map((e) => e.id !== id ? e : { ...e, notes: notes || undefined }));
+  }, [setHistory]);
+
   return {
     spotifyExportStatus,
     setSpotifyExportStatus,
@@ -178,6 +182,7 @@ export function useSpotifyExport({
     handleConfirmSpotifyExport,
     handleRenameEntry,
     handleRateEntry,
+    handleNoteEntry,
   };
 }
 

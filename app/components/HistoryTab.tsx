@@ -24,6 +24,7 @@ interface HistoryTabProps {
   startSpotifyExport?: (tracks: SetTrack[], playlistName: string) => Promise<void>;
   handleRenameEntry: (id: string, newName: string) => void;
   handleRateEntry: (id: string, rating: 1 | 2 | 3 | 4 | 5 | null) => void;
+  handleNoteEntry: (id: string, notes: string) => void;
   onLoadEntry: (entry: HistoryEntry) => void;
 }
 
@@ -50,6 +51,7 @@ export default function HistoryTab({
   startSpotifyExport,
   handleRenameEntry,
   handleRateEntry,
+  handleNoteEntry,
   onLoadEntry,
 }: HistoryTabProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
@@ -186,6 +188,18 @@ export default function HistoryTab({
                   </button>
                 )}
               </div>
+            </div>
+            {/* Gig notes */}
+            <div className="px-5 pb-2">
+              <textarea
+                rows={1}
+                placeholder="Add gig notes…"
+                defaultValue={entry.notes ?? ''}
+                onBlur={e => handleNoteEntry(entry.id, e.target.value)}
+                className="w-full bg-transparent resize-none text-xs text-[#94a3b8] placeholder-[#2a2a3a] focus:outline-none focus:placeholder-[#475569] transition-colors py-1 border-b border-transparent focus:border-[#2a2a3a]"
+                style={{ minHeight: 24, lineHeight: '1.5' }}
+                onInput={e => { const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }}
+              />
             </div>
             {/* Tags + mini curve (always visible) */}
             <div className="px-5 pt-1 pb-3 flex items-stretch gap-4">

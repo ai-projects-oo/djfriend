@@ -132,6 +132,28 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
       .catch(() => {});
   }, []);
 
+  // Silently re-analyze tracks that have low-resolution waveforms (< 1000 pts = old 400-pt data)
+  const runWaveformUpgrade = useCallback((loaded: Song[]) => {
+    const stale = loaded.filter(s => s.filePath && (!s.waveform || s.waveform.length < 1000));
+    if (stale.length === 0) return;
+    const CONCURRENCY = 3;
+    let idx = 0;
+    const next = async (): Promise<void> => {
+      if (idx >= stale.length) return;
+      const song = stale[idx++];
+      try {
+        const res = await apiFetch('/api/reanalyze-track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: song.filePath }) });
+        if (!res.ok) return next();
+        const d = await res.json() as { ok?: boolean; waveform?: number[]; frequencyWaveform?: { bass: number[]; mid: number[]; high: number[] }; vocalTimeline?: number[] };
+        if (d.ok && (d.waveform || d.frequencyWaveform)) {
+          setLibrary(prev => prev.map(s => s.file === song.file ? { ...s, ...(d.waveform ? { waveform: d.waveform } : {}), ...(d.frequencyWaveform ? { frequencyWaveform: d.frequencyWaveform } : {}), ...(d.vocalTimeline ? { vocalTimeline: d.vocalTimeline } : {}) } : s));
+        }
+      } catch { /* non-fatal */ }
+      return next();
+    };
+    void Promise.all(Array.from({ length: Math.min(CONCURRENCY, stale.length) }, next));
+  }, []);
+
   // Re-derive semantic tags using current rule set — streams patches for in-memory update
   const runRederive = useCallback(() => {
     apiFetch("/api/rederive-tags", { method: "POST" })
@@ -182,6 +204,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
           setIsInitializing(false);
           runBackfill(songs);
           runRederive();
+          runWaveformUpgrade(songs);
           return;
         }
         throw new Error("empty");
@@ -201,6 +224,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
               setError(null);
               runBackfill(songs);
               runRederive();
+              runWaveformUpgrade(songs);
             }
           })
           .catch(() => {})

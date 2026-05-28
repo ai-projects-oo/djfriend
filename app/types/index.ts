@@ -223,6 +223,7 @@ export interface HistoryEntry {
   prefs: DJPreferences;
   curve: CurvePoint[];
   rating?: 1 | 2 | 3 | 4 | 5;
+  notes?: string;
 }
 
 export interface ImportTrack {

@@ -123,16 +123,13 @@ export function findSongsForImport(tracks: import('../types').ImportTrack[], lib
   return tracks
     .filter(t => t.inLibrary && !t.unavailable)
     .reduce<Song[]>((acc, t) => {
-      const nTitle = norm(t.title);
-      const nArtist = norm(t.artist);
-      const found = library.find(s => {
-        if (t.manualMatchFile) return s.file === t.manualMatchFile;
-        if (s.spotifyId === t.spotifyId) return true;
-        const sArtist = norm(s.spotifyArtist ?? s.artist);
-        const artistOk = sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist);
-        if (!artistOk) return false;
-        return titlesMatch(norm(s.spotifyTitle ?? s.title), nTitle) !== false;
-      });
+      const found = library.find(s =>
+        s.spotifyId === t.spotifyId ||
+        (norm(s.spotifyTitle ?? s.title) === norm(t.title) &&
+          (norm(s.spotifyArtist ?? s.artist) === norm(t.artist) ||
+           norm(s.spotifyArtist ?? s.artist).includes(norm(t.artist)) ||
+           norm(t.artist).includes(norm(s.spotifyArtist ?? s.artist))))
+      );
       if (found && !seen.has(found.file)) {
         seen.add(found.file);
         acc.push(found);

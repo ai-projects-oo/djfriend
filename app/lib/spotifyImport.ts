@@ -126,6 +126,7 @@ export function findSongsForImport(tracks: import('../types').ImportTrack[], lib
       const nTitle = norm(t.title);
       const nArtist = norm(t.artist);
       const found = library.find(s => {
+        if (t.manualMatchFile) return s.file === t.manualMatchFile;
         if (s.spotifyId === t.spotifyId) return true;
         const sArtist = norm(s.spotifyArtist ?? s.artist);
         const artistOk = sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist);

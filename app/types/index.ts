@@ -88,11 +88,12 @@ export type VenueType =
   | 'Festival'
   | 'Private event'
   | 'Corporate'
-  | 'Wedding';
+  | 'Wedding'
+  | 'Boogie';
 
 export type SetPhase = 'Warm-up' | 'Peak time' | 'Cool-down' | 'After-party';
 
-export type ArcPreset = 'Build-up' | 'Peak' | 'Valley' | 'Steady' | 'W-shape';
+export type ArcPreset = 'Build-up' | 'Peak' | 'Valley' | 'Steady' | 'W-shape' | 'Rising-W';
 
 export interface TagFilters {
   vibeTags: string[];
@@ -112,6 +113,11 @@ export interface DateFilter {
   rangeTo?: string;   // ISO date YYYY-MM-DD; undefined = today ("Now")
 }
 
+export interface CommentFilter {
+  text: string;
+  mode: 'includes' | 'excludes';
+}
+
 export interface DJPreferences {
   setDuration: number | null; // minutes; null = unlimited (all matching tracks)
   venueType: VenueType;
@@ -121,6 +127,7 @@ export interface DJPreferences {
   bpmMax?: number;  // optional hard ceiling for candidate pool
   tagFilters: TagFilters;
   dateFilter: DateFilter;
+  commentFilter?: CommentFilter;
 }
 
 export interface PlayStats {

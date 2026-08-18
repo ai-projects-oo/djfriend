@@ -1,5 +1,5 @@
 import type { Song, SetTrack, DJPreferences, CurvePoint, VenueType, SetPhase, TagFilters, ScoringWeights, HistoryEntry } from '../types';
-import { camelotHarmonyScore, isHarmonicWarning, isCamelotClockwise } from './camelot';
+import { camelotHarmonyScore, isHarmonicWarning, isCamelotClockwise, getCamelotCompatibility, getTransitionLabel } from './camelot';
 import { computePlayStats, familiarityScore } from './historyStats';
 import { sampleCurve } from './curveInterpolation';
 import { matchesGenrePrefs } from './genreUtils';
@@ -15,13 +15,15 @@ type AffinityKey =
   | 'club-peak'
   | 'bar-background'
   | 'wedding-birthday'
-  | 'festival';
+  | 'festival'
+  | 'boogie';
 
 const GENRE_AFFINITY: Record<AffinityKey, string[]> = {
   'club-peak': ['techno', 'house', 'electronic', 'dance', 'edm', 'trance', 'disco'],
   'bar-background': ['soul', 'jazz', 'indie', 'chill', 'lounge', 'r&b', 'neo-soul'],
   'wedding-birthday': ['pop', 'classic soul', 'funk', 'motown', 'disco', 'r&b', 'soul'],
   festival: ['electronic', 'rock', 'indie', 'alternative', 'edm', 'dance'],
+  boogie: ['disco', 'funk', 'boogie', 'soul', 'motown', 'r&b', 'jazz-funk', 'groove', 'neo-soul', 'classic soul', 'disco house', 'nu-disco'],
 };
 
 export function getAffinityKey(venue: VenueType, setPhase: SetPhase): AffinityKey | null {
@@ -29,6 +31,7 @@ export function getAffinityKey(venue: VenueType, setPhase: SetPhase): AffinityKe
   if (venue === 'Bar') return 'bar-background';
   if (venue === 'Wedding') return 'wedding-birthday';
   if (venue === 'Festival') return 'festival';
+  if (venue === 'Boogie') return 'boogie';
   return null;
 }
 
@@ -47,6 +50,7 @@ const VENUE_TAG_MAP: Partial<Record<VenueType, string[]>> = {
   Bar: ['bar', 'lounge', 'intimate'],
   Wedding: ['intimate'],
   'Private event': ['intimate'],
+  Boogie: ['bar', 'lounge', 'club'],
 }
 
 const TIME_TAG_MAP: Partial<Record<SetPhase, string[]>> = {
@@ -192,6 +196,16 @@ function generateSetOnce(
     if (dateFiltered.length > 0) candidatePool = dateFiltered;
   }
 
+  // Comment text filter
+  if (prefs.commentFilter && prefs.commentFilter.text.trim() !== '') {
+    const needle = prefs.commentFilter.text.trim().toLowerCase();
+    const commentFiltered = candidatePool.filter(s => {
+      const hay = (s.comment ?? '').toLowerCase();
+      return prefs.commentFilter!.mode === 'includes' ? hay.includes(needle) : !hay.includes(needle);
+    });
+    if (commentFiltered.length > 0) candidatePool = commentFiltered;
+  }
+
   // excludeFiles is a hard constraint (no repeated tracks) — always applied, no fallback.
   if (options?.excludeFiles?.size) {
     candidatePool = candidatePool.filter(s => !options.excludeFiles!.has(s.file));
@@ -216,6 +230,12 @@ function generateSetOnce(
   const result: SetTrack[] = [];
   const used = new Set<string>();
   let cumulativeSeconds = 0;
+
+  // Rate-limit special transitions: Energy Boost (+2) every 5+ slots; Armin Boost every 4+ slots
+  let lastEnergyBoost2Slot = -99;
+  let lastArminBoostSlot = -99;
+  const MIN_ENERGY_BOOST_GAP = 5;
+  const MIN_ARMIN_BOOST_GAP = 4;
 
   for (let slot = 0; slot < maxCount; slot++) {
     // 2. Sample the energy curve for this slot (use maxCount so curve shape is preserved)
@@ -251,13 +271,17 @@ function generateSetOnce(
 
     // 4. Score every candidate in the energy neighbourhood
     type R = { text: string; quality: 'good' | 'ok' | 'bad' | 'bonus' | 'info' };
-    type Scored = { song: Song; score: number; reasons: R[] };
+    type Scored = { song: Song; score: number; reasons: R[]; harmonicScore: number; energyScore: number; artistPenalty: number };
     const scored: Scored[] = [];
 
-    const wH = options?.weights?.harmonicWeight   ?? 0.45;
-    const wB = options?.weights?.bpmWeight        ?? 0.22;
-    const wT = options?.weights?.transitionWeight ?? 0.08;
-    const wE = options?.weights?.energyWeight     ?? 0.25;
+    // Weights: energy-first philosophy (0.35 energy, 0.25 harmonic, 0.15 BPM, 0.15 transition/phrase)
+    const wH = options?.weights?.harmonicWeight   ?? 0.25;
+    const wB = options?.weights?.bpmWeight        ?? 0.15;
+    const wT = options?.weights?.transitionWeight ?? 0.15;
+    const wE = options?.weights?.energyWeight     ?? 0.35;
+
+    // Artist diversity: penalize same artist appearing in recent 3 slots
+    const recentArtists = result.slice(-3).map(t => t.artist.toLowerCase());
 
     for (const song of energyNeighbours) {
       const harmonicScore =
@@ -288,14 +312,29 @@ function generateSetOnce(
       // legacy jitter support
       const jitter = options?.jitter ? Math.random() * options.jitter : 0;
       const discogsBonus = (options?.weights?.discogsBonus && options.discogsBonusFiles?.has(song.file)) ? options.weights.discogsBonus : 0;
-      const score = baseScore + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + discogsBonus + jitter;
+
+      // Artist diversity penalty
+      const artistPenalty = recentArtists.includes(song.artist.toLowerCase()) ? -0.12 : 0;
+
+      // Rate-limit special harmonic transitions
+      const compat = prevCamelot ? getCamelotCompatibility(prevCamelot, song.camelot) : null;
+      const isEB2 = compat === 'energyBoost2';
+      const isAB = compat === 'arminBoost';
+      const boostRatePenalty =
+        (isEB2 && slot - lastEnergyBoost2Slot < MIN_ENERGY_BOOST_GAP ? -0.15 : 0) +
+        (isAB  && slot - lastArminBoostSlot   < MIN_ARMIN_BOOST_GAP  ? -0.15 : 0);
+
+      const score = baseScore + affinityBonus + semBonus + tagBonus + boostBonus + famBonus + discogsBonus + jitter + artistPenalty + boostRatePenalty;
 
       const reasons: R[] = [];
       if (prevCamelot !== null) {
-        if (harmonicScore >= 1.0)       reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — perfect match`, quality: 'good' });
-        else if (harmonicScore >= 0.75) reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — compatible`, quality: 'ok' });
-        else if (harmonicScore >= 0.5)  reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — energy boost`, quality: 'bonus' });
-        else                            reasons.push({ text: `Key ${prevCamelot}→${song.camelot} — key jump`, quality: 'bad' });
+        const label = getTransitionLabel(prevCamelot, song.camelot);
+        if (harmonicScore >= 1.0)       reasons.push({ text: label, quality: 'good' });
+        else if (harmonicScore >= 0.82) reasons.push({ text: label, quality: 'ok' });
+        else if (harmonicScore >= 0.75) reasons.push({ text: label, quality: 'bonus' });
+        else                            reasons.push({ text: label, quality: 'bad' });
+        if (isEB2 && boostRatePenalty < 0) reasons.push({ text: 'Energy Boost too soon — penalized', quality: 'bad' });
+        if (isAB  && boostRatePenalty < 0) reasons.push({ text: 'Armin Boost too soon — penalized', quality: 'bad' });
       }
       const eDelta = Math.abs(song.energy - targetEnergy);
       const eQuality: R['quality'] = eDelta <= 0.05 ? 'good' : eDelta <= 0.15 ? 'ok' : 'bad';
@@ -304,17 +343,18 @@ function generateSetOnce(
         const delta = Math.round(song.bpm - prevBpm);
         reasons.push({ text: `BPM ${Math.round(song.bpm)}  ${delta >= 0 ? '+' : ''}${delta} from prev`, quality: 'info' });
       }
-      if (boostBonus > 0)  reasons.push({ text: 'Clockwise energy boost', quality: 'bonus' });
+      if (artistPenalty < 0) reasons.push({ text: `Same artist (${song.artist}) — penalized`, quality: 'bad' });
+      if (boostBonus > 0)    reasons.push({ text: 'Clockwise energy boost', quality: 'bonus' });
       if (affinityBonus > 0) reasons.push({ text: 'Genre affinity', quality: 'bonus' });
-      if (semBonus > 0)    reasons.push({ text: 'Vibe match', quality: 'bonus' });
-      if (tagBonus > 0)    reasons.push({ text: 'Tag filter match', quality: 'bonus' });
+      if (semBonus > 0)      reasons.push({ text: 'Vibe match', quality: 'bonus' });
+      if (tagBonus > 0)      reasons.push({ text: 'Tag filter match', quality: 'bonus' });
       if (options?.history) {
         if (playCount === 0)       reasons.push({ text: 'First time in a set', quality: 'info' });
         else if (playCount >= 10)  reasons.push({ text: `Played ${playCount}× — cooling down`, quality: 'ok' });
         else                       reasons.push({ text: `Played ${playCount}× — familiar`, quality: 'good' });
       }
 
-      scored.push({ song, score, reasons });
+      scored.push({ song, score, reasons, harmonicScore, energyScore, artistPenalty });
     }
 
     // 5. Pick the winner — deterministic (best score) or softmax-sampled top-k for variation
@@ -339,11 +379,34 @@ function generateSetOnce(
     }
 
     const bestSong = winner.song;
-    const bestReasons = winner.reasons;
+    const bestReasons = winner.reasons.slice(); // copy so we can append
+
+    // Confidence score (0–100) based on normalized winner score
+    const confidence = Math.round(clamp(winner.score, 0, 1) * 100);
+    bestReasons.push({ text: `Confidence: ${confidence}%`, quality: 'info' });
+
+    // Top-2 rejected alternatives with primary rejection reason
+    const alternatives = scored.slice(1, 3);
+    for (const alt of alternatives) {
+      let why = 'close call';
+      if (alt.artistPenalty < 0 && winner.artistPenalty >= 0) why = 'same artist';
+      else if (alt.harmonicScore < winner.harmonicScore - 0.05) why = 'weaker harmonic';
+      else if (alt.energyScore < winner.energyScore - 0.05) why = 'energy mismatch';
+      else if (winner.score - alt.score > 0.08) why = 'lower overall score';
+      bestReasons.push({
+        text: `Alt: "${alt.song.title}" (${Math.round(clamp(alt.score, 0, 1) * 100)}) — ${why}`,
+        quality: 'info',
+      });
+    }
 
     // 5. Hard duration cap — stop before exceeding the budget
     const trackDur = (bestSong.duration ?? FALLBACK_DURATION) + GAP_SECONDS;
     if (result.length > 0 && cumulativeSeconds + trackDur > budgetSeconds) break;
+
+    // Update special-transition trackers
+    const winnerCompat = prevCamelot ? getCamelotCompatibility(prevCamelot, bestSong.camelot) : null;
+    if (winnerCompat === 'energyBoost2') lastEnergyBoost2Slot = slot;
+    if (winnerCompat === 'arminBoost')   lastArminBoostSlot   = slot;
 
     cumulativeSeconds += trackDur;
     used.add(bestSong.file);

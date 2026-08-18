@@ -26,6 +26,7 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const [generatedSet, setGeneratedSet] = useState<SetTrack[]>([]);
   const [scoringWeights, setScoringWeights] = useState<ScoringWeights | undefined>(undefined);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const curveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [swapModal, setSwapModal] = useState<{
     index: number;
     suggestions: Array<{ song: Song; breakdown: SwapBreakdown }>;
@@ -290,8 +291,56 @@ export function useSetGenerator(library: Song[], setLibrary: React.Dispatch<Reac
   const handleCurveChange = useCallback(
     (newCurve: CurvePoint[]) => {
       setCurve(newCurve);
+
+      // Immediately restamp targetEnergy on every set track so UI markers follow the curve live
+      setGeneratedSet(prev => {
+        if (prev.length === 0) return prev;
+        const n = prev.length;
+        return prev.map((t, i) => ({
+          ...t,
+          targetEnergy: sampleCurve(newCurve, n > 1 ? i / (n - 1) : 0.5),
+        }));
+      });
+
+      // Debounced: swap unlocked tracks that no longer fit the new curve
+      if (curveDebounceRef.current) clearTimeout(curveDebounceRef.current);
+      curveDebounceRef.current = setTimeout(() => {
+        setGeneratedSet(prev => {
+          if (prev.length === 0) return prev;
+          const n = prev.length;
+          const usedFiles = new Set(prev.map(t => t.file));
+          let changed = false;
+          const next = prev.map((track, i) => {
+            if (track.locked) return track;
+            const target = sampleCurve(newCurve, n > 1 ? i / (n - 1) : 0.5);
+            if (Math.abs(track.energy - target) <= 0.18) return track;
+
+            // Find best replacement: energy closest to target, then harmonic
+            const prevTrack = i > 0 ? prev[i - 1] : null;
+            const nextTrack = i < n - 1 ? prev[i + 1] : null;
+            const candidates = library.filter(s => !usedFiles.has(s.file));
+            let best: Song | null = null;
+            let bestScore = -1;
+            for (const c of candidates) {
+              const eFit = 1 - Math.abs(c.energy - target);
+              if (eFit < 0.7) continue; // must be reasonably close
+              const hPrev = prevTrack ? camelotHarmonyScore(prevTrack.camelot, c.camelot) : 1;
+              const hNext = nextTrack ? camelotHarmonyScore(c.camelot, nextTrack.camelot) : 1;
+              const score = eFit * 0.6 + ((hPrev + hNext) / 2) * 0.4;
+              if (score > bestScore) { bestScore = score; best = c; }
+            }
+            if (!best || bestScore <= 0) return track;
+            changed = true;
+            usedFiles.delete(track.file);
+            usedFiles.add(best.file);
+            const harmonicWarning = prevTrack ? isHarmonicWarning(prevTrack.camelot, best.camelot) : false;
+            return { ...best, slot: track.slot, targetEnergy: target, locked: false, harmonicWarning };
+          });
+          return changed ? next : prev;
+        });
+      }, 400);
     },
-    [],
+    [library],
   );
 
   const buildSwapSuggestions = useCallback(

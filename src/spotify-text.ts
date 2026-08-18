@@ -45,3 +45,17 @@ export function pickConfidentMatch(
   }
   return null
 }
+
+/** Match on title alone — used when the artist field is a label, not the actual performer. */
+export function pickTitleOnlyMatch(
+  origTitle: string,
+  items: SpotifyItem[],
+): SpotifyItem | null {
+  const cleanTitle = normalizeStr(stripFeatured(origTitle))
+  if (!cleanTitle) return null
+  for (const item of items) {
+    const spotTitle = normalizeStr(item.name)
+    if (hasWordOverlap(cleanTitle, spotTitle)) return item
+  }
+  return null
+}

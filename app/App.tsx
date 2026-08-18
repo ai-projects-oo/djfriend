@@ -25,6 +25,7 @@ import {
   findSongsForImport,
   fetchAudioFeatures,
   spotifyTrackToSong,
+  findPartialMatchSong,
 } from "./lib/spotifyImport";
 import { downloadM3U } from "./lib/m3uExport";
 import { SpotifyIcon, M3UIcon } from "./components/Icons";
@@ -234,6 +235,7 @@ function AppInner() {
   const MAX_APPLE_PLAYLISTS = 3;
   const [manualMatchKey, setManualMatchKey] = useState<string | null>(null);
   const [manualMatchQuery, setManualMatchQuery] = useState("");
+  const [partialHoverKey, setPartialHoverKey] = useState<string | null>(null);
   const manualSearchRef = useRef<HTMLDivElement | null>(null);
   const analyzeMenuRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1452,10 +1454,10 @@ function AppInner() {
       )}
 
       {activeTab === "Set Generator" && (
-        <main className="px-2 py-6 overflow-y-auto flex-1">
-          <div className="flex flex-col lg:flex-row lg:items-stretch gap-4">
+        <main className="px-2 flex-1 min-h-0 overflow-hidden">
+          <div className="flex flex-col lg:flex-row lg:items-stretch gap-4 h-full py-6">
             {/* ── LEFT SIDEBAR ── */}
-            <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4">
+            <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4 lg:overflow-y-auto">
 
               {/* Card 1: Source — visible when playlists exist (Apple Music or Spotify) */}
               {Object.keys(applePlaylistFiles).length === 0 && importHistory.length === 0 ? (
@@ -1845,18 +1847,21 @@ function AppInner() {
                 availableGenres.length >
                 0 &&
                 (() => {
+                  const commentFilterActive = !!(prefs.commentFilter && prefs.commentFilter.text.trim() !== '');
                   const activeFilterCount =
                     prefs.tagFilters.vibeTags.length +
                     prefs.tagFilters.moodTags.length +
                     prefs.tagFilters.vocalTypes.length +
                     prefs.tagFilters.venueTags.length +
-                    prefs.tagFilters.timeOfNightTags.length;
+                    prefs.tagFilters.timeOfNightTags.length +
+                    (commentFilterActive ? 1 : 0);
                   const activeList = [
                     ...prefs.tagFilters.vibeTags,
                     ...prefs.tagFilters.moodTags,
                     ...prefs.tagFilters.vocalTypes,
                     ...prefs.tagFilters.venueTags,
                     ...prefs.tagFilters.timeOfNightTags,
+                    ...(commentFilterActive ? [`comment ${prefs.commentFilter!.mode} "${prefs.commentFilter!.text.trim()}"`] : []),
                   ];
                   return (
                     <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
@@ -1922,6 +1927,7 @@ function AppInner() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 selectGenre("Any");
+                                setPrefs(p => ({ ...p, commentFilter: undefined }));
                               }}
                               className="ml-auto text-[#475569] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
                               title="Clear all filters"
@@ -2140,6 +2146,60 @@ function AppInner() {
                               </div>
                             )}
                           </div>
+                          {/* Comment filter */}
+                          <div>
+                            <div className="flex items-center gap-1 mb-2">
+                              <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                                Comment
+                              </span>
+                              {commentFilterActive && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPrefs(p => ({ ...p, commentFilter: undefined }))}
+                                  className="w-3.5 h-3.5 rounded-full border border-[#475569] text-[#475569] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                  title="Clear comment filter"
+                                  style={{ fontSize: 9, lineHeight: 1 }}
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex gap-2 items-center">
+                              <div className="flex rounded-md border border-[#2a2a3a] overflow-hidden text-[10px] flex-shrink-0">
+                                {(['includes', 'excludes'] as const).map(mode => (
+                                  <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => setPrefs(p => ({
+                                      ...p,
+                                      commentFilter: { text: p.commentFilter?.text ?? '', mode },
+                                    }))}
+                                    className="px-2 py-1 transition-colors cursor-pointer"
+                                    style={{
+                                      backgroundColor: (prefs.commentFilter?.mode ?? 'includes') === mode ? '#7c3aed' : 'transparent',
+                                      color: (prefs.commentFilter?.mode ?? 'includes') === mode ? '#fff' : '#64748b',
+                                    }}
+                                  >
+                                    {mode}
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                type="text"
+                                placeholder="filter text…"
+                                value={prefs.commentFilter?.text ?? ''}
+                                onChange={e => {
+                                  const text = e.target.value;
+                                  setPrefs(p => ({
+                                    ...p,
+                                    commentFilter: { text, mode: p.commentFilter?.mode ?? 'includes' },
+                                  }));
+                                }}
+                                className="flex-1 bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[11px] text-[#cbd5e1] placeholder-[#334155] outline-none focus:border-[#7c3aed] transition-colors"
+                              />
+                            </div>
+                          </div>
+
                           {availableGenres.length > 0 && (
                             <div>
                               <div className="flex items-center gap-1.5 mb-2">
@@ -2409,9 +2469,9 @@ function AppInner() {
             </div>
 
             {/* ── RIGHT: Generated Set ── */}
-            <div className="flex-1 min-w-0 flex flex-col gap-4">
-              {/* Energy Curve */}
-              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
+            <div className="flex-1 min-w-0 flex flex-col gap-4 min-h-0 overflow-hidden">
+              {/* Energy Curve — pinned, does not scroll */}
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex-shrink-0">
                 <div className="flex items-center gap-2 mb-4">
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
                     Energy Curve
@@ -2426,7 +2486,7 @@ function AppInner() {
                   tipConfig={tipConfig}
                 />
               </div>
-              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex flex-col flex-1">
+              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex flex-col flex-1 min-h-0 overflow-y-auto">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
                     Generated Set
@@ -3049,6 +3109,49 @@ function AppInner() {
                                       {track.artist}
                                     </div>
                                   )}
+                                  {track.matchConfidence === "partial" && (() => {
+                                    const pKey = `${entry.id}-${track.spotifyId}-${idx}-partial`;
+                                    const guessed = findPartialMatchSong(track.spotifyId, track.title, track.artist, library);
+                                    return (
+                                      <div className="relative inline-block mt-0.5">
+                                        <button
+                                          type="button"
+                                          onMouseEnter={() => setPartialHoverKey(pKey)}
+                                          onMouseLeave={() => setPartialHoverKey(null)}
+                                          className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-yellow-500/60 text-yellow-500/80 text-[9px] font-bold hover:border-yellow-400 hover:text-yellow-300 transition-colors cursor-default"
+                                          title="Uncertain match — hover to see guessed track"
+                                        >
+                                          ?
+                                        </button>
+                                        {partialHoverKey === pKey && guessed && (
+                                          <div className="absolute left-5 top-0 z-50 w-56 bg-[#1a1a2e] border border-yellow-500/30 rounded-lg shadow-xl p-3 text-[11px]">
+                                            <div className="text-yellow-400/70 uppercase tracking-widest text-[9px] font-semibold mb-1.5">Guessed match</div>
+                                            <div className="text-[#e2e8f0] font-medium leading-snug truncate">{guessed.title}</div>
+                                            <div className="text-[#94a3b8] truncate mb-2">{guessed.artist}</div>
+                                            <button
+                                              type="button"
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                setImportHistory(prev => prev.map(e2 =>
+                                                  e2.id !== entry.id ? e2 : {
+                                                    ...e2,
+                                                    tracks: e2.tracks.map((t, i) =>
+                                                      i !== idx ? t : { ...t, matchConfidence: 'fuzzy' as const, manualMatchFile: guessed.file }
+                                                    ),
+                                                  }
+                                                ));
+                                                setPartialHoverKey(null);
+                                              }}
+                                              className="flex items-center gap-1.5 px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/40 rounded text-yellow-300 transition-colors cursor-pointer w-full"
+                                            >
+                                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                              Approve this match
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="py-2.5 px-2 pr-5">
                                   {(track.inLibrary &&

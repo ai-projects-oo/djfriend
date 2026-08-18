@@ -2,15 +2,22 @@
  * Camelot Wheel compatibility logic.
  * A Camelot key looks like "5B" or "11A" — a number 1–12 and a letter A or B.
  *
- * Compatible moves (MixedInKey system):
- *   perfect      — same key (8A → 8A)
- *   compatible   — ±1 same letter (7A/9A) or same number other letter (8B)
- *   energyBoost  — ±1 with letter switch / diagonal (7B, 9B from 8A)
- *                  Creates a perfect-fifth energy shift; use for intentional lifts
- *   incompatible — everything else
+ * Compatible moves (DJFriend engine):
+ *   perfect      — same key (8A → 8A)              ★★★★★
+ *   compatible   — ±1 same letter (7A/9A) or same number other letter (8B = relative)  ★★★★★
+ *   energyBoost  — ±1 with letter switch / diagonal (7B, 9B from 8A)  ★★★★☆
+ *   energyBoost2 — clockwise +2 same letter (8A → 10A)  ★★★★☆  use sparingly (every 20–30 min)
+ *   arminBoost   — counterclockwise -5 same letter (8A → 3A)  ★★★★☆  dramatic lift
+ *   incompatible — everything else  ✗
  */
 
-export type CamelotCompatibility = 'perfect' | 'compatible' | 'energyBoost' | 'incompatible';
+export type CamelotCompatibility =
+  | 'perfect'
+  | 'compatible'
+  | 'energyBoost'
+  | 'energyBoost2'
+  | 'arminBoost'
+  | 'incompatible';
 
 export function parseCamelot(camelot: string): { num: number; letter: 'A' | 'B' } | null {
   const match = camelot.trim().match(/^(\d{1,2})([AaBb])$/);
@@ -34,35 +41,67 @@ export function getCamelotCompatibility(
   const sameLetter = a.letter === b.letter;
   const diff = Math.abs(a.num - b.num);
   const wrappedDiff = Math.min(diff, 12 - diff);
+  // Clockwise steps from a to b (0 = same, 1 = +1, 11 = -1, 2 = +2, 7 = -5)
+  const cwDiff = ((b.num - a.num) + 12) % 12;
 
   // Perfect: identical key
   if (sameNum && sameLetter) return 'perfect';
 
-  // Compatible: ±1 same letter (smooth energy flow)
+  // Compatible: ±1 same letter (neighbor — smoothest energy flow)
   if (sameLetter && wrappedDiff === 1) return 'compatible';
 
   // Compatible: same number, other letter (relative major/minor swap)
   if (sameNum && !sameLetter) return 'compatible';
 
-  // Energy boost: ±1 with letter switch (diagonal — perfect fifth relationship)
-  // Clockwise (+1) lifts energy; counterclockwise (-1) softens it.
+  // Diagonal ±1: ±1 with letter switch (perfect-fifth relationship)
   if (!sameLetter && wrappedDiff === 1) return 'energyBoost';
+
+  // Energy Boost (+2): clockwise 2 steps, same letter — intentional lift
+  if (sameLetter && cwDiff === 2) return 'energyBoost2';
+
+  // Armin Boost (-5): counterclockwise 5 steps (= clockwise 7), same letter — dramatic jump
+  if (sameLetter && cwDiff === 7) return 'arminBoost';
 
   return 'incompatible';
 }
 
 /**
  * Returns a numeric harmony score for the transition.
- *   perfect / compatible → 1.0
- *   energyBoost         → 0.75  (valid but adds tension)
+ *   perfect / compatible → 1.00  (★★★★★)
+ *   energyBoost2        → 0.87  (★★★★☆ +2 clockwise)
+ *   arminBoost          → 0.82  (★★★★☆ -5 counterclockwise)
+ *   energyBoost         → 0.75  (★★★★☆ diagonal ±1 fifth)
  *   incompatible        → 0.0
  */
 export function camelotHarmonyScore(from: string, to: string): number {
   switch (getCamelotCompatibility(from, to)) {
-    case 'perfect':      return 1.0;
-    case 'compatible':   return 1.0;
-    case 'energyBoost':  return 0.75;
-    case 'incompatible': return 0.0;
+    case 'perfect':       return 1.0;
+    case 'compatible':    return 1.0;
+    case 'energyBoost2':  return 0.87;
+    case 'arminBoost':    return 0.82;
+    case 'energyBoost':   return 0.75;
+    case 'incompatible':  return 0.0;
+  }
+}
+
+/**
+ * Human-readable label for a Camelot transition, used in selectionReason.
+ * Example: "Forward +1 (8A→9A)", "Energy Boost +2 (8A→10A)", "Armin Boost -5 (8A→3A)"
+ */
+export function getTransitionLabel(from: string, to: string): string {
+  const a = parseCamelot(from);
+  const b = parseCamelot(to);
+  if (!a || !b) return `Key jump (${from}→${to})`;
+  const cwDiff = ((b.num - a.num) + 12) % 12;
+  switch (getCamelotCompatibility(from, to)) {
+    case 'perfect':      return `Same Key (${from})`;
+    case 'compatible':
+      if (a.num === b.num) return `Relative (${from}→${to})`;
+      return cwDiff === 1 ? `Forward +1 (${from}→${to})` : `Back -1 (${from}→${to})`;
+    case 'energyBoost':  return `Diagonal ±1 (${from}→${to})`;
+    case 'energyBoost2': return `Energy Boost +2 (${from}→${to})`;
+    case 'arminBoost':   return `Armin Boost -5 (${from}→${to})`;
+    case 'incompatible': return `Key jump (${from}→${to})`;
   }
 }
 

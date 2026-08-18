@@ -179,7 +179,7 @@ describe('selectionReason', () => {
     expect(reasons.some(r => r.text.toLowerCase().includes('energy'))).toBe(true)
   })
 
-  it('includes harmonic info when a previous track exists', () => {
+  it('includes harmonic transition label when a previous track exists', () => {
     const songs = [
       makeSong({ file: 'first.mp3', camelot: '8B', energy: 0.5 }),
       makeSong({ file: 'second.mp3', camelot: '9B', energy: 0.5 }),
@@ -187,15 +187,17 @@ describe('selectionReason', () => {
     const set = generateSet(songs, { ...defaultPrefs, setDuration: 15 }, flatCurve)
     if (set.length >= 2) {
       const reasons = set[1].selectionReason ?? []
-      expect(reasons.some(r => r.text.toLowerCase().includes('key'))).toBe(true)
+      // Harmonic labels always contain a Camelot key pattern (e.g. "8B→9B")
+      expect(reasons.some(r => /\d+[AB]/i.test(r.text))).toBe(true)
     }
   })
 
-  it('first track has no key transition reason (no previous track)', () => {
+  it('first track has no harmonic transition reason (no previous track)', () => {
     const songs = [makeSong({ file: 'first.mp3', camelot: '8B', energy: 0.5 })]
     const set = generateSet(songs, { ...defaultPrefs, setDuration: 10 }, flatCurve)
     const reasons = set[0].selectionReason ?? []
-    expect(reasons.some(r => r.text.toLowerCase().includes('key'))).toBe(false)
+    // First track has no prev so no camelot transition label
+    expect(reasons.some(r => /\d+[AB].*→.*\d+[AB]/i.test(r.text))).toBe(false)
   })
 })
 

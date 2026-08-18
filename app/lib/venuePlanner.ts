@@ -167,6 +167,33 @@ const PLANS: Record<VenueType, Record<SetPhase, PlanEntry>> = {
       reasoning: 'Wedding after-party — younger crowd, more energy.',
     },
   },
+
+  Boogie: {
+    'Warm-up': {
+      bpmMin: 95, bpmMax: 112, bpmTarget: 104,
+      curve: curve([0, 0.25], [0.4, 0.42], [0.8, 0.55], [1, 0.60]),
+      weights: { harmonicWeight: 0.30, bpmWeight: 0.15, transitionWeight: 0.20, energyWeight: 0.35 },
+      reasoning: 'Set the groove early — classic soul and early funk to draw people onto the floor.',
+    },
+    'Peak time': {
+      bpmMin: 108, bpmMax: 124, bpmTarget: 116,
+      curve: curve([0, 0.60], [0.3, 0.78], [0.6, 0.90], [0.85, 0.85], [1, 0.75]),
+      weights: { harmonicWeight: 0.30, bpmWeight: 0.15, transitionWeight: 0.20, energyWeight: 0.35 },
+      reasoning: 'Full boogie dancefloor — tight harmonic locks keep the tonal music sounding lush.',
+    },
+    'Cool-down': {
+      bpmMin: 88, bpmMax: 108, bpmTarget: 98,
+      curve: curve([0, 0.72], [0.4, 0.55], [0.75, 0.40], [1, 0.28]),
+      weights: { harmonicWeight: 0.30, bpmWeight: 0.15, transitionWeight: 0.20, energyWeight: 0.35 },
+      reasoning: 'Slow the tempo gracefully — mellow soul and ballads to close the night.',
+    },
+    'After-party': {
+      bpmMin: 100, bpmMax: 120, bpmTarget: 110,
+      curve: curve([0, 0.48], [0.5, 0.65], [1, 0.58]),
+      weights: { harmonicWeight: 0.30, bpmWeight: 0.15, transitionWeight: 0.20, energyWeight: 0.35 },
+      reasoning: 'Late-night boogie for the faithful — deep cuts, rare grooves, keep it hypnotic.',
+    },
+  },
 };
 
 export function getSetPlan(venueType: VenueType, phase: SetPhase): SetPlan {
@@ -184,5 +211,5 @@ export function getSetPlan(venueType: VenueType, phase: SetPhase): SetPlan {
   };
 }
 
-export const VENUE_TYPES: VenueType[] = ['Club', 'Bar', 'Festival', 'Private event', 'Corporate', 'Wedding'];
+export const VENUE_TYPES: VenueType[] = ['Club', 'Bar', 'Festival', 'Private event', 'Corporate', 'Wedding', 'Boogie'];
 export const SET_PHASES: SetPhase[]   = ['Warm-up', 'Peak time', 'Cool-down', 'After-party'];

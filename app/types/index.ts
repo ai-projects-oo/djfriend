@@ -250,3 +250,101 @@ export interface ImportEntry {
   playlistId: string;
   tracks: ImportTrack[];
 }
+
+// ─── GigFinder ────────────────────────────────────────────────────────────────
+
+export type GigLeadStatus = 'NEW' | 'RESEARCHED' | 'READY_TO_CONTACT' | 'CONTACTED' | 'FOLLOW_UP' | 'REPLIED' | 'BOOKED' | 'NOT_INTERESTED' | 'REJECTED'
+export type GigLocationClass = 'LOCAL' | 'TRAVEL' | 'DESTINATION'
+export type GigConfidenceLevel = 'VERIFIED' | 'INFERRED' | 'UNKNOWN'
+export type GigOpportunityTier = 'HIGH_CONFIDENCE' | 'POTENTIAL' | 'WEAK' | 'REJECT'
+export type GigEvidenceFreshness = 'VERY_FRESH' | 'FRESH' | 'MODERATE' | 'OLD' | 'HISTORICAL'
+
+export interface GigEvidenceItem {
+  sourceUrl: string
+  sourceType: string
+  discoveredAt: string
+  publishedAt?: string
+  summary: string
+  freshness: GigEvidenceFreshness
+}
+
+export interface GigGenreClassification {
+  genres: string[]
+  confidence: number
+  level: GigConfidenceLevel
+  evidenceBullets: string[]
+  why: string
+}
+
+export interface GigContact {
+  name?: string
+  role?: string
+  email?: string
+  phone?: string
+  whatsapp?: string
+  instagram?: string
+  facebook?: string
+  linkedin?: string
+  website?: string
+  source?: string
+  confidence: number
+  whyThisContact: string
+  bestChannel: string
+  bestChannelReason: string
+  secondaryChannel?: string
+  secondaryChannelReason?: string
+}
+
+export interface GigLeadScores {
+  opportunity: number
+  musicFit: number
+  contactability: number
+  potentialValue: number
+  locationFit: number
+  overall: number
+}
+
+export interface GigLead {
+  id: string
+  venueName: string
+  city: string
+  country: string
+  distanceKm?: number
+  travelMinutes?: number
+  locationClass: GigLocationClass
+  opportunityDescription: string
+  opportunityTier: GigOpportunityTier
+  genre: GigGenreClassification
+  scores: GigLeadScores
+  contact: GigContact
+  whyItFits: string[]
+  suggestedMessage: string
+  evidence: GigEvidenceItem[]
+  status: GigLeadStatus
+  discoveredAt: string
+  contactedAt?: string
+  lastFollowUp?: string
+  nextFollowUp?: string
+  notes?: string
+}
+
+export interface GigFinderProfile {
+  djName: string
+  baseLocation: string
+  searchRadiusKm: number
+  maxTravelMinutes: number | null
+  preferredAreas: string[]
+  primaryGenres: string[]
+  preferredCharacteristics: string[]
+  avoidGenres: string[]
+  preferredVenueTypes: string[]
+  minimumLeadScore: number
+  scoringWeights: {
+    opportunity: number
+    musicFit: number
+    contactability: number
+    potentialValue: number
+    locationFit: number
+  }
+  locationFitThresholds: { maxKm: number; score: number }[]
+}

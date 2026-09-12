@@ -19,6 +19,8 @@ import { upstashEnabled, redisGet, redisSet } from './upstash.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
+import { readProfile, writeProfile, readLeads, updateLead, deleteLead } from './gigfinder/store.js'
+import { runGigFinderAgent } from './gigfinder/agent.js'
 
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
@@ -2107,6 +2109,74 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     res.end(JSON.stringify({ ok: true }))
   })
 
+  // ─── GigFinder routes ─────────────────────────────────────────────────────
+
+  middlewares.use('/api/gigfinder/profile', async (req, res, next) => {
+    res.setHeader('Content-Type', 'application/json')
+    if (req.method === 'GET') {
+      res.end(JSON.stringify(readProfile()))
+      return
+    }
+    if (req.method === 'PUT') {
+      try {
+        const body = await readJsonBody(req)
+        writeProfile(body as Parameters<typeof writeProfile>[0])
+        res.end(JSON.stringify(readProfile()))
+      } catch (err) { res.statusCode = 400; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Bad request' })) }
+      return
+    }
+    next()
+  })
+
+  middlewares.use('/api/gigfinder/leads', async (req, res, next) => {
+    res.setHeader('Content-Type', 'application/json')
+    if (req.method === 'GET') {
+      res.end(JSON.stringify(readLeads()))
+      return
+    }
+    next()
+  })
+
+  middlewares.use('/api/gigfinder/leads/', async (req, res, next) => {
+    const urlParts = (req.url ?? '').split('?')[0].split('/')
+    const id = urlParts[urlParts.length - 1]
+    if (!id) { next(); return }
+
+    res.setHeader('Content-Type', 'application/json')
+    if (req.method === 'PUT') {
+      try {
+        const body = await readJsonBody(req)
+        const updated = updateLead(id, body as Partial<Parameters<typeof updateLead>[1]>)
+        if (!updated) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Lead not found' })); return }
+        res.end(JSON.stringify(updated))
+      } catch (err) { res.statusCode = 400; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Bad request' })) }
+      return
+    }
+    if (req.method === 'DELETE') {
+      const ok = deleteLead(id)
+      if (!ok) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Lead not found' })); return }
+      res.end(JSON.stringify({ ok: true }))
+      return
+    }
+    next()
+  })
+
+  middlewares.use('/api/gigfinder/search', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+
+    const profile = readProfile()
+    try {
+      await runGigFinderAgent(profile, (event) => {
+        res.write(`data: ${JSON.stringify(event)}\n\n`)
+      })
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: err instanceof Error ? err.message : 'Agent error' })}\n\n`)
+    }
+    res.end()
+  })
 
 
 }

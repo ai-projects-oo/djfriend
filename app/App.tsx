@@ -47,6 +47,7 @@ import SuggestionsStrip from "./components/SuggestionsStrip";
 import CratesTab from "./components/CratesTab";
 import OnboardingModal from "./components/OnboardingModal";
 import PlayerBar from "./components/PlayerBar";
+import GigFinderTab from "./components/GigFinderTab";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -189,7 +190,7 @@ export default function App() {
 
 function AppInner() {
   const [activeTab, setActiveTab] = useState<
-    "Set Generator" | "Library" | "Crates" | "History" | "Imports"
+    "Set Generator" | "Library" | "Crates" | "History" | "Imports" | "Gig Finder"
   >("Set Generator");
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
@@ -1377,7 +1378,7 @@ function AppInner() {
 
         {/* Tab nav */}
         <div className="px-2 flex gap-1">
-          {(["Set Generator", "Library", "History", "Crates"] as const).map((tab) => {
+          {(["Set Generator", "Library", "History", "Crates", "Gig Finder"] as const).map((tab) => {
             const isCratesLocked = tab === "Crates" && !hasDiscogsOAuth;
             return (
               <button
@@ -4044,6 +4045,12 @@ function AppInner() {
             )}
           </div>
         </div>
+      )}
+
+      {activeTab === "Gig Finder" && (
+        <main className="flex-1 overflow-hidden">
+          <GigFinderTab />
+        </main>
       )}
 
       </div>{/* end tab content wrapper */}

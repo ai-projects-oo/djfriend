@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { apiFetch } from '../lib/apiFetch'
 import { redirectToSpotifyLogin } from '../lib/spotifyExport'
-import { redirectToOpenAiLogin } from '../lib/openAiAuth'
+import { saveApiKey, clearSession as clearOpenAiKey } from '../lib/openAiAuth'
 import type { OpenAiSession } from '../lib/openAiAuth'
 import { SpotifyIcon, RekordboxIcon } from './Icons'
 
@@ -105,8 +105,9 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [showTips, setShowTips] = useState(true)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
-  const [openAiClientId, setOpenAiClientId] = useState('')
-  const [savingOpenAiClientId, setSavingOpenAiClientId] = useState(false)
+  const [openAiKeyInput, setOpenAiKeyInput] = useState('')
+  const [savingOpenAiKey, setSavingOpenAiKey] = useState(false)
+  const [openAiKeySaved, setOpenAiKeySaved] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [clearConfirm, setClearConfirm] = useState(false)
   const [error, setError] = useState('')
@@ -152,7 +153,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         setHasDiscogsOAuth(d.hasDiscogsOAuth ?? false)
         setHasDiscogsConsumerKey(d.hasDiscogsConsumerKey ?? false)
         setDiscogsConnectedAs(d.discogsUsername ?? '')
-        setOpenAiClientId(d.openAiClientId ?? '')
+        void d; // openAiClientId no longer used (key stored in localStorage)
       })
       .catch(() => {})
     fetch('https://djfriend.onrender.com/api/telemetry/stats')
@@ -202,17 +203,16 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (onSyncDiscogs) onSyncDiscogs()
   }
 
-  async function saveOpenAiClientId() {
-    if (!openAiClientId.trim()) return
-    setSavingOpenAiClientId(true)
+  async function handleSaveOpenAiKey() {
+    if (!openAiKeyInput.trim()) return
+    setSavingOpenAiKey(true)
     try {
-      await apiFetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ openAiClientId: openAiClientId.trim() }),
-      })
+      saveApiKey(openAiKeyInput.trim())
+      setOpenAiKeySaved(true)
+      setOpenAiKeyInput('')
+      onOpenAiFeaturesChange?.({ ...(openAiFeatures ?? { gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false }) })
     } finally {
-      setSavingOpenAiClientId(false)
+      setSavingOpenAiKey(false)
     }
   }
 
@@ -482,69 +482,69 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           </div>
         </div>
 
-{/* ── OpenAI / Gig Finder ─────────────────────────────────── */}
+{/* ── OpenAI / AI Features ─────────────────────────────────── */}
         <div id="settings-gig-finder" className="mt-5 pt-5 border-t border-[#2c2c42]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">ChatGPT</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">OpenAI</h3>
+
           {!openAiSession ? (
-            <div className="flex flex-col gap-3">
-              <p className="text-[11px] text-[#8394a8] leading-relaxed">
-                Sign in with your ChatGPT account to unlock AI-powered features — Gig Finder and enhanced track analysis.
-              </p>
-              {isElectron && (
-                <div>
-                  <label className="text-[10px] text-[#8394a8] uppercase tracking-wider block mb-1">OAuth Client ID</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={openAiClientId}
-                      onChange={e => setOpenAiClientId(e.target.value)}
-                      placeholder="oaiapp_…"
-                      className="flex-1 px-3 py-1.5 text-xs rounded-md border border-[#363650] bg-[#1c1c2e] text-[#e2e8f0] placeholder:text-[#5a6a80] focus:outline-none focus:border-[#7c3aed]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void saveOpenAiClientId()}
-                      disabled={savingOpenAiClientId || !openAiClientId.trim()}
-                      className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                    >
-                      {savingOpenAiClientId ? 'Saving…' : 'Save'}
-                    </button>
-                  </div>
+            <div className="flex flex-col gap-4">
+              {/* How to get a key */}
+              <div className="rounded-lg bg-[#1c1c2e] border border-[#2c2c42] p-3 flex flex-col gap-2">
+                <p className="text-[11px] font-semibold text-[#a6b5c8]">How to get an API key</p>
+                <ol className="text-[11px] text-[#8394a8] leading-relaxed list-decimal list-inside flex flex-col gap-1">
+                  <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-[#a78bfa] hover:underline cursor-pointer">platform.openai.com/api-keys</a></li>
+                  <li>Sign in or create a free account</li>
+                  <li>Click <span className="text-[#e2e8f0]">Create new secret key</span></li>
+                  <li>Copy the key (starts with <span className="font-mono text-[#e2e8f0]">sk-</span>) and paste it below</li>
+                </ol>
+                <p className="text-[10px] text-[#64748b] leading-relaxed">
+                  Keys are stored locally on your device only — never sent to DJFriend servers. OpenAI charges per request; typical use costs a few cents per month.
+                </p>
+              </div>
+
+              {/* Key input */}
+              <div>
+                <label className="text-[10px] text-[#8394a8] uppercase tracking-wider block mb-1.5">OpenAI API Key</label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={openAiKeyInput}
+                    onChange={e => { setOpenAiKeyInput(e.target.value); setOpenAiKeySaved(false); }}
+                    placeholder="sk-…"
+                    autoComplete="off"
+                    className="flex-1 px-3 py-1.5 text-xs rounded-md border border-[#363650] bg-[#1c1c2e] text-[#e2e8f0] placeholder:text-[#5a6a80] focus:outline-none focus:border-[#7c3aed] font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveOpenAiKey()}
+                    disabled={savingOpenAiKey || !openAiKeyInput.trim()}
+                    className="px-4 py-1.5 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer font-medium"
+                  >
+                    {savingOpenAiKey ? 'Saving…' : openAiKeySaved ? '✓ Saved' : 'Save key'}
+                  </button>
                 </div>
-              )}
-              <button
-                type="button"
-                onClick={() => void redirectToOpenAiLogin()}
-                disabled={!openAiClientId.trim()}
-                title={!openAiClientId.trim() ? 'Enter your OAuth Client ID above first' : undefined}
-                className="self-start flex items-center gap-2 px-4 py-2 rounded-md bg-[#10a37f] hover:bg-[#0d8f6e] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors cursor-pointer"
-              >
-                <svg width="16" height="16" viewBox="0 0 41 41" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <path d="M37.532 16.87a9.963 9.963 0 0 0-.856-8.184 10.078 10.078 0 0 0-10.855-4.835 9.964 9.964 0 0 0-6.205-2.799 10.079 10.079 0 0 0-10.43 7.032 9.962 9.962 0 0 0-6.219 5.05 10.079 10.079 0 0 0 1.198 11.803 9.963 9.963 0 0 0 .856 8.185 10.079 10.079 0 0 0 10.855 4.835 9.965 9.965 0 0 0 6.205 2.799 10.079 10.079 0 0 0 10.43-7.032 9.965 9.965 0 0 0 6.219-5.051 10.078 10.078 0 0 0-1.198-11.803zm-17.224 14.9a7.477 7.477 0 0 1-4.801-1.735c.061-.033.168-.091.237-.134l7.964-4.6a1.294 1.294 0 0 0 .655-1.134V19.054l3.366 1.944a.12.12 0 0 1 .066.092v9.299a7.505 7.505 0 0 1-7.487 7.381zM6.647 26.376a7.476 7.476 0 0 1-.894-5.023c.06.036.162.099.237.141l7.964 4.6a1.297 1.297 0 0 0 1.308 0l9.724-5.614v3.888a.12.12 0 0 1-.048.103L17 29.128a7.505 7.505 0 0 1-10.353-2.752zm-2.104-16.44a7.476 7.476 0 0 1 3.908-3.287c0 .068-.004.19-.004.274v9.201a1.294 1.294 0 0 0 .654 1.132l9.723 5.614-3.366 1.944a.12.12 0 0 1-.114.012L7.44 19.881a7.505 7.505 0 0 1-2.898-9.946zm27.658 6.437l-9.724-5.615 3.367-1.943a.121.121 0 0 1 .114-.012l7.807 4.509a7.506 7.506 0 0 1-1.165 13.528v-9.476a1.293 1.293 0 0 0-.399-1.001zm3.35-5.043c-.059-.037-.162-.099-.236-.141l-7.965-4.6a1.298 1.298 0 0 0-1.308 0l-9.723 5.614v-3.888a.12.12 0 0 1 .048-.103l7.948-4.590a7.504 7.504 0 0 1 11.235 7.708zm-21.063 6.929l-3.367-1.944a.12.12 0 0 1-.065-.092v-9.299a7.505 7.505 0 0 1 12.293-5.756 6.94 6.94 0 0 0-.236.134l-7.965 4.6a1.294 1.294 0 0 0-.654 1.132l-.006 11.225zm1.829-3.943l4.33-2.501 4.332 2.497v4.994l-4.331 2.5-4.331-2.5V19.316z"/>
-                </svg>
-                Sign in with ChatGPT
-              </button>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-sm text-[#e2e8f0] font-medium">{openAiSession.name || openAiSession.email}</span>
-                  {openAiSession.name && <span className="text-[10px] text-[#8394a8]">{openAiSession.email}</span>}
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                  <span className="text-sm text-[#e2e8f0] font-medium">API key connected</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => onOpenAiFeaturesChange?.(null)}
+                  onClick={() => { clearOpenAiKey(); onOpenAiFeaturesChange?.(null); }}
                   className="text-xs text-[#8394a8] hover:text-[#ef4444] transition-colors cursor-pointer"
                 >
-                  Sign out
+                  Remove key
                 </button>
               </div>
               <div className="flex flex-col gap-2">
                 <p className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8] mb-1">Enable features</p>
                 {([
                   { key: 'gigFinder' as const, label: 'Gig Finder', desc: 'Discover venue leads and booking opportunities' },
-                  { key: 'enhancedAnalysis' as const, label: 'Enhanced Track Analysis', desc: 'AI-powered semantic tagging and genre enrichment' },
+                  { key: 'enhancedAnalysis' as const, label: 'Enhanced Track Analysis', desc: 'AI transition explanations, set narrative, and track finder' },
                   { key: 'vinylAnalysis' as const, label: 'Vinyl Auto-Detection', desc: 'Automatically detect genre and BPM for Discogs vinyl records' },
                 ] as const).map(({ key, label, desc }) => {
                   const enabled = openAiFeatures?.[key] ?? false;

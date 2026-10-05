@@ -51,7 +51,6 @@ import PlayerBar from "./components/PlayerBar";
 import GigFinderTab from "./components/GigFinderTab";
 import {
   getStoredSession,
-  exchangeOpenAiCode,
   clearSession as clearOpenAiSession,
   type OpenAiSession,
 } from "./lib/openAiAuth";
@@ -74,8 +73,8 @@ function InfoMark({ text, align = 'left' }: { text: string; align?: 'left' | 'ri
 
   return (
     <div ref={ref} className="relative flex-shrink-0" onMouseEnter={show} onMouseLeave={() => setVisible(false)}>
-      <div className="w-3.5 h-3.5 rounded-full border border-[#424f63] flex items-center justify-center cursor-default">
-        <span className="text-[8px] text-[#8394a8] leading-none select-none">i</span>
+      <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center cursor-default transition-colors ${visible ? 'border-[#a78bfa] bg-[#7c3aed22]' : 'border-[#424f63] hover:border-[#a78bfa] hover:bg-[#7c3aed22]'}`}>
+        <span className={`text-[8px] leading-none select-none transition-colors ${visible ? 'text-[#a78bfa]' : 'text-[#8394a8]'}`}>i</span>
       </div>
       {visible && (
         <div
@@ -956,7 +955,7 @@ function AppInner() {
 
   // Handle Spotify OAuth callback
   useEffect(() => {
-    if (!window.location.pathname.startsWith('/callback') || window.location.pathname.startsWith('/callback-openai')) return;
+    if (!window.location.pathname.startsWith('/callback')) return;
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (!code) return;
@@ -1016,24 +1015,6 @@ function AppInner() {
     })();
   }, [setImportUrl, setLoadingSpotifyPlaylists, setPendingImportUrl, setSpotifyExportStatus, setSpotifyPlaylistPicker]);
 
-  // Handle Sign in with ChatGPT callback
-  useEffect(() => {
-    if (!window.location.pathname.startsWith('/callback-openai')) return;
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const state = params.get('state');
-    if (!code || !state) return;
-    window.history.replaceState({}, '', '/');
-    void exchangeOpenAiCode(code, state)
-      .then(() => {
-        const session = getStoredSession();
-        setOpenAiSession(session);
-        setActiveTab('Gig Finder');
-      })
-      .catch((err: unknown) => {
-        console.error('OpenAI sign-in failed:', err);
-      });
-  }, []);
 
   const previewTrack = previewFile
     ? (generatedSet.find(t => t.filePath === previewFile) ?? null)
@@ -4313,6 +4294,7 @@ function AppInner() {
             setOpenAiFeatures({ gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false });
             localStorage.removeItem('djfriend-openai-features');
           } else {
+            setOpenAiSession(getStoredSession());
             setOpenAiFeatures(features);
             localStorage.setItem('djfriend-openai-features', JSON.stringify(features));
           }

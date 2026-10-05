@@ -43,6 +43,7 @@ export function useSpotifyImport({ library }: UseSpotifyImportParams) { // setHi
   const [loadingSpotifyPlaylists, setLoadingSpotifyPlaylists] = useState(false);
   const [openStoreLinkKey, setOpenStoreLinkKey] = useState<string | null>(null);
   const storeLinkRef = useRef<HTMLDivElement | null>(null);
+  const [copiedLinkKey, setCopiedLinkKey] = useState<string | null>(null);
 
   // Persist importHistory to localStorage
   useEffect(() => {
@@ -235,6 +236,8 @@ export function useSpotifyImport({ library }: UseSpotifyImportParams) { // setHi
     openStoreLinkKey,
     setOpenStoreLinkKey,
     storeLinkRef,
+    copiedLinkKey,
+    setCopiedLinkKey,
     runImport,
     reloadEntry,
     handleImport,

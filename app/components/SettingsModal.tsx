@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { apiFetch } from '../lib/apiFetch'
 import { redirectToSpotifyLogin } from '../lib/spotifyExport'
+import { redirectToOpenAiLogin } from '../lib/openAiAuth'
+import type { OpenAiSession } from '../lib/openAiAuth'
 import { SpotifyIcon, RekordboxIcon } from './Icons'
 
 type PathStatus = 'idle' | 'checking' | 'ok' | 'missing'
@@ -21,11 +23,11 @@ function FolderInput({ label, labelIcon, value, status, placeholder, hint, onCha
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-xs text-[#64748b] flex items-center gap-1.5">
+        <label className="text-xs text-[#8394a8] flex items-center gap-1.5">
           {labelIcon}
           {label}
         </label>
-        {status === 'checking' && <span className="text-[10px] text-[#475569]">Checking…</span>}
+        {status === 'checking' && <span className="text-[10px] text-[#8394a8]">Checking…</span>}
         {status === 'ok' && <span className="text-[10px] text-[#22c55e]">✓ Found</span>}
         {status === 'missing' && <span className="text-[10px] text-[#ef4444]">Folder not found</span>}
       </div>
@@ -36,24 +38,30 @@ function FolderInput({ label, labelIcon, value, status, placeholder, hint, onCha
           onChange={e => onChange(e.target.value)}
           onBlur={onBlur}
           placeholder={placeholder}
-          className={`flex-1 rounded-md border bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none transition-colors ${
+          className={`flex-1 rounded-md border bg-[#20202e] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#3e4f65] focus:outline-none transition-colors ${
             status === 'ok' ? 'border-[#22c55e]' :
             status === 'missing' ? 'border-[#ef4444]' :
-            'border-[#2a2a3a] focus:border-[#7c3aed]'
+            'border-[#363650] focus:border-[#7c3aed]'
           }`}
         />
         <button
           type="button"
           onClick={() => void onBrowse()}
-          className="px-3 py-2 text-xs rounded-md border border-[#2a2a3a] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#7c3aed] bg-[#12121a] transition-colors cursor-pointer whitespace-nowrap"
+          className="px-3 py-2 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:text-[#e2e8f0] hover:border-[#7c3aed] bg-[#20202e] transition-colors cursor-pointer whitespace-nowrap"
           aria-label={`Browse for ${label}`}
         >
           Browse…
         </button>
       </div>
-      {hint && <p className="mt-1 text-[10px] text-[#475569]">{hint}</p>}
+      {hint && <p className="mt-1 text-[10px] text-[#8394a8]">{hint}</p>}
     </div>
   )
+}
+
+export interface OpenAiFeatures {
+  gigFinder: boolean
+  enhancedAnalysis: boolean
+  vinylAnalysis: boolean
 }
 
 interface Props {
@@ -63,6 +71,8 @@ interface Props {
   onSaved: (folderChanged: boolean) => void
   /** called after the database is cleared */
   onDatabaseCleared?: () => void
+  /** if set, scroll to this section id after opening */
+  scrollToSection?: string
   /** trigger a Discogs collection sync (credentials are stored server-side) */
   onSyncDiscogs?: () => void
   /** current Discogs collection (for staleness badge) */
@@ -70,12 +80,18 @@ interface Props {
   /** current Discogs sync status */
   discogsSyncPhase?: 'idle' | 'syncing' | 'done' | 'error'
   discogsSyncMessage?: string
+  /** current ChatGPT session (null = not signed in) */
+  openAiSession?: OpenAiSession | null
+  /** current feature toggles for OpenAI features */
+  openAiFeatures?: OpenAiFeatures
+  /** called when features change or user signs out */
+  onOpenAiFeaturesChange?: (features: OpenAiFeatures | null) => void
 }
 
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron')
 
-export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleared, onSyncDiscogs, discogsCollection, discogsSyncPhase, discogsSyncMessage }: Props) {
+export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleared, scrollToSection, onSyncDiscogs, discogsCollection, discogsSyncPhase, discogsSyncMessage, openAiSession, openAiFeatures, onOpenAiFeaturesChange }: Props) {
   // Desktop-only state
   const [musicFolder, setMusicFolder] = useState('')
   const loadedMusicFolder = useRef('')
@@ -89,6 +105,8 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [showTips, setShowTips] = useState(true)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
+  const [openAiClientId, setOpenAiClientId] = useState('')
+  const [savingOpenAiClientId, setSavingOpenAiClientId] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [clearConfirm, setClearConfirm] = useState(false)
   const [error, setError] = useState('')
@@ -120,7 +138,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (!open) return
     apiFetch('/api/settings')
       .then(r => r.json())
-      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; tipConfig?: { help: boolean; info: boolean; ai: boolean }; hasDiscogsOAuth?: boolean; discogsUsername?: string; hasDiscogsConsumerKey?: boolean; hasRapidApiKey?: boolean }) => {
+      .then((d: { musicFolder: string; rekordboxFolder: string; hasSecret: boolean; analysisMode?: string; energyCheckThreshold?: number; shareTelemetry?: boolean; tipConfig?: { help: boolean; info: boolean; ai: boolean }; hasDiscogsOAuth?: boolean; discogsUsername?: string; hasDiscogsConsumerKey?: boolean; hasRapidApiKey?: boolean; openAiClientId?: string }) => {
         setMusicFolder(d.musicFolder ?? '')
         loadedMusicFolder.current = d.musicFolder ?? ''
         setRekordboxFolder(d.rekordboxFolder ?? '')
@@ -134,6 +152,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         setHasDiscogsOAuth(d.hasDiscogsOAuth ?? false)
         setHasDiscogsConsumerKey(d.hasDiscogsConsumerKey ?? false)
         setDiscogsConnectedAs(d.discogsUsername ?? '')
+        setOpenAiClientId(d.openAiClientId ?? '')
       })
       .catch(() => {})
     fetch('https://djfriend.onrender.com/api/telemetry/stats')
@@ -141,6 +160,12 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       .then((s: { vectorCount: number; negativeCount: number; trainedSamples: number; modelVersion: number } | null) => { if (s) setMlStats(s) })
       .catch(() => {})
   }, [open])
+
+  useEffect(() => {
+    if (!open || !scrollToSection) return
+    const el = document.getElementById(scrollToSection)
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120)
+  }, [open, scrollToSection])
 
   async function save() {
     setSaving(true)
@@ -177,6 +202,20 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (onSyncDiscogs) onSyncDiscogs()
   }
 
+  async function saveOpenAiClientId() {
+    if (!openAiClientId.trim()) return
+    setSavingOpenAiClientId(true)
+    try {
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ openAiClientId: openAiClientId.trim() }),
+      })
+    } finally {
+      setSavingOpenAiClientId(false)
+    }
+  }
+
 
   async function clearDatabase() {
     setClearing(true)
@@ -203,10 +242,10 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#0e0e16] shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-md rounded-xl border border-[#363650] bg-[#0e0e16] shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-semibold text-[#e2e8f0]">Settings</h2>
-          <button onClick={onClose} className="text-[#475569] hover:text-[#94a3b8] transition-colors" aria-label="Close settings">
+          <button onClick={onClose} className="text-[#8394a8] hover:text-[#a6b5c8] transition-colors" aria-label="Close settings">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -216,7 +255,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         {/* ── Desktop-only: Folders ─────────────────────────────────── */}
         {isElectron && (
           <div className="space-y-4 mb-5">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">Folders</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8]">Folders</h3>
 
             {!musicFolder && (
               <div className="rounded-lg border border-[#7c3aed44] bg-[#1a1030] px-4 py-3">
@@ -257,9 +296,9 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         )}
 
         {/* ── Spotify (both platforms) ──────────────────────────────── */}
-        <div className="mt-5 pt-5 border-t border-[#1e1e2e] space-y-4">
+        <div className="mt-5 pt-5 border-t border-[#2c2c42] space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] flex items-center gap-1.5">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] flex items-center gap-1.5">
               <SpotifyIcon size={13} className="text-[#1db954]" />
               Spotify
             </h3>
@@ -268,11 +307,11 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             )}
           </div>
           {hasSpotifySecret ? (
-            <p className="text-xs text-[#64748b] leading-relaxed">
+            <p className="text-xs text-[#8394a8] leading-relaxed">
               Spotify is connected. Import playlists and export sets directly from the app.
             </p>
           ) : (
-            <p className="text-xs text-[#64748b] leading-relaxed">
+            <p className="text-xs text-[#8394a8] leading-relaxed">
               To enable Spotify integration, reach out at{' '}
               <a href="mailto:obo_odedr@hotmail.com" className="text-[#1db954] hover:underline">
                 obo_odedr@hotmail.com
@@ -293,11 +332,11 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         </div>
 
         {/* ── Performance ───────────────────────────────────────────── */}
-        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Performance</h3>
+        <div className="mt-5 pt-5 border-t border-[#2c2c42]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">Performance</h3>
 
           <div>
-            <p className="text-xs text-[#64748b] mb-2">Concurrent Process Mode</p>
+            <p className="text-xs text-[#8394a8] mb-2">Concurrent Process Mode</p>
             <div className="space-y-2">
               {(['performance', 'normal', 'power-saving'] as const).map(value => (
                 <label key={value} className="flex items-center gap-3 cursor-pointer select-none">
@@ -318,8 +357,8 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         </div>
 
         {/* ── Display ──────────────────────────────────────────────── */}
-        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Display</h3>
+        <div className="mt-5 pt-5 border-t border-[#2c2c42]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">Display</h3>
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -338,14 +377,14 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             />
             <span className="flex flex-col">
               <span className="text-sm text-[#e2e8f0]">Show tips</span>
-              <span className="text-[11px] text-[#475569]">Hover tooltips on tracks and controls</span>
+              <span className="text-[11px] text-[#8394a8]">Hover tooltips on tracks and controls</span>
             </span>
           </label>
         </div>
 
         {/* ── AI & Privacy ─────────────────────────────────────────── */}
-        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">AI & Privacy</h3>
+        <div className="mt-5 pt-5 border-t border-[#2c2c42]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">AI & Privacy</h3>
           <label className="flex items-start gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -364,25 +403,25 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             />
             <div className="flex flex-col gap-0.5">
               <span className="text-sm text-[#e2e8f0]">Help improve the AI for everyone</span>
-              <span className="text-[11px] text-[#64748b]">
+              <span className="text-[11px] text-[#8394a8]">
                 Anonymously shares transition patterns (BPM, key, energy — no track names or metadata) after each set. Helps train a community model that benefits all DJFriend users.
               </span>
             </div>
           </label>
           {mlStats && (
-            <div className="mt-3 rounded-lg bg-[#0d0d14] border border-[#1e1e2e] px-3 py-2.5 flex items-center justify-between gap-4">
+            <div className="mt-3 rounded-lg bg-[#1c1c2e] border border-[#2c2c42] px-3 py-2.5 flex items-center justify-between gap-4">
               <div className="flex flex-col gap-0.5">
-                <span className="text-[11px] text-[#475569]">Community model</span>
-                <span className="text-[10px] text-[#334155]">v{mlStats.modelVersion} · {mlStats.trainedSamples.toLocaleString()} transitions learned</span>
+                <span className="text-[11px] text-[#8394a8]">Community model</span>
+                <span className="text-[10px] text-[#6b7a94]">v{mlStats.modelVersion} · {mlStats.trainedSamples.toLocaleString()} transitions learned</span>
               </div>
               <div className="flex gap-3 text-right">
                 <div className="flex flex-col items-end">
                   <span className="text-xs font-semibold text-[#a78bfa] tabular-nums">{mlStats.vectorCount.toLocaleString()}</span>
-                  <span className="text-[10px] text-[#334155]">positive</span>
+                  <span className="text-[10px] text-[#6b7a94]">positive</span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-xs font-semibold text-[#f87171] tabular-nums">{mlStats.negativeCount.toLocaleString()}</span>
-                  <span className="text-[10px] text-[#334155]">rejected</span>
+                  <span className="text-[10px] text-[#6b7a94]">rejected</span>
                 </div>
               </div>
             </div>
@@ -390,9 +429,9 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         </div>
 
         {/* ── Discogs ──────────────────────────────────────────────── */}
-        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
+        <div className="mt-5 pt-5 border-t border-[#2c2c42]">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">Discogs</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8]">Discogs</h3>
             {hasDiscogsOAuth && discogsConnectedAs && (
               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#22c55e22] text-[#22c55e]">Connected as {discogsConnectedAs}</span>
             )}
@@ -404,7 +443,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             )}
 
             {discogsCollection && discogsDaysSince !== null && (
-              <p className={`text-[11px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#475569]'}`}>
+              <p className={`text-[11px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#8394a8]'}`}>
                 {discogsCollection.totalReleases} releases · synced {discogsDaysSince === 0 ? 'today' : `${discogsDaysSince}d ago`}
                 {discogsDaysSince >= 30 && ' · collection may be out of date'}
               </p>
@@ -425,7 +464,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                 type="button"
                 onClick={() => { window.location.href = '/api/discogs/connect' }}
                 disabled={!hasDiscogsConsumerKey}
-                className="px-3 py-2 text-xs font-medium rounded-md border border-[#2a2a3a] text-[#94a3b8] hover:text-white hover:border-[#7c3aed] hover:bg-[#12121a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="px-3 py-2 text-xs font-medium rounded-md border border-[#363650] text-[#a6b5c8] hover:text-white hover:border-[#7c3aed] hover:bg-[#20202e] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 {hasDiscogsOAuth ? 'Reconnect Discogs ↗' : 'Connect Discogs ↗'}
               </button>
@@ -434,7 +473,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                   type="button"
                   onClick={triggerSync}
                   disabled={discogsSyncPhase === 'syncing'}
-                  className="px-3 py-2 text-xs font-medium rounded-md border border-[#2a2a3a] text-[#94a3b8] hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="px-3 py-2 text-xs font-medium rounded-md border border-[#363650] text-[#a6b5c8] hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   {discogsSyncPhase === 'syncing' ? 'Syncing…' : '↺ Sync Collection'}
                 </button>
@@ -443,9 +482,99 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           </div>
         </div>
 
+{/* ── OpenAI / Gig Finder ─────────────────────────────────── */}
+        <div id="settings-gig-finder" className="mt-5 pt-5 border-t border-[#2c2c42]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">ChatGPT</h3>
+          {!openAiSession ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-[11px] text-[#8394a8] leading-relaxed">
+                Sign in with your ChatGPT account to unlock AI-powered features — Gig Finder and enhanced track analysis.
+              </p>
+              {isElectron && (
+                <div>
+                  <label className="text-[10px] text-[#8394a8] uppercase tracking-wider block mb-1">OAuth Client ID</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={openAiClientId}
+                      onChange={e => setOpenAiClientId(e.target.value)}
+                      placeholder="oaiapp_…"
+                      className="flex-1 px-3 py-1.5 text-xs rounded-md border border-[#363650] bg-[#1c1c2e] text-[#e2e8f0] placeholder:text-[#5a6a80] focus:outline-none focus:border-[#7c3aed]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void saveOpenAiClientId()}
+                      disabled={savingOpenAiClientId || !openAiClientId.trim()}
+                      className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      {savingOpenAiClientId ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => void redirectToOpenAiLogin()}
+                disabled={!openAiClientId.trim()}
+                title={!openAiClientId.trim() ? 'Enter your OAuth Client ID above first' : undefined}
+                className="self-start flex items-center gap-2 px-4 py-2 rounded-md bg-[#10a37f] hover:bg-[#0d8f6e] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors cursor-pointer"
+              >
+                <svg width="16" height="16" viewBox="0 0 41 41" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M37.532 16.87a9.963 9.963 0 0 0-.856-8.184 10.078 10.078 0 0 0-10.855-4.835 9.964 9.964 0 0 0-6.205-2.799 10.079 10.079 0 0 0-10.43 7.032 9.962 9.962 0 0 0-6.219 5.05 10.079 10.079 0 0 0 1.198 11.803 9.963 9.963 0 0 0 .856 8.185 10.079 10.079 0 0 0 10.855 4.835 9.965 9.965 0 0 0 6.205 2.799 10.079 10.079 0 0 0 10.43-7.032 9.965 9.965 0 0 0 6.219-5.051 10.078 10.078 0 0 0-1.198-11.803zm-17.224 14.9a7.477 7.477 0 0 1-4.801-1.735c.061-.033.168-.091.237-.134l7.964-4.6a1.294 1.294 0 0 0 .655-1.134V19.054l3.366 1.944a.12.12 0 0 1 .066.092v9.299a7.505 7.505 0 0 1-7.487 7.381zM6.647 26.376a7.476 7.476 0 0 1-.894-5.023c.06.036.162.099.237.141l7.964 4.6a1.297 1.297 0 0 0 1.308 0l9.724-5.614v3.888a.12.12 0 0 1-.048.103L17 29.128a7.505 7.505 0 0 1-10.353-2.752zm-2.104-16.44a7.476 7.476 0 0 1 3.908-3.287c0 .068-.004.19-.004.274v9.201a1.294 1.294 0 0 0 .654 1.132l9.723 5.614-3.366 1.944a.12.12 0 0 1-.114.012L7.44 19.881a7.505 7.505 0 0 1-2.898-9.946zm27.658 6.437l-9.724-5.615 3.367-1.943a.121.121 0 0 1 .114-.012l7.807 4.509a7.506 7.506 0 0 1-1.165 13.528v-9.476a1.293 1.293 0 0 0-.399-1.001zm3.35-5.043c-.059-.037-.162-.099-.236-.141l-7.965-4.6a1.298 1.298 0 0 0-1.308 0l-9.723 5.614v-3.888a.12.12 0 0 1 .048-.103l7.948-4.590a7.504 7.504 0 0 1 11.235 7.708zm-21.063 6.929l-3.367-1.944a.12.12 0 0 1-.065-.092v-9.299a7.505 7.505 0 0 1 12.293-5.756 6.94 6.94 0 0 0-.236.134l-7.965 4.6a1.294 1.294 0 0 0-.654 1.132l-.006 11.225zm1.829-3.943l4.33-2.501 4.332 2.497v4.994l-4.331 2.5-4.331-2.5V19.316z"/>
+                </svg>
+                Sign in with ChatGPT
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-sm text-[#e2e8f0] font-medium">{openAiSession.name || openAiSession.email}</span>
+                  {openAiSession.name && <span className="text-[10px] text-[#8394a8]">{openAiSession.email}</span>}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenAiFeaturesChange?.(null)}
+                  className="text-xs text-[#8394a8] hover:text-[#ef4444] transition-colors cursor-pointer"
+                >
+                  Sign out
+                </button>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8] mb-1">Enable features</p>
+                {([
+                  { key: 'gigFinder' as const, label: 'Gig Finder', desc: 'Discover venue leads and booking opportunities' },
+                  { key: 'enhancedAnalysis' as const, label: 'Enhanced Track Analysis', desc: 'AI-powered semantic tagging and genre enrichment' },
+                  { key: 'vinylAnalysis' as const, label: 'Vinyl Auto-Detection', desc: 'Automatically detect genre and BPM for Discogs vinyl records' },
+                ] as const).map(({ key, label, desc }) => {
+                  const enabled = openAiFeatures?.[key] ?? false;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => onOpenAiFeaturesChange?.({ ...(openAiFeatures ?? { gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false }), [key]: !enabled })}
+                      className="flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer text-left"
+                      style={{ borderColor: enabled ? '#7c3aed' : '#2c2c42', backgroundColor: enabled ? '#7c3aed1a' : 'transparent' }}
+                    >
+                      <div className="mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                        style={{ borderColor: enabled ? '#7c3aed' : '#363650', backgroundColor: enabled ? '#7c3aed' : 'transparent' }}>
+                        {enabled && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-[#e2e8f0]">{label}</div>
+                        <div className="text-[11px] text-[#8394a8] mt-0.5">{desc}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
 {/* ── Danger Zone (both platforms) ─────────────────────────── */}
-        <div className="mt-5 pt-5 border-t border-[#1e1e2e]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#475569] mb-3">Danger Zone</h3>
+        <div className="mt-5 pt-5 border-t border-[#2c2c42]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">Danger Zone</h3>
           {!clearConfirm ? (
             <button
               onClick={() => setClearConfirm(true)}
@@ -465,7 +594,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               </button>
               <button
                 onClick={() => setClearConfirm(false)}
-                className="text-xs text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer"
+                className="text-xs text-[#8394a8] hover:text-[#a6b5c8] transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -482,7 +611,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           <div className="flex justify-end gap-2 mt-6">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm text-[#64748b] hover:text-[#94a3b8] transition-colors cursor-pointer"
+              className="px-4 py-2 text-sm text-[#8394a8] hover:text-[#a6b5c8] transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -499,7 +628,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           <div className="flex justify-end mt-6">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm text-[#64748b] hover:text-[#94a3b8] transition-colors cursor-pointer"
+              className="px-4 py-2 text-sm text-[#8394a8] hover:text-[#a6b5c8] transition-colors cursor-pointer"
             >
               Close
             </button>

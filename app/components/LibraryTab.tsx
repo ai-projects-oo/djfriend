@@ -125,7 +125,7 @@ function energyColor(e: number): string {
   if (e >= 0.75) return "#a855f7";
   if (e >= 0.5)  return "#3b82f6";
   if (e >= 0.25) return "#22c55e";
-  return "#64748b";
+  return "#8394a8";
 }
 
 function dupKey(s: Song): string {
@@ -153,7 +153,7 @@ function AlbumArt({ filePath }: { filePath?: string }) {
   }, [filePath, failed]);
 
   if (!src || failed) {
-    return <div className="w-8 h-8 rounded bg-[#1e1e2e] flex items-center justify-center flex-shrink-0"><span className="text-[10px] text-[#374151]">♪</span></div>;
+    return <div className="w-8 h-8 rounded bg-[#2c2c42] flex items-center justify-center flex-shrink-0"><span className="text-[10px] text-[#424f63]">♪</span></div>;
   }
   return <img src={src} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />;
 }
@@ -162,7 +162,7 @@ function AlbumArt({ filePath }: { filePath?: string }) {
 
 function SortHeader({ col, label, sortKey, sortAsc, onSort }: { col: SortKey; label: string; sortKey: SortKey; sortAsc: boolean; onSort: (k: SortKey) => void }) {
   return (
-    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] cursor-pointer hover:text-[#94a3b8] select-none transition-colors whitespace-nowrap" onClick={() => onSort(col)}>
+    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b] cursor-pointer hover:text-[#a6b5c8] select-none transition-colors whitespace-nowrap" onClick={() => onSort(col)}>
       {label}{sortKey === col ? (sortAsc ? " ↑" : " ↓") : ""}
     </th>
   );
@@ -192,12 +192,12 @@ function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSen
   }, [onClose]);
 
   const item = (label: string, onClick: () => void, danger = false) => (
-    <button type="button" className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded ${danger ? "text-[#ef4444]/80 hover:bg-[#ef4444]/10 hover:text-[#ef4444]" : "text-[#94a3b8] hover:bg-[#1e1e2e] hover:text-[#e2e8f0]"}`} onClick={() => { onClick(); onClose(); }}>{label}</button>
+    <button type="button" className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded ${danger ? "text-[#ef4444]/80 hover:bg-[#ef4444]/10 hover:text-[#ef4444]" : "text-[#a6b5c8] hover:bg-[#2c2c42] hover:text-[#e2e8f0]"}`} onClick={() => { onClick(); onClose(); }}>{label}</button>
   );
-  const sep = () => <div className="my-1 border-t border-[#1e1e2e]" />;
+  const sep = () => <div className="my-1 border-t border-[#2c2c42]" />;
 
   return (
-    <div ref={ref} className="fixed z-[100] bg-[#12121a] border border-[#2a2a3a] rounded-xl shadow-2xl py-1 min-w-[180px]" style={{ top: menu.y, left: menu.x }}>
+    <div ref={ref} className="fixed z-[100] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[180px]" style={{ top: menu.y, left: menu.x }}>
       {item("Play", () => onPlay(menu.song))}
       {item("Get Info", () => onGetInfo(menu.song))}
       {sep()}
@@ -244,8 +244,11 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   const [nowPlaying, setNowPlaying]     = useState<Song | null>(null);
   const lastClickedIdx = useRef<number>(-1);
 
-  const colMenuRef    = useRef<HTMLDivElement>(null);
-  const missingRowRef = useRef<HTMLTableRowElement>(null);
+  const colMenuRef      = useRef<HTMLDivElement>(null);
+  const missingRowRef   = useRef<HTMLTableRowElement>(null);
+  const tableScrollRef  = useRef<HTMLDivElement>(null);
+  const [tableScrollTop, setTableScrollTop] = useState(0);
+  const [tableViewH, setTableViewH]         = useState(600);
 
   const uniqueKeys = useMemo(() => {
     const keys = new Set(library.map(s => s.camelot).filter(k => k && k !== "Unknown"));
@@ -259,6 +262,16 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
     const h = (e: MouseEvent) => { if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false); };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setTableViewH(el.clientHeight));
+    ro.observe(el);
+    const onScroll = () => setTableScrollTop(el.scrollTop);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => { ro.disconnect(); el.removeEventListener('scroll', onScroll); };
   }, []);
 
   const toggleCol = (key: OptionalCol) => {
@@ -308,6 +321,14 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
   const firstMissingIdx = useMemo(() => rows.findIndex(s => s.bpm === 0 || !s.key || s.key === "Unknown" || s.genres.length === 0), [rows]);
   const handleSort = (key: SortKey) => { if (sortKey === key) setSortAsc(a => !a); else { setSortKey(key); setSortAsc(true); } };
+
+  // ── Virtual scrolling ─────────────────────────────────────────────────────
+  const ROW_H  = 44; // px — album art (32) + cell py-1.5 (12)
+  const OVERSCAN = 8;
+  const vStart  = Math.max(0, Math.floor(tableScrollTop / ROW_H) - OVERSCAN);
+  const vEnd    = Math.min(rows.length, Math.ceil((tableScrollTop + tableViewH) / ROW_H) + OVERSCAN);
+  const vTopPad = vStart * ROW_H;
+  const vBotPad = Math.max(0, (rows.length - vEnd) * ROW_H);
 
   // ── Row selection (no checkboxes — macOS style) ────────────────────────────
   const handleRowClick = useCallback((e: React.MouseEvent, song: Song, idx: number) => {
@@ -381,12 +402,12 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
       <div className="h-full flex flex-col">
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
           <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-            <circle cx="26" cy="26" r="22" stroke="#1e1e2e" strokeWidth="4" />
+            <circle cx="26" cy="26" r="22" stroke="#2c2c42" strokeWidth="4" />
             <circle cx="26" cy="26" r="22" stroke="#7c3aed" strokeWidth="4" strokeLinecap="round"
               strokeDasharray="138.2" strokeDashoffset="103.7"
               style={{ transformOrigin: "26px 26px", animation: "spin 1.1s linear infinite" }} />
           </svg>
-          <p className="text-sm text-[#475569]">Loading library…</p>
+          <p className="text-sm text-[#64748b]">Loading library…</p>
         </div>
       </div>
     );
@@ -396,7 +417,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
     return (
       <div className="h-full flex flex-col items-center justify-center gap-2">
         <span className="text-3xl">🎵</span>
-        <p className="text-sm text-[#475569]">No library loaded yet.</p>
+        <p className="text-sm text-[#64748b]">No library loaded yet.</p>
       </div>
     );
   }
@@ -405,7 +426,9 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
     <div className="h-full flex flex-col overflow-hidden">
       {/* ── Fixed top section ─────────────────────────────────────────────── */}
       <div className="flex-shrink-0 px-4 pt-3">
-        <LibraryStatsBar songs={library} onScrollToMissing={() => missingRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })} />
+        <LibraryStatsBar songs={library} onScrollToMissing={() => {
+          if (firstMissingIdx >= 0) tableScrollRef.current?.scrollTo({ top: Math.max(0, firstMissingIdx * ROW_H - tableViewH / 2), behavior: 'smooth' });
+        }} />
       </div>
 
       {/* Player */}
@@ -424,7 +447,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
             <span className="ml-auto text-[10px] text-[#ef4444]/50">{dupsOpen ? "▲" : "▼"}</span>
           </button>
           {dupsOpen && (
-            <div className="border-t border-[#ef4444]/20 divide-y divide-[#1e1e2e] max-h-48 overflow-y-auto">
+            <div className="border-t border-[#ef4444]/20 divide-y divide-[#2c2c42] max-h-48 overflow-y-auto">
               {dupGroups.map(group => {
                 const gk = dupKey(group[0]);
                 const sel = dupSelections[gk] ?? new Set<string>();
@@ -435,8 +458,8 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                       {group.map(s => (
                         <label key={s.file} className="flex items-center gap-3 cursor-pointer group/dup">
                           <input type="checkbox" checked={sel.has(s.file)} onChange={() => toggleDupSelection(gk, s.file)} className="w-3.5 h-3.5 accent-[#ef4444] cursor-pointer flex-shrink-0" />
-                          <span className={`text-[10px] font-mono truncate flex-1 transition-colors ${sel.has(s.file) ? "text-[#ef4444]/70 line-through" : "text-[#475569] group-hover/dup:text-[#94a3b8]"}`} title={s.filePath ?? s.file}>{s.filePath ?? s.file}</span>
-                          <span className="text-[10px] text-[#374151] whitespace-nowrap">{s.bpm} BPM · {s.duration != null ? fmt(s.duration) : "—"}</span>
+                          <span className={`text-[10px] font-mono truncate flex-1 transition-colors ${sel.has(s.file) ? "text-[#ef4444]/70 line-through" : "text-[#64748b] group-hover/dup:text-[#a6b5c8]"}`} title={s.filePath ?? s.file}>{s.filePath ?? s.file}</span>
+                          <span className="text-[10px] text-[#424f63] whitespace-nowrap">{s.bpm} BPM · {s.duration != null ? fmt(s.duration) : "—"}</span>
                         </label>
                       ))}
                     </div>
@@ -455,10 +478,10 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
       {/* Playlist creation panel */}
       {playlistMode && (
-        <div className="flex-shrink-0 mx-4 mt-2 flex flex-col gap-3 px-4 py-3 rounded-xl bg-[#0d0d14] border border-[#7c3aed]/50">
+        <div className="flex-shrink-0 mx-4 mt-2 flex flex-col gap-3 px-4 py-3 rounded-xl bg-[#1c1c2e] border border-[#7c3aed]/50">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-[#a78bfa]">Create Playlist</span>
-            <span className="text-[10px] text-[#6b7280]">— click rows to select tracks</span>
+            <span className="text-[10px] text-[#8292a4]">— click rows to select tracks</span>
             <span className="ml-auto text-[10px] text-[#a78bfa] font-medium">{selected.size} track{selected.size !== 1 ? 's' : ''} selected</span>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -467,12 +490,12 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
               value={playlistName}
               onChange={e => setPlaylistName(e.target.value)}
               placeholder="Playlist name"
-              className="flex-1 min-w-[160px] px-2.5 py-1.5 rounded-md bg-[#12121a] border border-[#2a2a3a] text-xs text-[#e2e8f0] placeholder-[#4b5563] focus:outline-none focus:border-[#7c3aed]/60"
+              className="flex-1 min-w-[160px] px-2.5 py-1.5 rounded-md bg-[#20202e] border border-[#363650] text-xs text-[#e2e8f0] placeholder-[#58656e] focus:outline-none focus:border-[#7c3aed]/60"
             />
-            <div className="flex rounded-md border border-[#2a2a3a] overflow-hidden flex-shrink-0">
+            <div className="flex rounded-md border border-[#363650] overflow-hidden flex-shrink-0">
               {(['M3U', 'XML'] as const).map(fmt => (
                 <button key={fmt} type="button" onClick={() => setPlaylistFormat(fmt)}
-                  className={`px-3 py-1.5 text-xs transition-colors cursor-pointer ${playlistFormat === fmt ? 'bg-[#7c3aed] text-white' : 'bg-[#12121a] text-[#6b7280] hover:text-[#94a3b8]'}`}>
+                  className={`px-3 py-1.5 text-xs transition-colors cursor-pointer ${playlistFormat === fmt ? 'bg-[#7c3aed] text-white' : 'bg-[#20202e] text-[#8292a4] hover:text-[#a6b5c8]'}`}>
                   {fmt === 'XML' ? 'Rekordbox XML' : 'M3U'}
                 </button>
               ))}
@@ -490,7 +513,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
             </button>
             <button type="button"
               onClick={() => { setPlaylistMode(false); setEditMode(false); setSelected(new Set()); }}
-              className="px-3 py-1.5 text-xs rounded-md border border-[#2a2a3a] text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer flex-shrink-0">
+              className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer flex-shrink-0">
               Cancel
             </button>
           </div>
@@ -531,7 +554,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                 }
                 setBulkProgress(null);
               }}
-              className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151] transition-colors cursor-pointer disabled:opacity-50"
+              className="text-xs px-2.5 py-1 rounded-md border border-[#2c2c42] text-[#8394a8] hover:text-[#a6b5c8] hover:border-[#424f63] transition-colors cursor-pointer disabled:opacity-50"
             >
               {bulkProgress ? `Re-analyzing ${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
             </button>
@@ -546,7 +569,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                 }
                 setBulkBpmOpen(o => !o);
               }}
-              className={`text-xs px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${bulkBpmOpen ? 'border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10' : 'border-[#1e1e2e] text-[#64748b] hover:text-[#94a3b8] hover:border-[#374151]'}`}
+              className={`text-xs px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${bulkBpmOpen ? 'border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10' : 'border-[#2c2c42] text-[#8394a8] hover:text-[#a6b5c8] hover:border-[#424f63]'}`}
             >
               Re-analyze BPM range…
             </button>
@@ -564,11 +587,11 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                     } catch { /* ignore */ }
                   }
                 }}
-                className="text-xs px-2.5 py-1 rounded-md border border-[#1e1e2e] text-[#64748b] hover:text-[#a78bfa] hover:border-[#7c3aed]/40 transition-colors cursor-pointer disabled:opacity-50 tabular-nums">
+                className="text-xs px-2.5 py-1 rounded-md border border-[#2c2c42] text-[#8394a8] hover:text-[#a78bfa] hover:border-[#7c3aed]/40 transition-colors cursor-pointer disabled:opacity-50 tabular-nums">
                 {mult === 2 ? '×2 BPM' : '÷2 BPM'}
               </button>
             ))}
-            <button type="button" onClick={() => { setSelected(new Set()); setBulkBpmOpen(false); }} className="ml-auto text-[10px] text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Clear</button>
+            <button type="button" onClick={() => { setSelected(new Set()); setBulkBpmOpen(false); }} className="ml-auto text-[10px] text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer">Clear</button>
           </div>
           {bulkBpmOpen && (
             <div className="flex flex-col gap-2 pt-2 border-t border-[#7c3aed]/20">
@@ -582,7 +605,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                     className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer
                       ${bulkBpmMin === String(range.min) && bulkBpmMax === String(range.max)
                         ? 'border-[#7c3aed] text-[#a78bfa] bg-[#7c3aed]/15'
-                        : 'border-[#2a2a3a] text-[#475569] hover:text-[#94a3b8] hover:border-[#374151]'}`}
+                        : 'border-[#363650] text-[#64748b] hover:text-[#a6b5c8] hover:border-[#424f63]'}`}
                   >
                     {label} <span className="opacity-50">{range.min}–{range.max}</span>
                   </button>
@@ -590,12 +613,12 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
               </div>
               {/* Manual inputs + run */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] text-[#64748b]">BPM range</span>
+                <span className="text-[10px] text-[#8394a8]">BPM range</span>
                 <input type="number" placeholder="Min" value={bulkBpmMin} onChange={e => setBulkBpmMin(e.target.value)}
-                  className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
-                <span className="text-[#4b5568] text-xs">–</span>
+                  className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#1c1c2e] border border-[#363650] focus:outline-none focus:border-[#7c3aed] text-center" />
+                <span className="text-[#64748b] text-xs">–</span>
                 <input type="number" placeholder="Max" value={bulkBpmMax} onChange={e => setBulkBpmMax(e.target.value)}
-                  className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center" />
+                  className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#1c1c2e] border border-[#363650] focus:outline-none focus:border-[#7c3aed] text-center" />
                 <button
                   type="button"
                   disabled={!!bulkProgress}
@@ -634,29 +657,29 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
       {/* Search + filter + columns */}
       <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2">
         <input type="text" placeholder="Search title or artist…" value={search} onChange={e => setSearch(e.target.value)}
-          className="flex-1 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors" />
-        {(search || activeFilters) && <span className="text-[10px] text-[#475569] whitespace-nowrap">{rows.length} / {library.length}</span>}
+          className="flex-1 bg-[#20202e] border border-[#2c2c42] rounded-lg px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#3e4f65] focus:outline-none focus:border-[#7c3aed] transition-colors" />
+        {(search || activeFilters) && <span className="text-[10px] text-[#64748b] whitespace-nowrap">{rows.length} / {library.length}</span>}
         <button type="button" onClick={() => { setEditMode(o => { if (o) setSelected(new Set()); return !o; }); }}
-          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${editMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
+          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${editMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#8292a4] hover:text-[#a6b5c8]"}`}>
           Edit
         </button>
         <button type="button" onClick={() => setFiltersOpen(o => !o)}
-          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${activeFilters ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
+          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${activeFilters ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#8292a4] hover:text-[#a6b5c8]"}`}>
           Filter{activeFilters ? " ●" : ""}
         </button>
         <button type="button"
           onClick={() => { setPlaylistMode(true); setEditMode(true); setSelected(new Set()); setPlaylistName('My Playlist'); setPlaylistFormat('M3U'); }}
-          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${playlistMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#1e1e2e] text-[#6b7280] hover:text-[#94a3b8]"}`}>
+          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${playlistMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#8292a4] hover:text-[#a6b5c8]"}`}>
           Create Playlist
         </button>
         <div className="relative flex-shrink-0" ref={colMenuRef}>
-          <button type="button" onClick={() => setColMenuOpen(o => !o)} className="px-3 py-1.5 text-xs border border-[#1e1e2e] rounded-lg text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Columns</button>
+          <button type="button" onClick={() => setColMenuOpen(o => !o)} className="px-3 py-1.5 text-xs border border-[#2c2c42] rounded-lg text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer">Columns</button>
           {colMenuOpen && (
-            <div className="absolute right-0 top-full mt-1 bg-[#12121a] border border-[#2a2a3a] rounded-xl shadow-xl z-50 py-1 min-w-[150px]">
+            <div className="absolute right-0 top-full mt-1 bg-[#20202e] border border-[#363650] rounded-xl shadow-xl z-50 py-1 min-w-[150px]">
               {OPTIONAL_COLS.map(col => (
-                <label key={col.key} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#1a1a2e] cursor-pointer">
+                <label key={col.key} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#26263c] cursor-pointer">
                   <input type="checkbox" checked={visibleCols.has(col.key)} onChange={() => toggleCol(col.key)} className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer" />
-                  <span className="text-xs text-[#94a3b8] flex items-center gap-1.5">{col.label}{col.ai && <AiBadge />}</span>
+                  <span className="text-xs text-[#a6b5c8] flex items-center gap-1.5">{col.label}{col.ai && <AiBadge />}</span>
                 </label>
               ))}
             </div>
@@ -666,53 +689,53 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
       {/* Filter panel */}
       {filtersOpen && (
-        <div className="flex-shrink-0 mx-4 rounded-xl border border-[#1e1e2e] bg-[#12121a] px-4 py-3 flex flex-wrap gap-4">
+        <div className="flex-shrink-0 mx-4 rounded-xl border border-[#2c2c42] bg-[#20202e] px-4 py-3 flex flex-wrap gap-4">
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">BPM</span>
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">BPM</span>
             <div className="flex items-center gap-1">
-              <input type="number" placeholder="Min" value={filters.bpmMin} onChange={e => setFilters(f => ({ ...f, bpmMin: e.target.value }))} className="w-16 bg-[#0d0d14] border border-[#1e1e2e] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed]" />
-              <span className="text-[10px] text-[#374151]">–</span>
-              <input type="number" placeholder="Max" value={filters.bpmMax} onChange={e => setFilters(f => ({ ...f, bpmMax: e.target.value }))} className="w-16 bg-[#0d0d14] border border-[#1e1e2e] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed]" />
+              <input type="number" placeholder="Min" value={filters.bpmMin} onChange={e => setFilters(f => ({ ...f, bpmMin: e.target.value }))} className="w-16 bg-[#1c1c2e] border border-[#2c2c42] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed]" />
+              <span className="text-[10px] text-[#424f63]">–</span>
+              <input type="number" placeholder="Max" value={filters.bpmMax} onChange={e => setFilters(f => ({ ...f, bpmMax: e.target.value }))} className="w-16 bg-[#1c1c2e] border border-[#2c2c42] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed]" />
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Key</span>
-            <select value={filters.key} onChange={e => setFilters(f => ({ ...f, key: e.target.value }))} className="bg-[#0d0d14] border border-[#1e1e2e] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] cursor-pointer">
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Key</span>
+            <select value={filters.key} onChange={e => setFilters(f => ({ ...f, key: e.target.value }))} className="bg-[#1c1c2e] border border-[#2c2c42] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] cursor-pointer">
               <option value="">Any</option>
               {uniqueKeys.map(k => <option key={k} value={k}>{k}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Energy {filters.energyMin}–{filters.energyMax}</span>
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Energy {filters.energyMin}–{filters.energyMax}</span>
             <div className="flex items-center gap-2">
               <input type="range" min={0} max={100} value={filters.energyMin} onChange={e => setFilters(f => ({ ...f, energyMin: Math.min(Number(e.target.value), f.energyMax) }))} className="w-20 accent-[#7c3aed] cursor-pointer" />
               <input type="range" min={0} max={100} value={filters.energyMax} onChange={e => setFilters(f => ({ ...f, energyMax: Math.max(Number(e.target.value), f.energyMin) }))} className="w-20 accent-[#7c3aed] cursor-pointer" />
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Genre</span>
-            <input type="text" placeholder="contains…" value={filters.genre} onChange={e => setFilters(f => ({ ...f, genre: e.target.value }))} className="w-28 bg-[#0d0d14] border border-[#1e1e2e] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed]" />
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Genre</span>
+            <input type="text" placeholder="contains…" value={filters.genre} onChange={e => setFilters(f => ({ ...f, genre: e.target.value }))} className="w-28 bg-[#1c1c2e] border border-[#2c2c42] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed]" />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Show</span>
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Show</span>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={filters.missingOnly} onChange={e => setFilters(f => ({ ...f, missingOnly: e.target.checked }))} className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer" />
-              <span className="text-xs text-[#94a3b8]">Missing data only</span>
+              <span className="text-xs text-[#a6b5c8]">Missing data only</span>
             </label>
           </div>
           {activeFilters && (
             <div className="flex flex-col justify-end">
-              <button type="button" onClick={() => setFilters(DEFAULT_FILTERS)} className="text-[10px] text-[#6b7280] hover:text-[#94a3b8] transition-colors cursor-pointer">Clear filters</button>
+              <button type="button" onClick={() => setFilters(DEFAULT_FILTERS)} className="text-[10px] text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer">Clear filters</button>
             </div>
           )}
         </div>
       )}
 
       {/* ── Scrollable table ───────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-y-auto mt-2">
+      <div ref={tableScrollRef} className="flex-1 min-h-0 overflow-y-auto mt-2">
         <table className="w-full border-collapse">
-          <thead className="bg-[#0a0a0f] sticky top-0 z-10">
-            <tr className="border-b border-[#1e1e2e]">
+          <thead className="bg-[#16161e] sticky top-0 z-10">
+            <tr className="border-b border-[#2c2c42]">
               <th className="px-2 py-2 w-10" />
               <SortHeader col="title"     label="Title"    {...sh} />
               <SortHeader col="artist"    label="Artist"   {...sh} />
@@ -724,14 +747,16 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
               {visibleCols.has("year")      && <SortHeader col="year"      label="Year"       {...sh} />}
               {visibleCols.has("comment")   && <SortHeader col="comment"   label="Comment"    {...sh} />}
               {visibleCols.has("dateAdded") && <SortHeader col="dateAdded" label="Date Added" {...sh} />}
-              {visibleCols.has("vibeTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]"><span className="flex items-center gap-1">Vibe <AiBadge /></span></th>}
-              {visibleCols.has("moodTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]"><span className="flex items-center gap-1">Mood <AiBadge /></span></th>}
-              {visibleCols.has("vocalType") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]"><span className="flex items-center gap-1">Vocal <AiBadge /></span></th>}
+              {visibleCols.has("vibeTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Vibe <AiBadge /></span></th>}
+              {visibleCols.has("moodTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Mood <AiBadge /></span></th>}
+              {visibleCols.has("vocalType") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Vocal <AiBadge /></span></th>}
               <th className="px-3 py-2 w-8" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1e1e2e]">
-            {rows.map((song, idx) => {
+          <tbody className="divide-y divide-[#2c2c42]">
+            {vTopPad > 0 && <tr style={{ height: vTopPad }}><td colSpan={99} /></tr>}
+            {rows.slice(vStart, vEnd).map((song, relIdx) => {
+              const idx = vStart + relIdx;
               const missingFields = [...(song.bpm === 0 ? ["BPM"] : []), ...(!song.key || song.key === "Unknown" ? ["Key"] : []), ...(song.genres.length === 0 ? ["Genres"] : [])];
               const isMissing   = missingFields.length > 0;
               const isFirst     = idx === firstMissingIdx;
@@ -743,7 +768,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                 <tr
                   key={song.file}
                   ref={isFirst ? missingRowRef : undefined}
-                  className={`group transition-colors cursor-default select-none ${isSelected ? "bg-[#7c3aed]/10" : isPlaying ? "bg-[#7c3aed]/5" : "hover:bg-[#0d0d14]"}`}
+                  className={`group transition-colors cursor-default select-none ${isSelected ? "bg-[#7c3aed]/10" : isPlaying ? "bg-[#7c3aed]/5" : "hover:bg-[#1c1c2e]"}`}
                   onClick={e => { setInlineEdit(null); handleRowClick(e, song, idx); }}
                   onDoubleClick={() => { setNowPlaying(song); }}
                   onContextMenu={e => handleRowContextMenu(e, song)}
@@ -775,13 +800,13 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                   </td>
                   <td className="px-3 py-1.5 max-w-[160px]" onClick={e => e.stopPropagation()}>
                     {inlineEdit?.file === song.file && inlineEdit.field === 'artist' ? (
-                      <input autoFocus defaultValue={song.artist} onBlur={e => { void handleSave(song.file, { artist: e.target.value.trim() || song.artist }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-sm text-[#94a3b8] outline-none pb-0.5" />
+                      <input autoFocus defaultValue={song.artist} onBlur={e => { void handleSave(song.file, { artist: e.target.value.trim() || song.artist }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-sm text-[#a6b5c8] outline-none pb-0.5" />
                     ) : (
-                      <span className="text-sm text-[#94a3b8] block truncate cursor-text hover:text-[#cbd5e1] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'artist' })}>{song.artist || "—"}</span>
+                      <span className="text-sm text-[#a6b5c8] block truncate cursor-text hover:text-[#cbd5e1] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'artist' })}>{song.artist || "—"}</span>
                     )}
                   </td>
                   <td className="px-3 py-1.5 whitespace-nowrap">
-                    <span className={`text-xs tabular-nums font-medium ${song.bpm === 0 ? "text-[#ef4444]/70" : "text-[#94a3b8]"}`}>{song.bpm === 0 ? "—" : Math.round(song.bpm)}</span>
+                    <span className={`text-xs tabular-nums font-medium ${song.bpm === 0 ? "text-[#ef4444]/70" : "text-[#a6b5c8]"}`}>{song.bpm === 0 ? "—" : Math.round(song.bpm)}</span>
                   </td>
                   <td className="px-3 py-1.5 whitespace-nowrap">
                     {song.camelot && song.camelot !== "Unknown"
@@ -790,43 +815,43 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                   </td>
                   <td className="px-3 py-1.5">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-12 h-1.5 bg-[#1e1e2e] rounded-full overflow-hidden">
+                      <div className="w-12 h-1.5 bg-[#2c2c42] rounded-full overflow-hidden">
                         <div className="h-full rounded-full" style={{ width: `${Math.round(song.energy * 100)}%`, backgroundColor: energyColor(song.energy) }} />
                       </div>
-                      <span className="text-[10px] text-[#475569] tabular-nums w-6">{Math.round(song.energy * 100)}</span>
+                      <span className="text-[10px] text-[#64748b] tabular-nums w-6">{Math.round(song.energy * 100)}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-1.5 max-w-[180px]"><span className="text-xs text-[#64748b] block truncate">{song.genres.join(", ") || "—"}</span></td>
-                  {visibleCols.has("duration")  && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#475569] tabular-nums">{song.duration != null ? fmt(song.duration) : "—"}</span></td>}
+                  <td className="px-3 py-1.5 max-w-[180px]"><span className="text-xs text-[#8394a8] block truncate">{song.genres.join(", ") || "—"}</span></td>
+                  {visibleCols.has("duration")  && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#64748b] tabular-nums">{song.duration != null ? fmt(song.duration) : "—"}</span></td>}
                   {visibleCols.has("year") && (
                     <td className="px-3 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       {inlineEdit?.file === song.file && inlineEdit.field === 'year' ? (
-                        <input autoFocus type="number" defaultValue={song.year ?? ''} onBlur={e => { const y = parseInt(e.target.value); void handleSave(song.file, { year: y > 0 ? y : undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-16 bg-transparent border-b border-[#7c3aed] text-xs text-[#475569] outline-none tabular-nums pb-0.5" />
+                        <input autoFocus type="number" defaultValue={song.year ?? ''} onBlur={e => { const y = parseInt(e.target.value); void handleSave(song.file, { year: y > 0 ? y : undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-16 bg-transparent border-b border-[#7c3aed] text-xs text-[#64748b] outline-none tabular-nums pb-0.5" />
                       ) : (
-                        <span className="text-xs text-[#475569] tabular-nums cursor-text hover:text-[#94a3b8] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'year' })}>{song.year ?? "—"}</span>
+                        <span className="text-xs text-[#64748b] tabular-nums cursor-text hover:text-[#a6b5c8] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'year' })}>{song.year ?? "—"}</span>
                       )}
                     </td>
                   )}
                   {visibleCols.has("comment") && (
                     <td className="px-3 py-1.5 max-w-[200px]" onClick={e => e.stopPropagation()}>
                       {inlineEdit?.file === song.file && inlineEdit.field === 'comment' ? (
-                        <input autoFocus defaultValue={song.comment ?? ''} onBlur={e => { void handleSave(song.file, { comment: e.target.value.trim() || undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-xs text-[#475569] outline-none pb-0.5" />
+                        <input autoFocus defaultValue={song.comment ?? ''} onBlur={e => { void handleSave(song.file, { comment: e.target.value.trim() || undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-xs text-[#64748b] outline-none pb-0.5" />
                       ) : (
-                        <span className="text-xs text-[#475569] block truncate cursor-text hover:text-[#94a3b8] transition-colors" title={song.comment} onClick={() => setInlineEdit({ file: song.file, field: 'comment' })}>{song.comment || "—"}</span>
+                        <span className="text-xs text-[#64748b] block truncate cursor-text hover:text-[#a6b5c8] transition-colors" title={song.comment} onClick={() => setInlineEdit({ file: song.file, field: 'comment' })}>{song.comment || "—"}</span>
                       )}
                     </td>
                   )}
-                  {visibleCols.has("dateAdded") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#475569] tabular-nums">{song.dateAdded != null ? fmtDate(song.dateAdded) : "—"}</span></td>}
-                  {visibleCols.has("vibeTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#64748b] block truncate">{song.semanticTags?.vibeTags.join(", ") || "—"}</span></td>}
-                  {visibleCols.has("moodTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#64748b] block truncate">{song.semanticTags?.moodTags.join(", ") || "—"}</span></td>}
-                  {visibleCols.has("vocalType") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-[10px] text-[#64748b]">{song.semanticTags?.vocalType ?? "—"}</span></td>}
+                  {visibleCols.has("dateAdded") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#64748b] tabular-nums">{song.dateAdded != null ? fmtDate(song.dateAdded) : "—"}</span></td>}
+                  {visibleCols.has("vibeTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#8394a8] block truncate">{song.semanticTags?.vibeTags.join(", ") || "—"}</span></td>}
+                  {visibleCols.has("moodTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#8394a8] block truncate">{song.semanticTags?.moodTags.join(", ") || "—"}</span></td>}
+                  {visibleCols.has("vocalType") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-[10px] text-[#8394a8]">{song.semanticTags?.vocalType ?? "—"}</span></td>}
                   {/* Re-analyze */}
                   <td className="px-2 py-1.5">
                     <button
                       type="button"
                       disabled={analyzing}
                       onClick={e => { e.stopPropagation(); handleReanalyze(song); }}
-                      className={`transition-opacity text-[#475569] hover:text-[#94a3b8] cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${isMissing || analyzing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                      className={`transition-opacity text-[#64748b] hover:text-[#a6b5c8] cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${isMissing || analyzing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                       title={isMissing ? `Re-analyze to fix: ${missingFields.join(", ")}` : "Re-analyze audio"}
                     >
                       <span
@@ -838,6 +863,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                 </tr>
               );
             })}
+            {vBotPad > 0 && <tr style={{ height: vBotPad }}><td colSpan={99} /></tr>}
           </tbody>
         </table>
       </div>

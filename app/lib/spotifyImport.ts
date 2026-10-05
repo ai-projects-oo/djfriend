@@ -145,6 +145,8 @@ export function findSongsForImport(tracks: import('../types').ImportTrack[], lib
 
 // Returns 'exact' (clean match), 'stripped' (needed parenthetical stripping), or false
 function titlesMatch(a: string, b: string): 'exact' | 'stripped' | false {
+  // Empty strings (non-Latin titles that norm to "") must not match anything
+  if (!a || !b) return a === b ? 'exact' : false;
   if (a === b) return 'exact';
   // One is a leading substring of the other (handles " (Dub Mix)" suffix on one side)
   if (b.startsWith(a) || a.startsWith(b)) return 'stripped';
@@ -155,15 +157,21 @@ function titlesMatch(a: string, b: string): 'exact' | 'stripped' | false {
   return false;
 }
 
+// Guard against empty normalized artist matching everything via includes("")
+function artistOk(sArtist: string, nArtist: string): boolean {
+  if (!sArtist || !nArtist) return sArtist === nArtist;
+  return sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist);
+}
+
 export function findPartialMatchSong(spotifyId: string, title: string, artist: string, library: Song[]): Song | null {
   if (library.some((s) => s.spotifyId === spotifyId)) return null; // exact — not a partial
   const nTitle = norm(title);
   const nArtist = norm(artist);
+  if (!nTitle || !nArtist) return null; // non-Latin search term — skip fuzzy matching
   for (const s of library) {
     const sTitle = norm(s.spotifyTitle ?? s.title);
     const sArtist = norm(s.spotifyArtist ?? s.artist);
-    const artistOk = sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist);
-    if (!artistOk) continue;
+    if (!artistOk(sArtist, nArtist)) continue;
     if (titlesMatch(sTitle, nTitle) === 'stripped') return s;
   }
   return null;
@@ -173,12 +181,12 @@ export function matchInLibrary(spotifyId: string, title: string, artist: string,
   if (library.some((s) => s.spotifyId === spotifyId)) return 'exact';
   const nTitle = norm(title);
   const nArtist = norm(artist);
+  if (!nTitle || !nArtist) return false; // non-Latin search term — skip fuzzy matching
   let best: 'fuzzy' | 'partial' | false = false;
   for (const s of library) {
     const sTitle = norm(s.spotifyTitle ?? s.title);
     const sArtist = norm(s.spotifyArtist ?? s.artist);
-    const artistOk = sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist);
-    if (!artistOk) continue;
+    if (!artistOk(sArtist, nArtist)) continue;
     const tm = titlesMatch(sTitle, nTitle);
     if (tm === 'exact') return 'fuzzy';     // clean title/artist match → green
     if (tm === 'stripped') best = 'partial'; // needed stripping → yellow

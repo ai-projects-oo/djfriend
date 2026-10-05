@@ -5,6 +5,8 @@ import type { ManualData } from '../lib/discogsManualData';
 import { saveManualData, saveRejected } from '../lib/discogsManualData';
 import { loadVinylStore, saveVinylStore, nextPosition, type VinylStore } from '../lib/vinylTracks';
 import { theme } from '../lib/theme';
+import { chatComplete } from '../lib/openAiApi';
+import { getAccessToken } from '../lib/openAiAuth';
 
 
 interface PrintSettings { stickerW: number; stickerH: number }
@@ -135,14 +137,14 @@ interface Props {
 
 function VinylPlaceholder() {
   return (
-    <div className="w-full h-full bg-[#0d0d14] flex items-center justify-center">
+    <div className="w-full h-full bg-[#1c1c2e] flex items-center justify-center">
       <svg viewBox="0 0 80 80" className="w-3/5 h-3/5" fill="currentColor">
         <circle cx="40" cy="40" r="38" fill="#3f3f5a" />
-        <circle cx="40" cy="40" r="28" fill="#0d0d14" />
+        <circle cx="40" cy="40" r="28" fill="#1c1c2e" />
         <circle cx="40" cy="40" r="24" fill="#2a2a40" />
-        <circle cx="40" cy="40" r="16" fill="#0d0d14" />
+        <circle cx="40" cy="40" r="16" fill="#1c1c2e" />
         <circle cx="40" cy="40" r="12" fill="#3a3a52" />
-        <circle cx="40" cy="40" r="4"  fill="#0d0d14" />
+        <circle cx="40" cy="40" r="4"  fill="#1c1c2e" />
       </svg>
     </div>
   );
@@ -187,7 +189,7 @@ function AlbumArt({ release, imageSrc, isManualLink, effectivelyMatched }: {
   const displaySrc = hiRes ?? imageSrc;
 
   return (
-    <div ref={containerRef} className="relative w-full aspect-square bg-[#0d0d14] overflow-hidden">
+    <div ref={containerRef} className="relative w-full aspect-square bg-[#1c1c2e] overflow-hidden">
       {displaySrc && !errored
         ? <img src={displaySrc} alt={release.title} className="w-full h-full object-cover" onError={() => { if (hiRes) { setHiRes(null); setHiResFailed(true); } else setErrored(true); }} />
         : <VinylPlaceholder />
@@ -225,17 +227,17 @@ function FilePicker({ library, onPick, onClose }: {
   }, [q, library]);
 
   return (
-    <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#0d0d14] border border-[#7c3aed] rounded-lg shadow-xl overflow-hidden">
-      <div className="flex items-center gap-2 px-2.5 py-2 border-b border-[#2a2a3a]">
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#475569] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#1c1c2e] border border-[#7c3aed] rounded-lg shadow-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-2.5 py-2 border-b border-[#363650]">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#8394a8] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <circle cx="6.5" cy="6.5" r="4"/><line x1="10" y1="10" x2="14" y2="14"/>
         </svg>
         <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)}
           placeholder="Search artist or title…"
-          className="flex-1 bg-transparent text-[11px] text-[#e2e8f0] placeholder-[#334155] focus:outline-none"
+          className="flex-1 bg-transparent text-[11px] text-[#e2e8f0] placeholder-[#3e4f65] focus:outline-none"
           onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
         />
-        <button type="button" onClick={onClose} className="text-[#475569] hover:text-[#94a3b8] cursor-pointer">
+        <button type="button" onClick={onClose} className="text-[#8394a8] hover:text-[#a6b5c8] cursor-pointer">
           <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/>
           </svg>
@@ -243,14 +245,14 @@ function FilePicker({ library, onPick, onClose }: {
       </div>
       <div className="max-h-48 overflow-y-auto">
         {results.length === 0 && (
-          <p className="text-center text-[#475569] text-[10px] py-4">No tracks found</p>
+          <p className="text-center text-[#8394a8] text-[10px] py-4">No tracks found</p>
         )}
         {results.map(s => (
           <button key={s.file} type="button" onClick={() => onPick(s)}
             className="w-full text-left px-2.5 py-1.5 hover:bg-[#1a1a2a] transition-colors cursor-pointer border-b border-[#1a1a2a] last:border-0">
-            <p className="text-[11px] text-[#94a3b8] font-medium truncate">{s.artist}</p>
-            <p className="text-[10px] text-[#475569] truncate">{s.title}</p>
-            {s.bpm > 0 && <p className="text-[9px] text-[#334155] tabular-nums">{Math.round(s.bpm)} BPM · {s.camelot}</p>}
+            <p className="text-[11px] text-[#a6b5c8] font-medium truncate">{s.artist}</p>
+            <p className="text-[10px] text-[#8394a8] truncate">{s.title}</p>
+            {s.bpm > 0 && <p className="text-[9px] text-[#6b7a94] tabular-nums">{Math.round(s.bpm)} BPM · {s.camelot}</p>}
           </button>
         ))}
       </div>
@@ -296,7 +298,7 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
     return map;
   }, [tracks]);
 
-  const inputCls = "bg-[#0d0d14] border border-[#1e1e2e] rounded px-1.5 py-1 text-[11px] text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors";
+  const inputCls = "bg-[#1c1c2e] border border-[#2c2c42] rounded px-1.5 py-1 text-[11px] text-[#e2e8f0] placeholder-[#3e4f65] focus:outline-none focus:border-[#7c3aed] transition-colors";
 
   return (
     <div className="border-t border-[#ffffff10] mt-1 pt-2 flex flex-col gap-2">
@@ -305,9 +307,9 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
         <div className="flex flex-col gap-1">
           {[...sides.entries()].map(([side, sideTracks]) => (
             <div key={side}>
-              <div className="text-[9px] uppercase tracking-widest text-[#334155] font-semibold mb-1">Side {side}</div>
+              <div className="text-[9px] uppercase tracking-widest text-[#6b7a94] font-semibold mb-1">Side {side}</div>
               {sideTracks.map(track => (
-                <div key={track.id} className="flex flex-col gap-1 mb-1.5 bg-[#0d0d14] rounded-md p-1.5 border border-[#1e1e2e]">
+                <div key={track.id} className="flex flex-col gap-1 mb-1.5 bg-[#1c1c2e] rounded-md p-1.5 border border-[#2c2c42]">
                   {/* Row 1: position · title · delete */}
                   <div className="flex items-center gap-1">
                     <input
@@ -326,7 +328,7 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
                     <button
                       type="button"
                       onClick={() => removeTrack(track.id)}
-                      className="text-[#334155] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
+                      className="text-[#6b7a94] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
                     >
                       <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                         <line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/>
@@ -377,7 +379,7 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
       <button
         type="button"
         onClick={addTrack}
-        className="flex items-center justify-center gap-1 w-full py-1.5 rounded-md border border-dashed border-[#2a2a3a] text-[#475569] hover:border-[#7c3aed] hover:text-[#a78bfa] transition-colors cursor-pointer text-[11px]"
+        className="flex items-center justify-center gap-1 w-full py-1.5 rounded-md border border-dashed border-[#363650] text-[#8394a8] hover:border-[#7c3aed] hover:text-[#a78bfa] transition-colors cursor-pointer text-[11px]"
       >
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
           <line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/>
@@ -420,6 +422,9 @@ export default function CratesTab({
     } catch { return new Map(); }
   });
 
+
+  const [aiLoading, setAiLoading] = useState<number | null>(null);
+  const hasAi = !!getAccessToken();
 
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const prevSyncPhase = useRef<string | undefined>(undefined);
@@ -547,6 +552,52 @@ export default function CratesTab({
     saveVinylStore(next);
   }, [vinylStore]);
 
+  const aiEstimateVinyl = useCallback(async (release: DiscogsRelease) => {
+    setAiLoading(release.releaseId);
+    try {
+      const label = releaseInfoCache.get(release.releaseId)?.label ?? '';
+      const raw = await chatComplete([
+        { role: 'system', content: 'You are a vinyl record expert. Return only valid JSON, no markdown.' },
+        { role: 'user', content: `Estimate the genre and BPM range for this vinyl release.\nTitle: "${release.title}"\nArtist: ${release.artist}\nLabel: ${(label || release.genres[0]) ?? 'unknown'}\nYear: ${release.year ?? 'unknown'}\nDiscogs genres: ${[...release.genres, ...release.styles].join(', ') || 'none'}\n\nReturn: {"genre":"...","bpmMin":XX,"bpmMax":YY,"confidence":"low|medium|high"}` },
+      ], { maxTokens: 80 });
+      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { genre?: string; bpmMin?: number; bpmMax?: number };
+      const next = new Map(manualData);
+      const curr = next.get(release.releaseId) ?? {};
+      const updates = {
+        ...curr,
+        ...(parsed.genre ? { aiGenre: parsed.genre } : {}),
+        ...(parsed.bpmMin ? { aiBpmMin: parsed.bpmMin } : {}),
+        ...(parsed.bpmMax ? { aiBpmMax: parsed.bpmMax } : {}),
+      };
+      next.set(release.releaseId, updates);
+      saveManualData(next);
+      onManualDataChange(next);
+      if (parsed.genre) {
+        const existing = vinylStore[release.releaseId] ?? { tracks: [] };
+        updateVinylData(release.releaseId, { ...existing, genre: parsed.genre });
+      }
+    } catch { /* silent — AI estimate is best-effort */ }
+    finally { setAiLoading(null); }
+  }, [manualData, onManualDataChange, releaseInfoCache, vinylStore, updateVinylData]);
+
+  const aiSummarizeNotes = useCallback(async (releaseId: number, notes: string) => {
+    if (!notes.trim()) return;
+    setAiLoading(releaseId);
+    try {
+      const raw = await chatComplete([
+        { role: 'system', content: 'You are a DJ tagging assistant. Return only valid JSON, no markdown.' },
+        { role: 'user', content: `Convert these vinyl listening notes into structured tags.\nNotes: "${notes}"\n\nReturn: {"tags":["tag1","tag2","tag3"],"summary":"one line"}` },
+      ], { maxTokens: 100 });
+      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { tags?: string[]; summary?: string };
+      const next = new Map(manualData);
+      const curr = next.get(releaseId) ?? {};
+      next.set(releaseId, { ...curr, aiTags: parsed.tags ?? [], comment: parsed.summary ?? curr.comment });
+      saveManualData(next);
+      onManualDataChange(next);
+    } catch { /* silent */ }
+    finally { setAiLoading(null); }
+  }, [manualData, onManualDataChange]);
+
   const toggleReleaseInfo = useCallback(async (releaseId: number) => {
     if (infoOpen === releaseId) { setInfoOpen(null); return; }
     setInfoOpen(releaseId);
@@ -597,14 +648,14 @@ export default function CratesTab({
   if (!collection) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-8">
-        <div className="w-14 h-14 rounded-full bg-[#12121a] border border-[#2a2a3a] flex items-center justify-center">
-          <svg className="w-7 h-7 text-[#475569]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <div className="w-14 h-14 rounded-full bg-[#20202e] border border-[#363650] flex items-center justify-center">
+          <svg className="w-7 h-7 text-[#8394a8]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
           </svg>
         </div>
         <div>
-          <p className="text-sm text-[#94a3b8] font-medium mb-1">No collection synced yet</p>
-          <p className="text-[11px] text-[#475569]">
+          <p className="text-sm text-[#a6b5c8] font-medium mb-1">No collection synced yet</p>
+          <p className="text-[11px] text-[#8394a8]">
             {hasOAuth ? 'Sync your Discogs collection to browse it here.' : 'Connect your Discogs account in Settings first.'}
           </p>
         </div>
@@ -619,7 +670,7 @@ export default function CratesTab({
             </button>
           ) : (
             <button type="button" onClick={() => { window.location.href = '/api/discogs/connect' }}
-              className="px-4 py-2 text-xs font-medium rounded-md border border-[#2a2a3a] text-[#94a3b8] hover:text-white hover:border-[#7c3aed] transition-colors cursor-pointer">
+              className="px-4 py-2 text-xs font-medium rounded-md border border-[#363650] text-[#a6b5c8] hover:text-white hover:border-[#7c3aed] transition-colors cursor-pointer">
               Connect Discogs ↗
             </button>
           )
@@ -638,29 +689,29 @@ export default function CratesTab({
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Search artist, title, genre…"
-          className="w-full rounded-md border border-[#2a2a3a] bg-[#12121a] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] transition-colors"
+          className="w-full rounded-md border border-[#363650] bg-[#20202e] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#3e4f65] focus:outline-none focus:border-[#7c3aed] transition-colors"
         />
 
         <div className="flex items-center gap-2">
           {/* Filter pills */}
-          <div className="flex rounded-md overflow-hidden border border-[#2a2a3a] text-[11px] font-medium">
+          <div className="flex rounded-md overflow-hidden border border-[#363650] text-[11px] font-medium">
             {([
               ['all',            `All ${collection.releases.length}`],
               ['in-library',     `+Digital ${inLibraryCount}`],
               ['not-in-library', `Vinyl only ${notInLibraryCount}`],
             ] as [Filter, string][]).map(([f, label]) => (
               <button key={f} type="button" onClick={() => setFilter(f)}
-                className={`px-2.5 py-1.5 transition-colors cursor-pointer ${filter === f ? 'bg-[#7c3aed] text-white' : 'text-[#64748b] hover:text-[#94a3b8]'}`}>
+                className={`px-2.5 py-1.5 transition-colors cursor-pointer ${filter === f ? 'bg-[#7c3aed] text-white' : 'text-[#8394a8] hover:text-[#a6b5c8]'}`}>
                 {label}
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-1 ml-auto text-[11px] text-[#475569]">
+          <div className="flex items-center gap-1 ml-auto text-[11px] text-[#8394a8]">
             <span>Sort</span>
             {(['artist', 'title', 'year'] as SortKey[]).map(s => (
               <button key={s} type="button" onClick={() => setSort(s)}
-                className={`px-2 py-1 rounded capitalize transition-colors cursor-pointer ${sort === s ? 'text-[#e2e8f0] bg-[#2a2a3a]' : 'hover:text-[#94a3b8]'}`}>
+                className={`px-2 py-1 rounded capitalize transition-colors cursor-pointer ${sort === s ? 'text-[#e2e8f0] bg-[#363650]' : 'hover:text-[#a6b5c8]'}`}>
                 {s}
               </button>
             ))}
@@ -669,7 +720,7 @@ export default function CratesTab({
           <button
             type="button"
             onClick={() => { setPrintMode(m => !m); setPrintSelection(new Set()); }}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-[11px] transition-colors cursor-pointer flex-shrink-0 ${printMode ? 'border-[#7c3aed] bg-[#7c3aed]/10 text-[#a78bfa]' : 'border-[#2a2a3a] bg-[#12121a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-[11px] transition-colors cursor-pointer flex-shrink-0 ${printMode ? 'border-[#7c3aed] bg-[#7c3aed]/10 text-[#a78bfa]' : 'border-[#363650] bg-[#20202e] text-[#8394a8] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
           >
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
               <path d="M4 1h8a1 1 0 011 1v3H3V2a1 1 0 011-1z"/>
@@ -683,7 +734,7 @@ export default function CratesTab({
             onClick={onSync}
             disabled={syncPhase === 'syncing'}
             title="Sync Discogs collection"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#2a2a3a] bg-[#12121a] text-[11px] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#363650] bg-[#20202e] text-[11px] text-[#8394a8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
           >
             <svg className={syncPhase === 'syncing' ? 'animate-spin' : ''} width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               {syncPhase === 'syncing'
@@ -696,16 +747,16 @@ export default function CratesTab({
         </div>
 
         {autoImportProgress && (
-          <div className="flex items-center gap-2 text-[10px] text-[#64748b]">
+          <div className="flex items-center gap-2 text-[10px] text-[#8394a8]">
             <svg className="animate-spin flex-shrink-0" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M8 2a6 6 0 0 1 0 12"/></svg>
             <span>Syncing from Discogs… {autoImportProgress.done}/{autoImportProgress.total}</span>
-            <div className="flex-1 h-1 rounded-full bg-[#1e1e2e] overflow-hidden">
+            <div className="flex-1 h-1 rounded-full bg-[#2c2c42] overflow-hidden">
               <div className="h-full rounded-full bg-[#7c3aed] transition-all" style={{ width: `${(autoImportProgress.done / autoImportProgress.total) * 100}%` }} />
             </div>
           </div>
         )}
 
-        <div className="text-[10px] text-[#334155]">
+        <div className="text-[10px] text-[#6b7a94]">
           <span>{releases.length} release{releases.length !== 1 ? 's' : ''}{query ? ' found' : ''}</span>
         </div>
       </div>
@@ -713,7 +764,7 @@ export default function CratesTab({
       {/* ── Grid ── */}
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {releases.length === 0 && (
-          <p className="text-center text-[#475569] text-sm pt-16">No releases match your filter.</p>
+          <p className="text-center text-[#8394a8] text-sm pt-16">No releases match your filter.</p>
         )}
         <div className="grid grid-cols-6 gap-x-3 gap-y-5">
           {releases.map(release => {
@@ -804,6 +855,26 @@ export default function CratesTab({
                     );
                   })()}
 
+                  {/* AI estimate — unmatched releases only */}
+                  {canEdit && hasAi && (() => {
+                    const aiData = manual;
+                    const hasBpmEstimate = aiData?.aiBpmMin && aiData?.aiBpmMax;
+                    return (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {hasBpmEstimate && (
+                          <span className="text-[10px] text-white/50 tabular-nums">~{aiData!.aiBpmMin}–{aiData!.aiBpmMax} BPM</span>
+                        )}
+                        <button type="button"
+                          onClick={() => void aiEstimateVinyl(release)}
+                          disabled={aiLoading === release.releaseId}
+                          className="text-[9px] text-white/30 hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer"
+                        >
+                          {aiLoading === release.releaseId ? '…' : hasBpmEstimate ? '↻ Re-estimate' : '✦ AI estimate'}
+                        </button>
+                      </div>
+                    );
+                  })()}
+
                   {/* BPM / key / energy — matched releases only */}
                   {!canEdit && (
                     <div className="space-y-1">
@@ -834,16 +905,33 @@ export default function CratesTab({
                     </div>
                   )}
 
+                  {/* AI tags from listening notes */}
+                  {manual?.aiTags && manual.aiTags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {manual.aiTags.map(tag => (
+                        <span key={tag} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-[#7c3aed22] text-[#a78bfa] border border-[#7c3aed33]">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Comment */}
                   {isEditComment ? (
                     <div className="flex flex-col gap-1.5">
                       <textarea ref={commentRef} placeholder="Notes…" defaultValue={comment ?? ''} rows={2}
-                        className="w-full rounded px-2 py-1 text-[11px] bg-[#12121a] border border-[#2a2a3a] text-[#e2e8f0] placeholder-[#334155] focus:outline-none focus:border-[#7c3aed] resize-none" />
-                      <div className="flex gap-1.5">
+                        className="w-full rounded px-2 py-1 text-[11px] bg-[#20202e] border border-[#363650] text-[#e2e8f0] placeholder-[#3e4f65] focus:outline-none focus:border-[#7c3aed] resize-none" />
+                      <div className="flex gap-1.5 flex-wrap">
                         <button type="button" onClick={() => saveComment(release.releaseId)}
                           className="text-[10px] px-2.5 py-1 rounded bg-[#7c3aed] text-white cursor-pointer hover:bg-[#6d28d9] transition-colors">Save</button>
+                        {hasAi && (
+                          <button type="button"
+                            onClick={() => void aiSummarizeNotes(release.releaseId, commentRef.current?.value ?? '')}
+                            disabled={aiLoading === release.releaseId}
+                            className="text-[10px] px-2.5 py-1 rounded border border-[#363650] text-[#a78bfa] cursor-pointer hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] disabled:opacity-40 transition-colors">
+                            {aiLoading === release.releaseId ? '…' : '✦ To tags'}
+                          </button>
+                        )}
                         <button type="button" onClick={() => setEditingComment(null)}
-                          className="text-[10px] px-2.5 py-1 rounded border border-[#2a2a3a] text-[#64748b] cursor-pointer hover:text-[#94a3b8] transition-colors">Cancel</button>
+                          className="text-[10px] px-2.5 py-1 rounded border border-[#363650] text-[#8394a8] cursor-pointer hover:text-[#a6b5c8] transition-colors">Cancel</button>
                       </div>
                     </div>
                   ) : (
@@ -855,21 +943,21 @@ export default function CratesTab({
                   {infoOpen === release.releaseId && (() => {
                     const info = releaseInfoCache.get(release.releaseId);
                     return (
-                      <div className="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1.5 text-[10px] text-[#94a3b8] flex flex-col gap-0.5">
+                      <div className="bg-[#1c1c2e] border border-[#363650] rounded-md px-2 py-1.5 text-[10px] text-[#a6b5c8] flex flex-col gap-0.5">
                         {info ? (
                           <>
                             {(info.label || info.catno) && (
-                              <div><span className="text-[#475569]">Label </span>{[info.label, info.catno].filter(Boolean).join(' · ')}</div>
+                              <div><span className="text-[#8394a8]">Label </span>{[info.label, info.catno].filter(Boolean).join(' · ')}</div>
                             )}
-                            {info.country && <div><span className="text-[#475569]">Country </span>{info.country}</div>}
-                            {info.formats?.length ? <div><span className="text-[#475569]">Format </span>{info.formats.join(', ')}</div> : null}
-                            {info.notes && <div className="text-[#475569] italic mt-0.5">{info.notes}</div>}
+                            {info.country && <div><span className="text-[#8394a8]">Country </span>{info.country}</div>}
+                            {info.formats?.length ? <div><span className="text-[#8394a8]">Format </span>{info.formats.join(', ')}</div> : null}
+                            {info.notes && <div className="text-[#8394a8] italic mt-0.5">{info.notes}</div>}
                             {!info.label && !info.country && !info.formats?.length && !info.notes && (
-                              <span className="text-[#334155]">No extra info</span>
+                              <span className="text-[#6b7a94]">No extra info</span>
                             )}
                           </>
                         ) : (
-                          <span className="text-[#334155]">Loading…</span>
+                          <span className="text-[#6b7a94]">Loading…</span>
                         )}
                       </div>
                     );
@@ -953,28 +1041,28 @@ export default function CratesTab({
       </div>
 
       {/* ── Footer ── */}
-      <div className="flex-shrink-0 border-t border-[#1e1e2e] px-4 py-2 flex items-center justify-between">
-        <span className="text-[10px] text-[#334155]">
+      <div className="flex-shrink-0 border-t border-[#2c2c42] px-4 py-2 flex items-center justify-between">
+        <span className="text-[10px] text-[#6b7a94]">
           {collection.username} · {(() => {
             const d = Math.floor((+new Date() - collection.syncedAt) / 86400000);
             return d === 0 ? 'synced today' : `synced ${d}d ago`;
           })()}
         </span>
         <button type="button" onClick={onSync} disabled={syncPhase === 'syncing'}
-          className="text-[11px] text-[#475569] hover:text-[#94a3b8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+          className="text-[11px] text-[#8394a8] hover:text-[#a6b5c8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
           {syncPhase === 'syncing' ? 'Syncing…' : '↺ Re-sync'}
         </button>
       </div>
 
       {/* Floating print stickers bar */}
       {printMode && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[#1a1a2e] border border-[#7c3aed] shadow-2xl whitespace-nowrap">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[#26263c] border border-[#7c3aed] shadow-2xl whitespace-nowrap">
           {printSelection.size === 0 ? (
             <>
-              <span className="text-[12px] text-[#64748b]">Click releases to select</span>
-              <div className="w-px h-4 bg-[#2a2a3a]" />
+              <span className="text-[12px] text-[#8394a8]">Click releases to select</span>
+              <div className="w-px h-4 bg-[#363650]" />
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-[#475569]">Size</span>
+                <span className="text-[10px] text-[#8394a8]">Size</span>
                 {PRINT_PRESETS.map(p => {
                   const active = printSettings.stickerW === p.w && printSettings.stickerH === p.h;
                   return (
@@ -985,14 +1073,14 @@ export default function CratesTab({
                         setCustomSize(false);
                         try { localStorage.setItem('djfriend-print-settings', JSON.stringify(s)); } catch { /* quota */ }
                       }}
-                      className={`px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer ${active ? 'bg-[#7c3aed] text-white' : 'text-[#64748b] hover:text-[#e2e8f0] border border-[#2a2a3a] hover:border-[#7c3aed]'}`}>
+                      className={`px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer ${active ? 'bg-[#7c3aed] text-white' : 'text-[#8394a8] hover:text-[#e2e8f0] border border-[#363650] hover:border-[#7c3aed]'}`}>
                       {p.label}
                     </button>
                   );
                 })}
                 <button type="button"
                   onClick={() => setCustomSize(v => !v)}
-                  className={`px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer ${customSize ? 'bg-[#7c3aed] text-white' : 'text-[#64748b] hover:text-[#e2e8f0] border border-[#2a2a3a] hover:border-[#7c3aed]'}`}>
+                  className={`px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer ${customSize ? 'bg-[#7c3aed] text-white' : 'text-[#8394a8] hover:text-[#e2e8f0] border border-[#363650] hover:border-[#7c3aed]'}`}>
                   Custom
                 </button>
                 {customSize && (
@@ -1004,9 +1092,9 @@ export default function CratesTab({
                         setPrintSettings(s);
                         try { localStorage.setItem('djfriend-print-settings', JSON.stringify(s)); } catch { /* quota */ }
                       }}
-                      className="w-12 bg-[#0d0d14] border border-[#2a2a3a] rounded px-1.5 py-0.5 text-[11px] text-[#e2e8f0] text-center focus:outline-none focus:border-[#7c3aed]"
+                      className="w-12 bg-[#1c1c2e] border border-[#363650] rounded px-1.5 py-0.5 text-[11px] text-[#e2e8f0] text-center focus:outline-none focus:border-[#7c3aed]"
                     />
-                    <span className="text-[#475569] text-[11px]">×</span>
+                    <span className="text-[#8394a8] text-[11px]">×</span>
                     <input type="number" min={20} max={300}
                       value={printSettings.stickerH}
                       onChange={e => {
@@ -1014,9 +1102,9 @@ export default function CratesTab({
                         setPrintSettings(s);
                         try { localStorage.setItem('djfriend-print-settings', JSON.stringify(s)); } catch { /* quota */ }
                       }}
-                      className="w-12 bg-[#0d0d14] border border-[#2a2a3a] rounded px-1.5 py-0.5 text-[11px] text-[#e2e8f0] text-center focus:outline-none focus:border-[#7c3aed]"
+                      className="w-12 bg-[#1c1c2e] border border-[#363650] rounded px-1.5 py-0.5 text-[11px] text-[#e2e8f0] text-center focus:outline-none focus:border-[#7c3aed]"
                     />
-                    <span className="text-[#475569] text-[10px]">mm</span>
+                    <span className="text-[#8394a8] text-[10px]">mm</span>
                   </>
                 )}
               </div>
@@ -1066,7 +1154,7 @@ export default function CratesTab({
             </button>
           )}
           <button type="button" onClick={() => { setPrintMode(false); setPrintSelection(new Set()); setCustomSize(false); }}
-            className="text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer text-[11px]">
+            className="text-[#8394a8] hover:text-[#a6b5c8] transition-colors cursor-pointer text-[11px]">
             Cancel
           </button>
         </div>
@@ -1085,10 +1173,10 @@ export default function CratesTab({
             <div className="flex flex-col gap-3" onClick={e => e.stopPropagation()}>
               {/* Label */}
               <div className="flex items-center justify-between px-1">
-                <span className="text-[11px] text-[#64748b]">
+                <span className="text-[11px] text-[#8394a8]">
                   {printPreview.isA4 ? `A4 layout · ${printSettings.stickerW}×${printSettings.stickerH}mm stickers` : `Sticker preview (${printSettings.stickerW}×${printSettings.stickerH}mm)`}
                 </span>
-                <button type="button" onClick={() => setPrintPreview(null)} className="text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer text-[18px] leading-none">×</button>
+                <button type="button" onClick={() => setPrintPreview(null)} className="text-[#8394a8] hover:text-[#e2e8f0] transition-colors cursor-pointer text-[18px] leading-none">×</button>
               </div>
 
               {/* Scaled preview */}
@@ -1105,7 +1193,7 @@ export default function CratesTab({
               {/* Actions */}
               <div className="flex gap-2 justify-end">
                 <button type="button" onClick={() => setPrintPreview(null)}
-                  className="px-3 py-1.5 rounded border border-[#2a2a3a] text-[#64748b] text-[12px] hover:text-[#e2e8f0] transition-colors cursor-pointer">
+                  className="px-3 py-1.5 rounded border border-[#363650] text-[#8394a8] text-[12px] hover:text-[#e2e8f0] transition-colors cursor-pointer">
                   Cancel
                 </button>
                 <button type="button" onClick={() => { printHtml(printPreview.html); setPrintPreview(null); }}

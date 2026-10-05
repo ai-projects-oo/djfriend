@@ -47,7 +47,7 @@ export default function PlayerBar({ track, audioRef, playing, onToggle, onClose 
   const progress = duration > 0 ? currentTime / duration : 0;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0d0d14] border-t border-[#1e1e2e] px-4 py-3 flex items-center gap-4">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#1c1c2e] border-t border-[#2c2c42] px-4 py-3 flex items-center gap-4">
       {/* Play / Pause */}
       <button
         onClick={onToggle}
@@ -69,33 +69,33 @@ export default function PlayerBar({ track, audioRef, playing, onToggle, onClose 
       {/* Track info */}
       <div className="flex-shrink-0 min-w-0 w-48">
         <div className="text-sm font-medium text-[#e2e8f0] truncate leading-tight">{track.title}</div>
-        <div className="text-[11px] text-[#475569] truncate mt-0.5">
+        <div className="text-[11px] text-[#64748b] truncate mt-0.5">
           {track.artist ?? ""}
-          {track.bpm && <span className="ml-2 text-[#334155]">{Math.round(track.bpm)} BPM</span>}
-          {track.camelot && <span className="ml-2 text-[#334155]">{track.camelot}</span>}
+          {track.bpm && <span className="ml-2 text-[#6b7a94]">{Math.round(track.bpm)} BPM</span>}
+          {track.camelot && <span className="ml-2 text-[#6b7a94]">{track.camelot}</span>}
         </div>
       </div>
 
       {/* Progress */}
       <div className="flex-1 flex items-center gap-3 min-w-0">
-        <span className="flex-shrink-0 text-[11px] text-[#475569] tabular-nums w-8 text-right">{fmt(currentTime)}</span>
+        <span className="flex-shrink-0 text-[11px] text-[#64748b] tabular-nums w-8 text-right">{fmt(currentTime)}</span>
         <div
           ref={barRef}
           onClick={seek}
-          className="flex-1 h-1.5 bg-[#1e1e2e] rounded-full cursor-pointer relative overflow-hidden group"
+          className="flex-1 h-1.5 bg-[#2c2c42] rounded-full cursor-pointer relative overflow-hidden group"
         >
           <div
             className="absolute inset-y-0 left-0 bg-[#7c3aed] rounded-full transition-none"
             style={{ width: `${progress * 100}%` }}
           />
         </div>
-        <span className="flex-shrink-0 text-[11px] text-[#334155] tabular-nums w-8">{fmt(duration)}</span>
+        <span className="flex-shrink-0 text-[11px] text-[#6b7a94] tabular-nums w-8">{fmt(duration)}</span>
       </div>
 
       {/* Close */}
       <button
         onClick={onClose}
-        className="flex-shrink-0 text-[#334155] hover:text-[#94a3b8] transition-colors cursor-pointer"
+        className="flex-shrink-0 text-[#6b7a94] hover:text-[#a6b5c8] transition-colors cursor-pointer"
         aria-label="Close player"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

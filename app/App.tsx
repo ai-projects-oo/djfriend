@@ -17,6 +17,7 @@ import {
   clearPendingExport,
   searchTracksOnSpotify,
   getStoredToken,
+  createPlaylistFromSpotifyIds,
 } from "./lib/spotifyExport";
 import {
   getPendingImport,
@@ -48,6 +49,13 @@ import CratesTab from "./components/CratesTab";
 import OnboardingModal from "./components/OnboardingModal";
 import PlayerBar from "./components/PlayerBar";
 import GigFinderTab from "./components/GigFinderTab";
+import {
+  getStoredSession,
+  exchangeOpenAiCode,
+  clearSession as clearOpenAiSession,
+  type OpenAiSession,
+} from "./lib/openAiAuth";
+import { chatComplete } from "./lib/openAiApi";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -66,8 +74,8 @@ function InfoMark({ text, align = 'left' }: { text: string; align?: 'left' | 'ri
 
   return (
     <div ref={ref} className="relative flex-shrink-0" onMouseEnter={show} onMouseLeave={() => setVisible(false)}>
-      <div className="w-3.5 h-3.5 rounded-full border border-[#374151] flex items-center justify-center cursor-default">
-        <span className="text-[8px] text-[#4b5568] leading-none select-none">i</span>
+      <div className="w-3.5 h-3.5 rounded-full border border-[#424f63] flex items-center justify-center cursor-default">
+        <span className="text-[8px] text-[#8394a8] leading-none select-none">i</span>
       </div>
       {visible && (
         <div
@@ -81,10 +89,10 @@ function InfoMark({ text, align = 'left' }: { text: string; align?: 'left' | 'ri
             width: '208px',
           }}
         >
-          <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
-            <p className="text-[10px] text-[#9ca3af] leading-relaxed">{text}</p>
+          <div className="bg-[#26263c] border border-[#3a3a56] rounded-lg p-2.5 shadow-xl">
+            <p className="text-[10px] text-[#adb6c0] leading-relaxed">{text}</p>
           </div>
-          <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${align === 'right' ? 'mr-1.5 ml-auto' : 'ml-1.5'}`} />
+          <div className={`w-2 h-2 bg-[#26263c] border-r border-b border-[#3a3a56] rotate-45 -mt-1 ${align === 'right' ? 'mr-1.5 ml-auto' : 'ml-1.5'}`} />
         </div>
       )}
     </div>
@@ -151,18 +159,18 @@ export default function App() {
     }
   }, [passwordInput]);
 
-  if (!authChecked) return <div className="min-h-screen bg-[#0a0a0f]" />;
+  if (!authChecked) return <div className="min-h-screen bg-[#16161e]" />;
 
   if (requiresPassword && !isAuthenticated)
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
-        <div className="bg-[#12121a] border border-white/10 rounded-xl p-8 w-80 flex flex-col gap-4">
+      <div className="min-h-screen bg-[#16161e] flex items-center justify-center">
+        <div className="bg-[#20202e] border border-white/10 rounded-xl p-8 w-80 flex flex-col gap-4">
           <h1 className="text-white font-semibold text-lg text-center">
             DJFriend
           </h1>
           <input
             type="password"
-            className="bg-[#0a0a0f] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#7c3aed]"
+            className="bg-[#16161e] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#7c3aed]"
             placeholder="Password"
             value={passwordInput}
             onChange={(e) => setPasswordInput(e.target.value)}
@@ -216,11 +224,18 @@ function AppInner() {
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [mediaOpen, setMediaOpen] = useState(false);
+  const [settingsScrollTo, setSettingsScrollTo] = useState<string | undefined>()
+  const [mediaOpen, setMediaOpen] = useState(true);
+  const [spotifyPickerSearch, setSpotifyPickerSearch] = useState("");
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
   const [hasSpotifyCredentials, setHasSpotifyCredentials] = useState(false);
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
+  const [openAiSession, setOpenAiSession] = useState<OpenAiSession | null>(() => getStoredSession());
+  const [openAiFeatures, setOpenAiFeatures] = useState<import('./components/SettingsModal').OpenAiFeatures>(() => {
+    try { return JSON.parse(localStorage.getItem('djfriend-openai-features') ?? 'null') ?? { gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false }; }
+    catch { return { gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false }; }
+  });
   const [hasDiscogsOAuth, setHasDiscogsOAuth] = useState(false);
   const [isMacOS, setIsMacOS] = useState(true); // assume macOS until settings load
   const energyCheckThreshold = 0.12;
@@ -362,6 +377,9 @@ function AppInner() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasAttemptedGenerate, setHasAttemptedGenerate] = useState(false);
   const [bulkOpError, setBulkOpError] = useState<string | null>(null);
+  const [aiSuggestQuery, setAiSuggestQuery] = useState('');
+  const [aiSuggestLoading, setAiSuggestLoading] = useState(false);
+  const [aiSuggestResults, setAiSuggestResults] = useState<import('./types').Song[]>([]);
 
   // Click-outside for source playlist dropdown
   useEffect(() => {
@@ -394,6 +412,8 @@ function AppInner() {
     openStoreLinkKey,
     setOpenStoreLinkKey,
     storeLinkRef,
+    copiedLinkKey,
+    setCopiedLinkKey,
     runImport,
     reloadEntry,
     handleImport,
@@ -583,6 +603,9 @@ function AppInner() {
   const [energyCheckOpen, setEnergyCheckOpen] = useState(true);
   const [crateGapsOpen, setCrateGapsOpen] = useState(true);
   const [spotifyGeneratingId, setSpotifyGeneratingId] = useState<string | null>(null);
+  const [missingExportId, setMissingExportId] = useState<string | null>(null);
+  const [missingExportResult, setMissingExportResult] = useState<{ entryId: string; url: string; count: number } | null>(null);
+  const [missingExportError, setMissingExportError] = useState<{ entryId: string; message: string } | null>(null);
 
   // Clamp curve points into the library energy range whenever it changes.
   // Without this, default y=0.3 or y=0.9 values render outside the SVG viewport
@@ -730,6 +753,70 @@ function AppInner() {
     [library, prefs, curve, setGeneratedSet],
   );
 
+  const handleExportMissingToSpotify = useCallback(async (entry: import('./types').ImportEntry) => {
+    const missingIds = entry.tracks
+      .filter(t => !t.inLibrary && !t.unavailable && t.spotifyId)
+      .map(t => t.spotifyId);
+    if (missingIds.length === 0) return;
+    const token = getStoredToken();
+    if (!token) {
+      setMissingExportError({ entryId: entry.id, message: "Connect Spotify first — log in via the Spotify section in Settings." });
+      setTimeout(() => setMissingExportError(null), 4000);
+      return;
+    }
+    setMissingExportId(entry.id);
+    setMissingExportResult(null);
+    setMissingExportError(null);
+    try {
+      const { playlistUrl, count } = await createPlaylistFromSpotifyIds(
+        missingIds,
+        `Don't have from ${entry.name}`,
+        token,
+      );
+      setMissingExportResult({ entryId: entry.id, url: playlistUrl, count });
+      setTimeout(() => setMissingExportResult(null), 8000);
+    } catch (err) {
+      setMissingExportError({ entryId: entry.id, message: err instanceof Error ? err.message : "Failed to create playlist." });
+      setTimeout(() => setMissingExportError(null), 5000);
+    } finally {
+      setMissingExportId(null);
+    }
+  }, []);
+
+  const handleAiSuggest = useCallback(async (query: string) => {
+    if (!query.trim() || library.length === 0) return;
+    setAiSuggestLoading(true);
+    setAiSuggestResults([]);
+    try {
+      const raw = await chatComplete([
+        { role: 'system', content: 'You are a DJ assistant. Given a free-text track request, output a JSON object with these fields: bpmMin (number), bpmMax (number), energyMin (number 0-1), energyMax (number 0-1), camelot (string[] of acceptable Camelot keys, empty means any), vibes (string[] of keywords). Output JSON only.' },
+        { role: 'user', content: query },
+      ], { maxTokens: 120 });
+      type Profile = { bpmMin?: number; bpmMax?: number; energyMin?: number; energyMax?: number; camelot?: string[]; vibes?: string[] };
+      const profile = JSON.parse(raw.replace(/```json|```/g, '').trim()) as Profile;
+      const scored = library
+        .filter(s => {
+          if (profile.bpmMin && s.bpm < profile.bpmMin) return false;
+          if (profile.bpmMax && s.bpm > profile.bpmMax) return false;
+          if (profile.energyMin && (s.energy ?? 0) < profile.energyMin) return false;
+          if (profile.energyMax && (s.energy ?? 0) > profile.energyMax) return false;
+          if (profile.camelot?.length && !profile.camelot.includes(s.camelot ?? '')) return false;
+          return true;
+        })
+        .map(s => {
+          const bpmMid = ((profile.bpmMin ?? 60) + (profile.bpmMax ?? 180)) / 2;
+          const eMid = ((profile.energyMin ?? 0) + (profile.energyMax ?? 1)) / 2;
+          const score = 1 - (Math.abs(s.bpm - bpmMid) / 50 + Math.abs((s.energy ?? 0.5) - eMid));
+          return { s, score };
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map(({ s }) => s);
+      setAiSuggestResults(scored);
+    } catch { /* silent */ }
+    finally { setAiSuggestLoading(false); }
+  }, [library]);
+
   const loadSettings = useCallback(() => {
     apiFetch("/api/settings")
       .then(
@@ -869,6 +956,7 @@ function AppInner() {
 
   // Handle Spotify OAuth callback
   useEffect(() => {
+    if (!window.location.pathname.startsWith('/callback') || window.location.pathname.startsWith('/callback-openai')) return;
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (!code) return;
@@ -928,12 +1016,31 @@ function AppInner() {
     })();
   }, [setImportUrl, setLoadingSpotifyPlaylists, setPendingImportUrl, setSpotifyExportStatus, setSpotifyPlaylistPicker]);
 
+  // Handle Sign in with ChatGPT callback
+  useEffect(() => {
+    if (!window.location.pathname.startsWith('/callback-openai')) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    if (!code || !state) return;
+    window.history.replaceState({}, '', '/');
+    void exchangeOpenAiCode(code, state)
+      .then(() => {
+        const session = getStoredSession();
+        setOpenAiSession(session);
+        setActiveTab('Gig Finder');
+      })
+      .catch((err: unknown) => {
+        console.error('OpenAI sign-in failed:', err);
+      });
+  }, []);
+
   const previewTrack = previewFile
     ? (generatedSet.find(t => t.filePath === previewFile) ?? null)
     : null;
 
   return (
-    <div className="h-screen bg-[#0a0a0f] text-[#e2e8f0] flex flex-col overflow-hidden">
+    <div className="h-screen bg-[#16161e] text-[#e2e8f0] flex flex-col overflow-hidden">
       {/* Hidden audio element for in-app preview */}
       <audio
         ref={audioRef}
@@ -958,7 +1065,7 @@ function AppInner() {
             </a>
             <button
               onClick={() => setUpdateInfo(null)}
-              className="text-[#475569] hover:text-[#94a3b8] transition-colors"
+              className="text-[#8394a8] hover:text-[#a6b5c8] transition-colors"
               aria-label="Dismiss update notification"
             >
               ✕
@@ -968,7 +1075,7 @@ function AppInner() {
       )}
       {/* Startup initialization overlay */}
       {isInitializing && (
-        <div className="fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col items-center justify-center gap-6">
+        <div className="fixed inset-0 z-50 bg-[#16161e] flex flex-col items-center justify-center gap-6">
           <img
             src="/icon.png"
             alt="DJFriend"
@@ -983,17 +1090,17 @@ function AppInner() {
             <p className="text-sm font-medium text-[#e2e8f0]">
               Initializing library…
             </p>
-            <p className="text-xs text-[#475569]">
+            <p className="text-xs text-[#8394a8]">
               Loading tracks and matching imported playlists
             </p>
           </div>
-          <div className="w-48 h-0.5 bg-[#1e1e2e] rounded-full overflow-hidden">
+          <div className="w-48 h-0.5 bg-[#2c2c42] rounded-full overflow-hidden">
             <div className="h-full bg-[#7c3aed] rounded-full animate-pulse w-full" />
           </div>
         </div>
       )}
       {/* Header */}
-      <header className="border-b border-[#1e1e2e] bg-[#0a0a0f] sticky top-0 z-40 pt-6">
+      <header className="border-b border-[#2c2c42] bg-[#16161e] sticky top-0 z-40 pt-6">
         <div className="px-2 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
             <img
@@ -1011,10 +1118,10 @@ function AppInner() {
               DJFriend
             </span>
             {libraryName && (
-              <span className="hidden sm:inline text-xs text-[#475569] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded truncate min-w-0">
+              <span className="hidden sm:inline text-xs text-[#8394a8] bg-[#20202e] border border-[#363650] px-2 py-0.5 rounded truncate min-w-0">
                 {libraryName} · {library.length} tracks
                 {library.some((s) => s.semanticTags) && (
-                  <span className="text-[#334155]">
+                  <span className="text-[#8394a8]">
                     {" "}
                     · {library.filter((s) => s.semanticTags).length} tagged
                   </span>
@@ -1035,7 +1142,7 @@ function AppInner() {
             })()}
             {!navigator.userAgent.toLowerCase().includes("electron") &&
               libraryName.includes("(imported)") && (
-                <span className="hidden sm:inline text-xs text-[#64748b] italic">
+                <span className="hidden sm:inline text-xs text-[#8394a8] italic">
                   BPM/key/energy are AI-estimated — not from audio analysis
                 </span>
               )}
@@ -1095,7 +1202,7 @@ function AppInner() {
                   }
                 }}
                 disabled={reanalyzingLibrary}
-                className="hidden sm:inline text-xs text-[#64748b] bg-[#12121a] border border-[#2a2a3a] px-2 py-0.5 rounded hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="hidden sm:inline text-xs text-[#8394a8] bg-[#20202e] border border-[#363650] px-2 py-0.5 rounded hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Re-run full analysis on every track — updates BPM, key, energy, and AI tags (vibe, mood, vocal type)."
               >
                 {reanalyzingLibrary
@@ -1144,7 +1251,7 @@ function AppInner() {
                           <span className="text-[9px] uppercase tracking-wider text-[#22c55e] font-semibold">
                             AI
                           </span>
-                          <div className="w-10 h-1 rounded-full bg-[#1f2937] overflow-hidden">
+                          <div className="w-10 h-1 rounded-full bg-[#262f3e] overflow-hidden">
                             <div
                               className="h-full bg-[#22c55e] transition-all"
                               style={{ width: `${aiPct}%` }}
@@ -1152,14 +1259,14 @@ function AppInner() {
                           </div>
                         </div>
                       )}
-                      <div className="w-24 h-1.5 rounded-full bg-[#1f2937] overflow-hidden flex-shrink-0">
+                      <div className="w-24 h-1.5 rounded-full bg-[#262f3e] overflow-hidden flex-shrink-0">
                         <div
-                          className={`h-full transition-all ${item.status === "analyzing" ? "bg-[#7c3aed]" : "bg-[#334155]"}`}
+                          className={`h-full transition-all ${item.status === "analyzing" ? "bg-[#7c3aed]" : "bg-[#3e4f65]"}`}
                           style={{ width: `${trackPct}%` }}
                         />
                       </div>
                       <span
-                        className={`text-[10px] tabular-nums truncate max-w-[80px] ${item.status === "analyzing" ? "text-[#94a3b8]" : "text-[#475569]"}`}
+                        className={`text-[10px] tabular-nums truncate max-w-[80px] ${item.status === "analyzing" ? "text-[#a6b5c8]" : "text-[#8394a8]"}`}
                       >
                         {item.status === "queued"
                           ? item.playlistName
@@ -1168,7 +1275,7 @@ function AppInner() {
                       <button
                         onClick={() => cancelQueueItem(item.playlistName)}
                         aria-label={`Cancel ${item.playlistName}`}
-                        className="text-[10px] text-[#475569] hover:text-red-400 transition-colors cursor-pointer leading-none flex-shrink-0"
+                        className="text-[10px] text-[#8394a8] hover:text-red-400 transition-colors cursor-pointer leading-none flex-shrink-0"
                       >
                         ✕
                       </button>
@@ -1183,7 +1290,7 @@ function AppInner() {
               <button
                 onClick={() => setSettingsOpen(true)}
                 title="Settings"
-                className="p-1.5 text-[#475569] hover:text-[#94a3b8] transition-colors cursor-pointer"
+                className="p-1.5 text-[#8394a8] hover:text-[#a6b5c8] transition-colors cursor-pointer"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -1307,20 +1414,20 @@ function AppInner() {
               <button
                 onClick={() => setAnalyzeMenuOpen((o) => !o)}
                 disabled={loadingPlaylists}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-[#2a2a3a] bg-[#12121a] text-[#94a3b8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-[#363650] bg-[#20202e] text-[#a6b5c8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loadingPlaylists ? "Loading…" : "Analyze"}
                 <span className="text-[10px]">▾</span>
               </button>
               {analyzeMenuOpen && !loadingPlaylists && (
-                <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
+                <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border border-[#363650] bg-[#20202e] shadow-lg overflow-hidden">
                   {navigator.userAgent.toLowerCase().includes("electron") && isMacOS && (
                     <button
                       onClick={() => {
                         setAnalyzeMenuOpen(false);
                         void openPlaylistPicker();
                       }}
-                      className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                      className="w-full text-left px-4 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                     >
                       Apple Music
                     </button>
@@ -1330,7 +1437,7 @@ function AppInner() {
                       setAnalyzeMenuOpen(false);
                       fileInputRef.current?.click();
                     }}
-                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     Import M3U / TXT
                   </button>
@@ -1339,7 +1446,7 @@ function AppInner() {
                       setAnalyzeMenuOpen(false);
                       rbFileInputRef.current?.click();
                     }}
-                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
                   >
                     Import Rekordbox XML
                   </button>
@@ -1348,10 +1455,10 @@ function AppInner() {
                       setAnalyzeMenuOpen(false);
                       uploadFolderInputRef.current?.click();
                     }}
-                    className="w-full text-left px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                    className="w-full text-left px-4 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
                   >
                     Upload Folder
-                    <span className="ml-1.5 text-[10px] text-[#475569]">
+                    <span className="ml-1.5 text-[10px] text-[#8394a8]">
                       (web)
                     </span>
                   </button>
@@ -1380,44 +1487,47 @@ function AppInner() {
         <div className="px-2 flex gap-1">
           {(["Set Generator", "Library", "History", "Crates", "Gig Finder"] as const).map((tab) => {
             const isCratesLocked = tab === "Crates" && !hasDiscogsOAuth;
+            const isGigFinderLocked = tab === "Gig Finder" && !(openAiSession && openAiFeatures.gigFinder);
+            const isLocked = isCratesLocked || isGigFinderLocked;
             return (
               <button
                 key={tab}
                 onClick={() => {
                   if (isCratesLocked) { setSettingsOpen(true); return; }
+                  if (isGigFinderLocked) { setSettingsOpen(true); setSettingsScrollTo('settings-gig-finder'); return; }
                   setActiveTab(tab as typeof activeTab);
                 }}
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-                  isCratesLocked
-                    ? "border-transparent text-[#2a2a3a] hover:text-[#475569]"
+                  isLocked
+                    ? "border-transparent text-[#5a5a7a] hover:text-[#8394a8]"
                     : activeTab === tab
                     ? "border-[#7c3aed] text-[#e2e8f0]"
-                    : "border-transparent text-[#475569] hover:text-[#94a3b8]"
+                    : "border-transparent text-[#8394a8] hover:text-[#a6b5c8]"
                 }`}
-                title={isCratesLocked ? "Connect Discogs in Settings to unlock Crates" : undefined}
+                title={isCratesLocked ? "Connect Discogs in Settings to unlock Crates" : isGigFinderLocked ? "Sign in with ChatGPT to unlock Gig Finder" : undefined}
               >
                 <span className="flex items-center gap-1.5">
                   {tab === "Crates"
                     ? <img src={new URL('./assets/discogs-logo.svg', import.meta.url).href} alt="Discogs" className="h-3.5 w-auto" style={{ filter: isCratesLocked ? 'brightness(0.18)' : activeTab === 'Crates' ? 'brightness(0.92)' : 'brightness(0.38)' }} />
                     : tab}
-                  {isCratesLocked && (
+                  {isLocked && (
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-50"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   )}
                   {tab === "Library" && isInitializing && (
                     <span className="w-3.5 h-3.5 rounded-full border-2 border-[#7c3aed]/30 border-t-[#7c3aed] animate-spin inline-block" />
                   )}
                   {tab === "Library" && !isInitializing && library.length > 0 && (
-                    <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                    <span className="text-[10px] bg-[#363650] text-[#a6b5c8] px-1.5 py-0.5 rounded-full">
                       {library.length}
                     </span>
                   )}
                   {tab === "History" && history.length > 0 && (
-                    <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                    <span className="text-[10px] bg-[#363650] text-[#a6b5c8] px-1.5 py-0.5 rounded-full">
                       {history.length}
                     </span>
                   )}
                   {tab === "Crates" && discogsCollection && (
-                    <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                    <span className="text-[10px] bg-[#363650] text-[#a6b5c8] px-1.5 py-0.5 rounded-full">
                       {discogsCollection.releases.length}
                     </span>
                   )}
@@ -1431,13 +1541,13 @@ function AppInner() {
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === "Imports"
                   ? "border-[#7c3aed] text-[#e2e8f0]"
-                  : "border-transparent text-[#475569] hover:text-[#94a3b8]"
+                  : "border-transparent text-[#8394a8] hover:text-[#a6b5c8]"
               }`}
             >
               <SpotifyIcon size={13} className="text-[#1db954]" />
               Spotify
               {importHistory.length > 0 && (
-                <span className="text-[10px] bg-[#2a2a3a] text-[#94a3b8] px-1.5 py-0.5 rounded-full">
+                <span className="text-[10px] bg-[#363650] text-[#a6b5c8] px-1.5 py-0.5 rounded-full">
                   {importHistory.length}
                 </span>
               )}
@@ -1462,11 +1572,11 @@ function AppInner() {
 
               {/* Card 1: Source — visible when playlists exist (Apple Music or Spotify) */}
               {Object.keys(applePlaylistFiles).length === 0 && importHistory.length === 0 ? (
-                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-2.5">
-                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Source</span>
+                <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4 flex flex-col gap-2.5">
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Source</span>
                   <div className="flex flex-col gap-1.5 py-1">
-                    <p className="text-xs text-[#334155]">No playlists imported yet.</p>
-                    <p className="text-[11px] text-[#2a2a3a]">
+                    <p className="text-xs text-[#8394a8]">No playlists imported yet.</p>
+                    <p className="text-[11px] text-[#6b7a94]">
                       Import a Spotify playlist or load an Apple Music library to filter your generator source.
                     </p>
                     {hasSpotifyCredentials && (
@@ -1481,9 +1591,9 @@ function AppInner() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
+                <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4 flex flex-col gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8] whitespace-nowrap">
                       Source
                     </span>
                     <InfoMark text="Choose which tracks to generate from — your full library or a specific imported playlist. The generator only considers tracks in the selected source." />
@@ -1497,8 +1607,8 @@ function AppInner() {
                         className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
                         style={{
                           backgroundColor: playlistFilterIds.length === 0 ? "#7c3aed" : "transparent",
-                          color: playlistFilterIds.length === 0 ? "#fff" : "#64748b",
-                          borderColor: playlistFilterIds.length === 0 ? "#7c3aed" : "#2a2a3a",
+                          color: playlistFilterIds.length === 0 ? "#fff" : "#8394a8",
+                          borderColor: playlistFilterIds.length === 0 ? "#7c3aed" : "#363650",
                         }}
                       >
                         Full Library
@@ -1510,8 +1620,8 @@ function AppInner() {
                           className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border truncate max-w-[200px] flex items-center gap-1"
                           style={{
                             backgroundColor: playlistFilterIds.length > 0 ? "#7c3aed" : "transparent",
-                            color: playlistFilterIds.length > 0 ? "#fff" : "#64748b",
-                            borderColor: playlistFilterIds.length > 0 ? "#7c3aed" : "#2a2a3a",
+                            color: playlistFilterIds.length > 0 ? "#fff" : "#8394a8",
+                            borderColor: playlistFilterIds.length > 0 ? "#7c3aed" : "#363650",
                           }}
                         >
                           <span className="truncate max-w-[160px]">
@@ -1530,10 +1640,10 @@ function AppInner() {
                           </svg>
                         </button>
                         {sourceDropdownOpen && (
-                          <div className="absolute left-0 top-full mt-1 z-30 bg-[#12121a] border border-[#2a2a3a] rounded-lg shadow-xl py-1 min-w-[220px] max-h-60 overflow-y-auto">
+                          <div className="absolute left-0 top-full mt-1 z-30 bg-[#20202e] border border-[#363650] rounded-lg shadow-xl py-1 min-w-[220px] max-h-60 overflow-y-auto">
                             <button
                               type="button"
-                              className="w-full text-left px-3 py-2 text-xs text-[#64748b] hover:bg-[#1e1e2e] transition-colors cursor-pointer"
+                              className="w-full text-left px-3 py-2 text-xs text-[#8394a8] hover:bg-[#2c2c42] transition-colors cursor-pointer"
                               onClick={() => { setPlaylistFilterIds([]); setSourceDropdownOpen(false); }}
                             >
                               — Full Library (no filter) —
@@ -1546,15 +1656,15 @@ function AppInner() {
                                 <button
                                   key={id}
                                   type="button"
-                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center gap-2 cursor-pointer"
-                                  style={{ color: isSelected ? "#a78bfa" : "#e2e8f0", backgroundColor: isSelected ? "#1e1a2e" : undefined }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#2c2c42] transition-colors flex items-center gap-2 cursor-pointer"
+                                  style={{ color: isSelected ? "#a78bfa" : "#e2e8f0", backgroundColor: isSelected ? "#2c263c" : undefined }}
                                   onClick={() => setPlaylistFilterIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
                                 >
-                                  <span className={`w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center ${isSelected ? "bg-[#7c3aed] border-[#7c3aed]" : "border-[#3a3a4a]"}`}>
+                                  <span className={`w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center ${isSelected ? "bg-[#7c3aed] border-[#7c3aed]" : "border-[#46465e]"}`}>
                                     {isSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                                   </span>
                                   <span className="truncate flex-1">{name}</span>
-                                  <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">{inLib} tracks</span>
+                                  <span className="shrink-0 text-[10px] text-[#8394a8] whitespace-nowrap">{inLib} tracks</span>
                                 </button>
                               );
                             })}
@@ -1565,15 +1675,15 @@ function AppInner() {
                                 <button
                                   key={entry.id}
                                   type="button"
-                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#1e1e2e] transition-colors flex items-center gap-2 cursor-pointer"
-                                  style={{ color: isSelected ? "#a78bfa" : "#e2e8f0", backgroundColor: isSelected ? "#1e1a2e" : undefined }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#2c2c42] transition-colors flex items-center gap-2 cursor-pointer"
+                                  style={{ color: isSelected ? "#a78bfa" : "#e2e8f0", backgroundColor: isSelected ? "#2c263c" : undefined }}
                                   onClick={() => setPlaylistFilterIds(prev => prev.includes(entry.id) ? prev.filter(x => x !== entry.id) : [...prev, entry.id])}
                                 >
-                                  <span className={`w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center ${isSelected ? "bg-[#7c3aed] border-[#7c3aed]" : "border-[#3a3a4a]"}`}>
+                                  <span className={`w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center ${isSelected ? "bg-[#7c3aed] border-[#7c3aed]" : "border-[#46465e]"}`}>
                                     {isSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                                   </span>
                                   <span className="truncate flex-1">{entry.name}</span>
-                                  <span className="shrink-0 text-[10px] text-[#64748b] whitespace-nowrap">{inLib}/{entry.tracks.length}</span>
+                                  <span className="shrink-0 text-[10px] text-[#8394a8] whitespace-nowrap">{inLib}/{entry.tracks.length}</span>
                                 </button>
                               );
                             })}
@@ -1583,8 +1693,8 @@ function AppInner() {
                     </div>
                   </div>
                   {playlistFilterIds.length > 0 && playlistFilterFiles && (
-                    <p className="text-[11px] text-[#64748b]">
-                      <span className="text-[#94a3b8] font-medium">{playlistFilterFiles.size}</span> tracks in playlist
+                    <p className="text-[11px] text-[#8394a8]">
+                      <span className="text-[#a6b5c8] font-medium">{playlistFilterFiles.size}</span> tracks in playlist
                     </p>
                   )}
                 </div>
@@ -1592,19 +1702,19 @@ function AppInner() {
 
               {/* Discogs filter — visible only when a collection has been synced */}
               {discogsCollection && (
-                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
+                <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setMediaOpen(o => !o)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1c1c2e] transition-colors cursor-pointer"
                   >
-                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Media</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`text-[#475569] transition-transform duration-150 ${mediaOpen ? 'rotate-180' : ''}`}>
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Media</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`text-[#8394a8] transition-transform duration-150 ${mediaOpen ? 'rotate-180' : ''}`}>
                       <polyline points="6 9 12 15 18 9" />
                     </svg>
                   </button>
-                  {mediaOpen && <div className="border-t border-[#1e1e2e] p-4 flex flex-col gap-2.5">
-                  <div className="flex rounded-lg border border-[#2a2a3a] overflow-hidden text-xs font-medium">
+                  {mediaOpen && <div className="border-t border-[#2c2c42] p-4 flex flex-col gap-2.5">
+                  <div className="flex rounded-lg border border-[#363650] overflow-hidden text-xs font-medium">
                     {(['library', 'crates-first', 'crates'] as DiscogsMode[]).map((mode) => {
                       const labels: Record<DiscogsMode, string> = { library: 'Library', 'crates-first': 'Mixed', crates: 'Vinyl' };
                       const titles: Record<DiscogsMode, string> = { library: 'Digital library only', 'crates-first': 'Vinyl + digital — vinyl scores higher', crates: 'Vinyl only' };
@@ -1614,7 +1724,7 @@ function AppInner() {
                         isInitializing ? (
                           <div className="flex flex-col items-center gap-2">
                             <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none">
-                              <circle cx="12" cy="12" r="10" stroke="#2a2a3a" strokeWidth="3"/>
+                              <circle cx="12" cy="12" r="10" stroke="#363650" strokeWidth="3"/>
                               <path d="M12 2a10 10 0 0 1 10 10" stroke="#7c3aed" strokeWidth="3" strokeLinecap="round"/>
                             </svg>
                           </div>
@@ -1642,7 +1752,7 @@ function AppInner() {
                           onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.3'; }}
                         >
                           <div className="flex-1 flex items-center justify-center">{icon}</div>
-                          <span className="text-[9px] font-medium pb-2" style={{ color: active ? '#e2e8f0' : '#64748b' }}>
+                          <span className="text-[9px] font-medium pb-2" style={{ color: active ? '#e2e8f0' : '#8394a8' }}>
                             {isLibraryLoading ? 'Loading…' : labels[mode]}
                           </span>
                         </button>
@@ -1650,21 +1760,21 @@ function AppInner() {
                     })}
                   </div>
                   {discogsMode === 'library' && (
-                    <p className="text-[11px] text-[#64748b]">
+                    <p className="text-[11px] text-[#8394a8]">
                       {isInitializing
-                        ? <span className="text-[#475569]">Loading library…</span>
-                        : <><span className="text-[#94a3b8] font-medium">{library.length}</span> tracks</>
+                        ? <span className="text-[#8394a8]">Loading library…</span>
+                        : <><span className="text-[#a6b5c8] font-medium">{library.length}</span> tracks</>
                       }
                     </p>
                   )}
                   {discogsMode === 'crates' && (
                     <div className="flex items-center justify-between">
-                      <p className="text-[11px] text-[#64748b]">
-                        <span className="text-[#94a3b8] font-medium">{discogsCollection.totalReleases}</span> vinyl
+                      <p className="text-[11px] text-[#8394a8]">
+                        <span className="text-[#a6b5c8] font-medium">{discogsCollection.totalReleases}</span> vinyl
                       </p>
                       <div className="flex items-center gap-2 ml-auto">
                         {discogsDaysSince !== null && (
-                          <span className={`text-[10px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#334155]'}`}>
+                          <span className={`text-[10px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#8394a8]'}`}>
                             {discogsDaysSince === 0 ? 'Synced today' : `Synced ${discogsDaysSince}d ago`}
                             {discogsDaysSince >= 30 && ' ⚠'}
                           </span>
@@ -1674,7 +1784,7 @@ function AppInner() {
                           title="Re-sync Discogs collection"
                           onClick={() => void syncDiscogsCollection()}
                           disabled={discogsSyncStatus.phase === 'syncing'}
-                          className="text-[10px] text-[#475569] hover:text-[#a78bfa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          className="text-[10px] text-[#8394a8] hover:text-[#a78bfa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                           aria-label="Re-sync Discogs collection"
                         >
                           {discogsSyncStatus.phase === 'syncing' ? '…' : '↺'}
@@ -1683,18 +1793,18 @@ function AppInner() {
                     </div>
                   )}
                   {discogsMode === 'crates-first' && (
-                    <p className="text-[11px] text-[#64748b]">
-                      <span className="text-[#94a3b8] font-medium">{discogsCollection.totalReleases}</span> vinyl
+                    <p className="text-[11px] text-[#8394a8]">
+                      <span className="text-[#a6b5c8] font-medium">{discogsCollection.totalReleases}</span> vinyl
                       {' · '}
-                      <span className="text-[#94a3b8] font-medium">{library.length}</span> digital
+                      <span className="text-[#a6b5c8] font-medium">{library.length}</span> digital
                     </p>
                   )}
 
                   {/* DJ System */}
-                  <div className="pt-2 border-t border-[#1e1e2e]">
+                  <div className="pt-2 border-t border-[#2c2c42]">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Turntables</span>
-                      <div className="flex rounded overflow-hidden border border-[#2a2a3a] text-[10px] font-medium">
+                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Turntables</span>
+                      <div className="flex rounded overflow-hidden border border-[#363650] text-[10px] font-medium">
                         {([0, 1, 2] as const).map(n => {
                           const vinylCount = djSystem.channels.filter(k => k === 'vinyl').length;
                           const active = vinylCount === n;
@@ -1707,7 +1817,7 @@ function AppInner() {
                                 handleSetDjSystem({ channels: next });
                               }}
                               className="px-2.5 py-1 transition-colors cursor-pointer"
-                              style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#64748b' }}
+                              style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#8394a8' }}
                             >
                               {n}
                             </button>
@@ -1722,11 +1832,11 @@ function AppInner() {
 
               {/* Card 3: Genre */}
               {genreGroups.length > 0 && (
-                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4">
+                <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Genre</span>
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Genre</span>
                     {prefs.genres.length > 0 && (
-                      <button type="button" onClick={() => selectGenre("Any")} className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors">
+                      <button type="button" onClick={() => selectGenre("Any")} className="text-[10px] text-[#8292a4] hover:text-[#adb6c0] transition-colors">
                         clear
                       </button>
                     )}
@@ -1744,7 +1854,7 @@ function AppInner() {
                           style={{
                             backgroundColor: active ? "#7c3aed" : "transparent",
                             color: active ? "#fff" : "#a78bfa",
-                            borderColor: active ? "#7c3aed" : "#4c1d95",
+                            borderColor: active ? "#7c3aed" : "#5a24a8",
                           }}
                         >
                           {label}
@@ -1756,14 +1866,14 @@ function AppInner() {
               )}
 
               {/* Card 3: Duration + BPM Range */}
-              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-4">
+              <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4 flex flex-col gap-4">
                 {/* Duration */}
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568] whitespace-nowrap">Duration</span>
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8] whitespace-nowrap">Duration</span>
                     <InfoMark text="Target set length. Tracks are added until this duration is reached. The estimate on the right is based on average track length in your current filtered library." />
                     {filteredTrackCount > 0 && (
-                      <span className="text-[10px] text-[#475569]">≈ {filteredTrackCount} tracks</span>
+                      <span className="text-[10px] text-[#8394a8]">≈ {filteredTrackCount} tracks</span>
                     )}
                   </div>
                   <div className="flex gap-1.5 flex-wrap">
@@ -1775,8 +1885,8 @@ function AppInner() {
                       className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border disabled:opacity-30 disabled:cursor-not-allowed"
                       style={{
                         backgroundColor: prefs.setDuration === null ? "#7c3aed" : "transparent",
-                        color: prefs.setDuration === null ? "#fff" : "#64748b",
-                        borderColor: prefs.setDuration === null ? "#7c3aed" : "#2a2a3a",
+                        color: prefs.setDuration === null ? "#fff" : "#8394a8",
+                        borderColor: prefs.setDuration === null ? "#7c3aed" : "#363650",
                       }}
                     >
                       {playlistFilterIds.length > 0 ? "Max" : "Any"}
@@ -1799,8 +1909,8 @@ function AppInner() {
                           className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border disabled:opacity-30 disabled:cursor-not-allowed"
                           style={{
                             backgroundColor: active ? "#7c3aed" : "transparent",
-                            color: active ? "#fff" : "#64748b",
-                            borderColor: active ? "#7c3aed" : "#2a2a3a",
+                            color: active ? "#fff" : "#8394a8",
+                            borderColor: active ? "#7c3aed" : "#363650",
                           }}
                         >
                           {min}m
@@ -1810,14 +1920,14 @@ function AppInner() {
                   </div>
                 </div>
                 {/* BPM Range */}
-                <div className="border-t border-[#1e1e2e] pt-4">
+                <div className="border-t border-[#2c2c42] pt-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">BPM Range</span>
+                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">BPM Range</span>
                       <InfoMark text="Hard filter — only tracks within this tempo range are considered. Leave both fields empty to include all tempos." />
                     </div>
                     {(prefs.bpmMin != null || prefs.bpmMax != null) && (
-                      <button type="button" onClick={() => setPrefs(p => ({ ...p, bpmMin: undefined, bpmMax: undefined }))} className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors">
+                      <button type="button" onClick={() => setPrefs(p => ({ ...p, bpmMin: undefined, bpmMax: undefined }))} className="text-[10px] text-[#8292a4] hover:text-[#adb6c0] transition-colors">
                         clear
                       </button>
                     )}
@@ -1827,14 +1937,14 @@ function AppInner() {
                       type="number" min={40} max={250} placeholder="Min"
                       value={prefs.bpmMin ?? ""}
                       onChange={e => { const v = e.target.value === "" ? undefined : Number(e.target.value); setPrefs(p => ({ ...p, bpmMin: v })); }}
-                      className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
+                      className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#1c1c2e] border border-[#363650] focus:outline-none focus:border-[#7c3aed] text-center"
                     />
-                    <span className="text-[#4b5568] text-xs flex-shrink-0">–</span>
+                    <span className="text-[#8394a8] text-xs flex-shrink-0">–</span>
                     <input
                       type="number" min={40} max={250} placeholder="Max"
                       value={prefs.bpmMax ?? ""}
                       onChange={e => { const v = e.target.value === "" ? undefined : Number(e.target.value); setPrefs(p => ({ ...p, bpmMax: v })); }}
-                      className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#0d0d14] border border-[#2a2a3a] focus:outline-none focus:border-[#7c3aed] text-center"
+                      className="w-full rounded px-2 py-1.5 text-xs text-[#e2e8f0] bg-[#1c1c2e] border border-[#363650] focus:outline-none focus:border-[#7c3aed] text-center"
                     />
                   </div>
                 </div>
@@ -1865,15 +1975,15 @@ function AppInner() {
                     ...(commentFilterActive ? [`comment ${prefs.commentFilter!.mode} "${prefs.commentFilter!.text.trim()}"`] : []),
                   ];
                   return (
-                    <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
+                    <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl overflow-hidden">
                       {/* Toggle header */}
                       <button
                         type="button"
                         onClick={() => setFiltersOpen((o) => !o)}
-                        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-[#1c1c2e] transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+                          <span className="text-xs font-semibold uppercase tracking-widest text-[#8394a8]">
                             Filters
                           </span>
                           {activeFilterCount > 0 && (
@@ -1892,7 +2002,7 @@ function AppInner() {
                                   dateFilter: { field: 'dateAdded', preset: 'all' },
                                 }));
                               }}
-                              className="text-[10px] text-[#475569] hover:text-[#94a3b8] transition-colors"
+                              className="text-[10px] text-[#8394a8] hover:text-[#a6b5c8] transition-colors"
                             >
                               clear all
                             </button>
@@ -1907,7 +2017,7 @@ function AppInner() {
                           strokeWidth="2.5"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className={`text-[#475569] transition-transform duration-150 ${filtersOpen ? "rotate-180" : ""}`}
+                          className={`text-[#8394a8] transition-transform duration-150 ${filtersOpen ? "rotate-180" : ""}`}
                         >
                           <polyline points="6 9 12 15 18 9" />
                         </svg>
@@ -1915,12 +2025,12 @@ function AppInner() {
 
                       {/* Active filter summary — always visible when filters active */}
                       {activeFilterCount > 0 && (
-                        <div className="px-5 pb-3 border-t border-[#1e1e2e] pt-3">
-                          <div className="flex items-center gap-2 text-[11px] bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-3 py-1.5">
-                            <span className="text-[#475569] flex-shrink-0">
+                        <div className="px-5 pb-3 border-t border-[#2c2c42] pt-3">
+                          <div className="flex items-center gap-2 text-[11px] bg-[#1c1c2e] border border-[#363650] rounded-md px-3 py-1.5">
+                            <span className="text-[#8394a8] flex-shrink-0">
                               {activeFilterCount} active:
                             </span>
-                            <span className="text-[#94a3b8] truncate">
+                            <span className="text-[#a6b5c8] truncate">
                               {activeList.join(" · ")}
                             </span>
                             <button
@@ -1930,7 +2040,7 @@ function AppInner() {
                                 selectGenre("Any");
                                 setPrefs(p => ({ ...p, commentFilter: undefined }));
                               }}
-                              className="ml-auto text-[#475569] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
+                              className="ml-auto text-[#8394a8] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
                               title="Clear all filters"
                             >
                               ×
@@ -1942,26 +2052,26 @@ function AppInner() {
                       {/* Expanded filter pills */}
                       {filtersOpen && (
                         <div
-                          className={`px-4 pb-4 flex flex-col gap-4 ${activeFilterCount === 0 ? "border-t border-[#1e1e2e] pt-4" : "pt-2"}`}
+                          className={`px-4 pb-4 flex flex-col gap-4 ${activeFilterCount === 0 ? "border-t border-[#2c2c42] pt-4" : "pt-2"}`}
                         >
                           <div>
                             {/* Field selector toggle */}
                             <div className="flex items-center gap-1 mb-2">
-                              <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                              <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">
                                 Date
                               </span>
                               {prefs.dateFilter && prefs.dateFilter.preset !== "all" && (
                                 <button
                                   type="button"
                                   onClick={() => setPrefs(p => ({ ...p, dateFilter: { field: 'dateAdded', preset: 'all' } }))}
-                                  className="w-3.5 h-3.5 rounded-full border border-[#475569] text-[#475569] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                  className="w-3.5 h-3.5 rounded-full border border-[#8394a8] text-[#8394a8] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
                                   title="Clear date filter"
                                   style={{ fontSize: 9, lineHeight: 1 }}
                                 >
                                   ×
                                 </button>
                               )}
-                              <div className="ml-2 flex rounded overflow-hidden border border-[#4c1d95]">
+                              <div className="ml-2 flex rounded overflow-hidden border border-[#5a24a8]">
                                 {(["dateAdded", "releaseYear"] as const).map(
                                   (f) => {
                                     const active =
@@ -2044,7 +2154,7 @@ function AppInner() {
                                       color: active ? "#fff" : "#a78bfa",
                                       borderColor: active
                                         ? "#7c3aed"
-                                        : "#4c1d95",
+                                        : "#5a24a8",
                                     }}
                                   >
                                     {label}
@@ -2069,13 +2179,13 @@ function AppInner() {
                                     style={{
                                       backgroundColor:
                                         dateCalendar === "from"
-                                          ? "#1e1e2e"
+                                          ? "#2c2c42"
                                           : "transparent",
-                                      borderColor: "#4c1d95",
+                                      borderColor: "#5a24a8",
                                       color: "#a78bfa",
                                     }}
                                   >
-                                    <span className="text-[#4b5568]">From</span>
+                                    <span className="text-[#8394a8]">From</span>
                                     <span>
                                       {prefs.dateFilter?.rangeFrom ?? "Ever"}
                                     </span>
@@ -2113,13 +2223,13 @@ function AppInner() {
                                     style={{
                                       backgroundColor:
                                         dateCalendar === "to"
-                                          ? "#1e1e2e"
+                                          ? "#2c2c42"
                                           : "transparent",
-                                      borderColor: "#4c1d95",
+                                      borderColor: "#5a24a8",
                                       color: "#a78bfa",
                                     }}
                                   >
-                                    <span className="text-[#4b5568]">To</span>
+                                    <span className="text-[#8394a8]">To</span>
                                     <span>
                                       {prefs.dateFilter?.rangeTo ?? "Now"}
                                     </span>
@@ -2150,14 +2260,14 @@ function AppInner() {
                           {/* Comment filter */}
                           <div>
                             <div className="flex items-center gap-1 mb-2">
-                              <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                              <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">
                                 Comment
                               </span>
                               {commentFilterActive && (
                                 <button
                                   type="button"
                                   onClick={() => setPrefs(p => ({ ...p, commentFilter: undefined }))}
-                                  className="w-3.5 h-3.5 rounded-full border border-[#475569] text-[#475569] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                  className="w-3.5 h-3.5 rounded-full border border-[#8394a8] text-[#8394a8] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
                                   title="Clear comment filter"
                                   style={{ fontSize: 9, lineHeight: 1 }}
                                 >
@@ -2166,7 +2276,7 @@ function AppInner() {
                               )}
                             </div>
                             <div className="flex gap-2 items-center">
-                              <div className="flex rounded-md border border-[#2a2a3a] overflow-hidden text-[10px] flex-shrink-0">
+                              <div className="flex rounded-md border border-[#363650] overflow-hidden text-[10px] flex-shrink-0">
                                 {(['includes', 'excludes'] as const).map(mode => (
                                   <button
                                     key={mode}
@@ -2178,7 +2288,7 @@ function AppInner() {
                                     className="px-2 py-1 transition-colors cursor-pointer"
                                     style={{
                                       backgroundColor: (prefs.commentFilter?.mode ?? 'includes') === mode ? '#7c3aed' : 'transparent',
-                                      color: (prefs.commentFilter?.mode ?? 'includes') === mode ? '#fff' : '#64748b',
+                                      color: (prefs.commentFilter?.mode ?? 'includes') === mode ? '#fff' : '#8394a8',
                                     }}
                                   >
                                     {mode}
@@ -2196,7 +2306,7 @@ function AppInner() {
                                     commentFilter: { text, mode: p.commentFilter?.mode ?? 'includes' },
                                   }));
                                 }}
-                                className="flex-1 bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[11px] text-[#cbd5e1] placeholder-[#334155] outline-none focus:border-[#7c3aed] transition-colors"
+                                className="flex-1 bg-[#1c1c2e] border border-[#363650] rounded-md px-2 py-1 text-[11px] text-[#cbd5e1] placeholder-[#3e4f65] outline-none focus:border-[#7c3aed] transition-colors"
                               />
                             </div>
                           </div>
@@ -2204,14 +2314,14 @@ function AppInner() {
                           {availableGenres.length > 0 && (
                             <div>
                               <div className="flex items-center gap-1.5 mb-2">
-                                <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                                <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">
                                   User Genre
                                 </span>
                                 {prefs.genres.length > 0 && (
                                   <button
                                     type="button"
                                     onClick={() => selectGenre("Any")}
-                                    className="w-3.5 h-3.5 rounded-full border border-[#475569] text-[#475569] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                    className="w-3.5 h-3.5 rounded-full border border-[#8394a8] text-[#8394a8] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
                                     title="Clear genre filter"
                                     style={{ fontSize: 9, lineHeight: 1 }}
                                   >
@@ -2265,14 +2375,14 @@ function AppInner() {
                             return (
                               <div key={key}>
                                 <div className="flex items-center gap-1.5 mb-2">
-                                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">
+                                  <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">
                                     {label}
                                   </span>
                                   {selectedTags.length > 0 && (
                                     <button
                                       type="button"
                                       onClick={() => setPrefs(p => ({ ...p, tagFilters: { ...p.tagFilters, [key]: [] } }))}
-                                      className="w-3.5 h-3.5 rounded-full border border-[#475569] text-[#475569] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                      className="w-3.5 h-3.5 rounded-full border border-[#8394a8] text-[#8394a8] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors flex items-center justify-center flex-shrink-0 cursor-pointer"
                                       title={`Clear ${label.toLowerCase()} filter`}
                                       style={{ fontSize: 9, lineHeight: 1 }}
                                     >
@@ -2345,9 +2455,9 @@ function AppInner() {
                   p.weights.transitionWeight === scoringWeights.transitionWeight
                 ) ?? PRESETS[0];
                 return (
-                  <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4">
+                  <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">Style</span>
+                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Style</span>
                     </div>
                     <div className="flex gap-1.5 flex-wrap">
                       {PRESETS.map((preset, i) => {
@@ -2362,17 +2472,17 @@ function AppInner() {
                               className={`text-[10px] px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
                                 isActive
                                   ? 'bg-[#7c3aed]/20 border-[#7c3aed]/60 text-[#a78bfa]'
-                                  : 'bg-[#0d0d14] border-[#1e1e2e] text-[#6b7280] hover:border-[#374151] hover:text-[#9ca3af]'
+                                  : 'bg-[#1c1c2e] border-[#2c2c42] text-[#8292a4] hover:border-[#424f63] hover:text-[#adb6c0]'
                               }`}
                             >
                               {preset.name}
                             </button>
                             <div className={`absolute bottom-full mb-2 w-40 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 ${isLast ? 'right-0' : 'left-0'}`}>
-                              <div className="bg-[#1a1a2e] border border-[#2d2d44] rounded-lg p-2.5 shadow-xl">
+                              <div className="bg-[#26263c] border border-[#3a3a56] rounded-lg p-2.5 shadow-xl">
                                 <p className="text-[10px] font-semibold text-[#c4b5fd] mb-0.5">{preset.name}</p>
-                                <p className="text-[10px] text-[#9ca3af]">{preset.desc}</p>
+                                <p className="text-[10px] text-[#adb6c0]">{preset.desc}</p>
                               </div>
-                              <div className={`w-2 h-2 bg-[#1a1a2e] border-r border-b border-[#2d2d44] rotate-45 -mt-1 ${isLast ? 'mr-3 ml-auto' : 'ml-3'}`} />
+                              <div className={`w-2 h-2 bg-[#26263c] border-r border-b border-[#3a3a56] rotate-45 -mt-1 ${isLast ? 'mr-3 ml-auto' : 'ml-3'}`} />
                             </div>
                           </div>
                         );
@@ -2390,7 +2500,7 @@ function AppInner() {
                 const estSetSec = rawPlaylistSec - MIX_OVERLAP_SEC * transitions;
                 const fmtMin = (s: number) => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
                 return (
-                  <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
+                  <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4 flex flex-col gap-3">
                     <div className="relative group">
                       <button
                         onClick={() => {
@@ -2429,12 +2539,12 @@ function AppInner() {
                         )}
                       </button>
                       {prefs.genres.length === 0 && playlistFilterIds.length === 0 && tipConfig.help && (
-                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
+                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-md bg-[#2c2c42] border border-[#363650] px-2.5 py-2 text-[11px] text-[#a6b5c8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
                           Pick a genre first to generate a set
                         </div>
                       )}
                       {playlistFilterIds.length > 0 && playlistFilterFiles === undefined && (
-                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
+                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-[#2c2c42] border border-[#363650] px-2.5 py-2 text-[11px] text-[#a6b5c8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
                           None of these playlist tracks are in your library
                         </div>
                       )}
@@ -2444,37 +2554,82 @@ function AppInner() {
                         <button
                           onClick={handleAppendTracks}
                           disabled={isInitializing || library.length === 0 || !canAppendTracks || (prefs.genres.length === 0 && playlistFilterIds.length === 0) || (playlistFilterIds.length > 0 && playlistFilterFiles === undefined)}
-                          className="w-full flex items-center justify-center gap-2 bg-[#1e1e2e] hover:bg-[#2a2a3a] border border-[#2a2a3a] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed text-[#94a3b8] hover:text-[#a78bfa] text-sm font-medium py-2 rounded-md transition-colors cursor-pointer"
+                          className="w-full flex items-center justify-center gap-2 bg-[#2c2c42] hover:bg-[#363650] border border-[#363650] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed text-[#a6b5c8] hover:text-[#a78bfa] text-sm font-medium py-2 rounded-md transition-colors cursor-pointer"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                           Append tracks
                         </button>
-                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-[#1e1e2e] border border-[#2a2a3a] px-2.5 py-2 text-[11px] text-[#94a3b8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
+                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-[#2c2c42] border border-[#363650] px-2.5 py-2 text-[11px] text-[#a6b5c8] leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 text-center">
                           Add more tracks to the end of the current set — your locks and reorders stay untouched
                         </div>
                       </div>
                     )}
                     {generatedSet.length >= 2 && (
-                      <div className="flex items-center gap-3 text-[10px] text-[#475569] border-t border-[#1e1e2e] pt-2">
-                        <span title="Sum of all track durations">Playlist: <span className="text-[#64748b] font-semibold">{fmtMin(rawPlaylistSec)}</span></span>
-                        <span className="text-[#1e1e2e]">·</span>
-                        <span title="Estimated actual set length accounting for 2-min crossfades">Est. set: <span className="text-[#94a3b8] font-semibold">{fmtMin(estSetSec)}</span></span>
-                        <span className="text-[#1e1e2e]">·</span>
-                        <span className="text-[#4b5568]">{generatedSet.length} tracks</span>
+                      <div className="flex items-center gap-3 text-[10px] text-[#8394a8] border-t border-[#2c2c42] pt-2">
+                        <span title="Sum of all track durations">Playlist: <span className="text-[#8394a8] font-semibold">{fmtMin(rawPlaylistSec)}</span></span>
+                        <span className="text-[#2c2c42]">·</span>
+                        <span title="Estimated actual set length accounting for 2-min crossfades">Est. set: <span className="text-[#a6b5c8] font-semibold">{fmtMin(estSetSec)}</span></span>
+                        <span className="text-[#2c2c42]">·</span>
+                        <span className="text-[#8394a8]">{generatedSet.length} tracks</span>
                       </div>
                     )}
                   </div>
                 );
               })()}
 
+              {/* AI live suggestion engine */}
+              {openAiSession && openAiFeatures.enhancedAnalysis && library.length > 0 && (
+                <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4 flex flex-col gap-3">
+                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[#a78bfa] flex items-center gap-1.5">
+                    <span>✦</span> Track finder
+                  </h3>
+                  <form
+                    onSubmit={(e) => { e.preventDefault(); void handleAiSuggest(aiSuggestQuery); }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      value={aiSuggestQuery}
+                      onChange={e => setAiSuggestQuery(e.target.value)}
+                      placeholder="e.g. something dark and driving for 2am"
+                      className="flex-1 bg-[#26263c] border border-[#363650] rounded-md px-3 py-1.5 text-xs text-[#e2e8f0] placeholder:text-[#5a6a80] focus:outline-none focus:border-[#7c3aed]"
+                      aria-label="Track search query"
+                    />
+                    <button
+                      type="submit"
+                      disabled={aiSuggestLoading || !aiSuggestQuery.trim()}
+                      className="px-3 py-1.5 rounded-md bg-[#7c3aed] text-white text-xs font-medium hover:bg-[#6d28d9] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      {aiSuggestLoading
+                        ? <span className="w-3 h-3 rounded-full border border-white/30 border-t-white animate-spin" />
+                        : '→'}
+                    </button>
+                  </form>
+                  {aiSuggestResults.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      {aiSuggestResults.map(s => (
+                        <div key={s.file} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-[#26263c] hover:bg-[#2c2c42] transition-colors group">
+                          <div className="min-w-0">
+                            <p className="text-xs text-[#e2e8f0] truncate">{s.artist} — {s.title}</p>
+                            <p className="text-[10px] text-[#6b7a94]">{Math.round(s.bpm)} BPM · {s.camelot ?? '—'} · {s.genres?.[0] ?? '—'}</p>
+                          </div>
+                          <div className="text-[10px] text-[#a78bfa] tabular-nums shrink-0">
+                            {((s.energy ?? 0) * 100).toFixed(0)}%
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
 
             {/* ── RIGHT: Generated Set ── */}
             <div className="flex-1 min-w-0 flex flex-col gap-4 min-h-0 overflow-hidden">
               {/* Energy Curve — pinned, does not scroll */}
-              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex-shrink-0">
+              <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-5 flex-shrink-0">
                 <div className="flex items-center gap-2 mb-4">
-                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8]">
                     Energy Curve
                   </h2>
                   <InfoMark text="Draw the energy arc for your set. Each point sets the target energy level at that position — 0 is low/mellow, 1 is peak intensity. The generator picks tracks that match the curve as closely as possible." />
@@ -2487,9 +2642,9 @@ function AppInner() {
                   tipConfig={tipConfig}
                 />
               </div>
-              <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 flex flex-col flex-1 min-h-0 overflow-y-auto">
+              <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-5 flex flex-col flex-1 min-h-0 overflow-y-auto">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#475569]">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8]">
                     Generated Set
                   </h2>
                   {bulkOpError && (
@@ -2505,13 +2660,13 @@ function AppInner() {
                     const tooltip = `Harmonic: ${Math.round((1 - setScore.harmonicRate) * 100)}%  ·  Energy fit: ${Math.round((1 - setScore.avgEnergyError) * 100)}%  ·  BPM flow: ${Math.round(setScore.bpmSmoothness * 100)}%`;
                     return (
                       <div
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-[#0d0d14] cursor-default"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-[#1c1c2e] cursor-default"
                         style={{ borderColor: `${scoreColor}44` }}
                         title={tooltip}
                       >
-                        <span className="text-[10px] text-[#475569] font-medium uppercase tracking-wider">Score</span>
+                        <span className="text-[10px] text-[#8394a8] font-medium uppercase tracking-wider">Score</span>
                         <span className="text-xl font-bold tabular-nums leading-none" style={{ color: scoreColor }}>{setScore.total}</span>
-                        <span className="text-xs text-[#334155] font-medium">/ 100</span>
+                        <span className="text-xs text-[#8394a8] font-medium">/ 100</span>
                       </div>
                     );
                   })()}
@@ -2567,6 +2722,7 @@ function AppInner() {
                   isElectron={navigator.userAgent.toLowerCase().includes("electron")}
                   isMacOS={isMacOS}
                   hasAttemptedGenerate={hasAttemptedGenerate}
+                  hasAi={!!(openAiSession && openAiFeatures.enhancedAnalysis)}
                   onBulkReanalyze={async (indices, bpmHint) => {
                     let failCount = 0;
                     for (let n = 0; n < indices.length; n++) {
@@ -2617,10 +2773,10 @@ function AppInner() {
                 )}
 
                 {generatedSet.length >= 2 && (
-                  <div className="mt-4 rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
+                  <div className="mt-4 rounded-xl border border-[#2c2c42] bg-[#20202e] overflow-hidden">
                     <button
                       onClick={() => setEnergyCheckOpen(o => !o)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#1c1c2e] transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
                         {energyIssues.length > 0 ? (
@@ -2637,17 +2793,17 @@ function AppInner() {
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] font-bold">{energyIssues.length}</span>
                         )}
                       </div>
-                      <span className="text-[10px] text-[#475569]">{energyCheckOpen ? "▲" : "▼"}</span>
+                      <span className="text-[10px] text-[#8394a8]">{energyCheckOpen ? "▲" : "▼"}</span>
                     </button>
                     {energyCheckOpen && (
-                      <div className="border-t border-[#1e1e2e]">
+                      <div className="border-t border-[#2c2c42]">
                         {energyIssues.length === 0 ? (
                           <div className="flex items-center gap-2 px-4 py-3.5">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                            <span className="text-xs text-[#4b5568]">Energy curve followed — all tracks are within range.</span>
+                            <span className="text-xs text-[#8394a8]">Energy curve followed — all tracks are within range.</span>
                           </div>
                         ) : (
-                          <div className="divide-y divide-[#1e1e2e]">
+                          <div className="divide-y divide-[#2c2c42]">
                             {energyIssues.map((track) => {
                               const actual = Math.round(track.energy * 100);
                               const target = Math.round(track.targetEnergy * 100);
@@ -2658,7 +2814,7 @@ function AppInner() {
                                     <p className="text-xs font-medium text-[#e2e8f0] truncate">{track.artist} — {track.title}</p>
                                     <div className="flex items-center gap-2 mt-1.5">
                                       {/* Mini energy bar */}
-                                      <div className="relative rounded-full bg-[#1e1e2e]" style={{ width: 64, height: 4 }}>
+                                      <div className="relative rounded-full bg-[#2c2c42]" style={{ width: 64, height: 4 }}>
                                         <div
                                           className="absolute inset-y-0 left-0 rounded-full"
                                           style={{ width: `${track.energy * 100}%`, backgroundColor: tooLow ? '#f59e0b' : '#ef4444' }}
@@ -2668,8 +2824,8 @@ function AppInner() {
                                           style={{ left: `${track.targetEnergy * 100}%` }}
                                         />
                                       </div>
-                                      <span className="text-[10px] text-[#64748b] tabular-nums">
-                                        {actual}% <span className="text-[#334155]">→</span> {target}%
+                                      <span className="text-[10px] text-[#8394a8] tabular-nums">
+                                        {actual}% <span className="text-[#8394a8]">→</span> {target}%
                                         <span className={`ml-1 font-semibold ${tooLow ? 'text-[#f59e0b]' : 'text-[#ef4444]'}`}>
                                           {tooLow ? '↓ too low' : '↑ too high'}
                                         </span>
@@ -2678,7 +2834,7 @@ function AppInner() {
                                   </div>
                                   <button
                                     onClick={() => handleSwapTrack(track.slot)}
-                                    className="shrink-0 px-2.5 py-1 text-[10px] font-medium rounded border border-[#2a2a3a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#a78bfa] transition-colors cursor-pointer"
+                                    className="shrink-0 px-2.5 py-1 text-[10px] font-medium rounded border border-[#363650] text-[#8394a8] hover:border-[#7c3aed] hover:text-[#a78bfa] transition-colors cursor-pointer"
                                   >
                                     Swap
                                   </button>
@@ -2707,10 +2863,10 @@ function AppInner() {
                 )}
 
                 {crateGaps.length > 0 && (
-                  <div className="mt-4 rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
+                  <div className="mt-4 rounded-xl border border-[#2c2c42] bg-[#20202e] overflow-hidden">
                     <button
                       onClick={() => setCrateGapsOpen(o => !o)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#1c1c2e] transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2719,21 +2875,21 @@ function AppInner() {
                         <span className="text-xs font-semibold text-[#e2e8f0]">Crate Suggestions</span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#7c3aed]/10 border border-[#7c3aed]/30 text-[#a78bfa] font-bold">{crateGaps.length}</span>
                       </div>
-                      <span className="text-[10px] text-[#475569]">{crateGapsOpen ? "▲" : "▼"}</span>
+                      <span className="text-[10px] text-[#8394a8]">{crateGapsOpen ? "▲" : "▼"}</span>
                     </button>
                     {crateGapsOpen && (
-                      <div className="border-t border-[#1e1e2e] divide-y divide-[#1e1e2e]">
+                      <div className="border-t border-[#2c2c42] divide-y divide-[#2c2c42]">
                         {crateGaps.map((gap, idx) => (
                           <div key={idx} className="px-4 py-3 flex flex-col gap-1.5">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-[10px] text-[#475569] tabular-nums">
+                              <span className="text-[10px] text-[#8394a8] tabular-nums">
                                 Slot {Math.round(gap.setPosition * (generatedSet.length - 1)) + 1} of {generatedSet.length}
                               </span>
                               <div className="flex items-center gap-1">
                                 {gap.camelotNeeded.slice(0, 4).map(k => (
-                                  <span key={k} className="text-[10px] px-1 py-0.5 rounded bg-[#1e1e2e] text-[#94a3b8] font-mono">{k}</span>
+                                  <span key={k} className="text-[10px] px-1 py-0.5 rounded bg-[#2c2c42] text-[#a6b5c8] font-mono">{k}</span>
                                 ))}
-                                <span className="text-[10px] text-[#475569] ml-1">{gap.bpmRange.min}–{gap.bpmRange.max} BPM</span>
+                                <span className="text-[10px] text-[#8394a8] ml-1">{gap.bpmRange.min}–{gap.bpmRange.max} BPM</span>
                               </div>
                             </div>
                             <p className="text-xs text-[#a78bfa] font-mono select-all">{gap.suggestedSearch}</p>
@@ -2817,7 +2973,7 @@ function AppInner() {
       {activeTab === "Imports" && (
         <main className="px-4 py-6 overflow-y-auto flex-1 max-w-3xl mx-auto w-full">
           {/* Import input */}
-          <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-5">
+          <div className="mb-6 rounded-xl border border-[#2c2c42] bg-[#20202e] p-5">
             <div className="flex items-center gap-2 mb-3">
               <SpotifyIcon size={16} className="text-[#1db954] shrink-0" />
               <h2 className="text-sm font-semibold text-[#e2e8f0]">
@@ -2836,7 +2992,7 @@ function AppInner() {
                   if (e.key === "Enter") handleImport();
                 }}
                 placeholder="Add playlist Spotify link"
-                className="flex-1 bg-[#0d0d14] border border-[#2a2a3a] rounded-lg px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#475569] focus:outline-none focus:border-[#7c3aed] transition-colors"
+                className="flex-1 bg-[#1c1c2e] border border-[#363650] rounded-lg px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#8394a8] focus:outline-none focus:border-[#7c3aed] transition-colors"
               />
               <button
                 onClick={handleImport}
@@ -2854,13 +3010,13 @@ function AppInner() {
                 disabled={
                   loadingSpotifyPlaylists || importStatus?.phase === "loading"
                 }
-                className="px-4 py-2 text-sm font-medium border border-[#2a2a3a] text-[#94a3b8] rounded-lg hover:text-[#e2e8f0] hover:border-[#7c3aed] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer whitespace-nowrap"
+                className="px-4 py-2 text-sm font-medium border border-[#363650] text-[#a6b5c8] rounded-lg hover:text-[#e2e8f0] hover:border-[#7c3aed] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer whitespace-nowrap"
               >
                 {loadingSpotifyPlaylists ? "Loading…" : "Browse my playlists"}
               </button>
             </div>
             {importStatus?.phase === "loading" && (
-              <p className="mt-2 text-xs text-[#94a3b8]">
+              <p className="mt-2 text-xs text-[#a6b5c8]">
                 {importStatus.total > 0
                   ? `Loading tracks… ${importStatus.loaded} / ${importStatus.total}`
                   : "Connecting to Spotify…"}
@@ -2869,7 +3025,7 @@ function AppInner() {
             {importStatus?.phase === "error" && (
               <p className="mt-2 text-xs text-red-400">
                 {importStatus.message}{" "}
-                <span className="text-[#94a3b8]">
+                <span className="text-[#a6b5c8]">
                   For Spotify integration support, contact us at{" "}
                   <a
                     href="mailto:obo_odedr@hotmail.com"
@@ -2887,7 +3043,7 @@ function AppInner() {
           {(() => {
             const spotifyImports = importHistory.filter(e => !e.playlistId.startsWith("local-"));
             return spotifyImports.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
+            <div className="flex flex-col items-center justify-center py-16 text-[#8394a8] gap-3">
               <span className="text-4xl">🎵</span>
               <p className="text-sm">
                 No playlists imported yet. Paste a Spotify playlist URL above.
@@ -2915,33 +3071,36 @@ function AppInner() {
                 const fuzzyCount = entry.tracks.filter(
                   (t) => t.inLibrary && t.matchConfidence === "partial",
                 ).length;
+                const missingCount = entry.tracks.filter(
+                  (t) => !t.inLibrary && !t.unavailable && t.spotifyId,
+                ).length;
 
                 return (
                   <div
                     key={entry.id}
-                    className="rounded-xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden"
+                    className="rounded-xl border border-[#2c2c42] bg-[#20202e] overflow-hidden"
                   >
                     <div className="flex items-center">
                       <button
                         onClick={() =>
                           setExpandedImportId(isExpanded ? null : entry.id)
                         }
-                        className="flex-1 min-w-0 flex items-center gap-3 px-5 py-4 text-left hover:bg-[#0d0d14] transition-colors cursor-pointer"
+                        className="flex-1 min-w-0 flex items-center gap-3 px-5 py-4 text-left hover:bg-[#1c1c2e] transition-colors cursor-pointer"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-semibold text-[#e2e8f0] truncate">
                             {entry.name}
                           </div>
-                          <div className="text-xs text-[#475569] mt-0.5">
+                          <div className="text-xs text-[#8394a8] mt-0.5">
                             {label}
                           </div>
                         </div>
                         <div className="shrink-0 flex items-center gap-3">
-                          <span className="text-xs text-[#94a3b8]">
+                          <span className="text-xs text-[#a6b5c8]">
                             <span className="text-[#7c3aed] font-medium">
                               {inLibraryCount}
                             </span>
-                            <span className="text-[#475569]">
+                            <span className="text-[#8394a8]">
                               {" "}
                               / {entry.tracks.length} in library
                             </span>
@@ -2954,7 +3113,7 @@ function AppInner() {
                               </span>
                             )}
                           </span>
-                          <span className="text-[#475569] text-xs">
+                          <span className="text-[#8394a8] text-xs">
                             {isExpanded ? "▲" : "▼"}
                           </span>
                         </div>
@@ -2968,7 +3127,7 @@ function AppInner() {
                             ? "No matched tracks to generate from"
                             : `Generate a set from ${inLibraryCount} matched track${inLibraryCount !== 1 ? "s" : ""}`
                         }
-                        className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#7c3aed] hover:text-[#a78bfa] disabled:hover:text-[#475569]"
+                        className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#7c3aed] hover:text-[#a78bfa] disabled:hover:text-[#8394a8]"
                       >
                         + Set
                       </button>
@@ -2981,13 +3140,24 @@ function AppInner() {
                       >
                         {spotifyGeneratingId === entry.id ? '…' : '⚡ Spotify'}
                       </button>
+                      {hasSpotifyCredentials && missingCount > 0 && (
+                        <button
+                          onClick={() => void handleExportMissingToSpotify(entry)}
+                          disabled={missingExportId === entry.id}
+                          aria-label={`Create Spotify playlist of ${missingCount} missing track${missingCount !== 1 ? 's' : ''}`}
+                          title={missingExportId === entry.id ? 'Creating playlist…' : `Create Spotify playlist of ${missingCount} missing track${missingCount !== 1 ? 's' : ''}`}
+                          className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-[#8394a8] hover:text-[#1db954]"
+                        >
+                          {missingExportId === entry.id ? '…' : `↑ ${missingCount} missing`}
+                        </button>
+                      )}
                       <a
                         href={`https://open.spotify.com/playlist/${entry.playlistId}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Open on Spotify"
                         title="Open on Spotify"
-                        className="shrink-0 px-2 py-4 flex items-center text-[#475569] hover:text-[#1db954] transition-colors"
+                        className="shrink-0 px-2 py-4 flex items-center text-[#8394a8] hover:text-[#1db954] transition-colors"
                       >
                         <SpotifyIcon size={14} />
                       </a>
@@ -2996,7 +3166,7 @@ function AppInner() {
                         disabled={inLibraryCount === 0}
                         aria-label="Export as M3U"
                         title="Export matched tracks as M3U"
-                        className="shrink-0 px-2 py-4 flex items-center transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] hover:text-[#a78bfa] disabled:hover:text-[#475569]"
+                        className="shrink-0 px-2 py-4 flex items-center transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-[#8394a8] hover:text-[#a78bfa] disabled:hover:text-[#8394a8]"
                       >
                         <M3UIcon size={14} className="opacity-70" />
                       </button>
@@ -3004,7 +3174,7 @@ function AppInner() {
                         onClick={() => void reloadEntry(entry)}
                         aria-label="Reload from Spotify"
                         title="Reload from Spotify"
-                        className="shrink-0 px-2 py-4 text-[#475569] hover:text-[#7c3aed] transition-colors cursor-pointer"
+                        className="shrink-0 px-2 py-4 text-[#8394a8] hover:text-[#7c3aed] transition-colors cursor-pointer"
                       >
                         ↻
                       </button>
@@ -3017,43 +3187,55 @@ function AppInner() {
                             setExpandedImportId(null);
                         }}
                         aria-label="Remove playlist"
-                        className="shrink-0 px-4 py-4 text-[#475569] hover:text-red-400 transition-colors cursor-pointer"
+                        className="shrink-0 px-4 py-4 text-[#8394a8] hover:text-red-400 transition-colors cursor-pointer"
                       >
                         ✕
                       </button>
                     </div>
 
+                    {missingExportResult?.entryId === entry.id && (
+                      <div className="px-5 py-2 text-xs flex items-center gap-2 bg-[#1a2e1e] text-green-400 border-t border-[#2c2c42]">
+                        <span>✓ Playlist created with {missingExportResult.count} track{missingExportResult.count !== 1 ? 's' : ''}.</span>
+                        <a href={missingExportResult.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-green-300">Open on Spotify</a>
+                      </div>
+                    )}
+                    {missingExportError?.entryId === entry.id && (
+                      <div className="px-5 py-2 text-xs text-red-400 bg-red-950/20 border-t border-[#2c2c42]">
+                        {missingExportError.message}
+                      </div>
+                    )}
+
                     {isExpanded && (
-                      <div className="border-t border-[#1e1e2e]">
+                      <div className="border-t border-[#2c2c42]">
                         <table className="w-full border-collapse">
                           <thead>
-                            <tr className="bg-[#0d0d14]">
-                              <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-10">
+                            <tr className="bg-[#1c1c2e]">
+                              <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#8394a8] uppercase tracking-wider w-10">
                                 #
                               </th>
-                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider">
+                              <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#8394a8] uppercase tracking-wider">
                                 Track
                               </th>
-                              <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#475569] uppercase tracking-wider w-8"></th>
+                              <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#8394a8] uppercase tracking-wider w-8"></th>
                             </tr>
                           </thead>
                           <tbody>
                             {entry.tracks.map((track, idx) => (
                               <tr
                                 key={`${track.spotifyId}-${idx}`}
-                                className={`group border-t border-[#1e1e2e] ${
+                                className={`group border-t border-[#2c2c42] ${
                                   track.unavailable
                                     ? "opacity-40"
                                     : !track.inLibrary
                                       ? "bg-red-950/20 hover:bg-red-950/30"
                                       : track.matchConfidence === "partial"
                                         ? "bg-yellow-950/20 hover:bg-yellow-950/30"
-                                        : "hover:bg-[#0d0d14]"
+                                        : "hover:bg-[#1c1c2e]"
                                 }`}
                               >
                                 <td className="py-2.5 pl-5 pr-2 w-10">
                                   <span
-                                    className={`group-hover:hidden text-xs tabular-nums ${!track.inLibrary ? "text-red-500/60" : track.matchConfidence === "partial" ? "text-yellow-500/60" : "text-[#475569]"}`}
+                                    className={`group-hover:hidden text-xs tabular-nums ${!track.inLibrary ? "text-red-500/60" : track.matchConfidence === "partial" ? "text-yellow-500/60" : "text-[#8394a8]"}`}
                                   >
                                     {idx + 1}
                                   </span>
@@ -3099,7 +3281,7 @@ function AppInner() {
                                 </td>
                                 <td className="py-2.5 px-2">
                                   <div
-                                    className={`text-sm ${track.unavailable ? "text-[#475569] italic" : !track.inLibrary ? "text-red-400" : track.matchConfidence === "partial" ? "text-yellow-300/90" : "text-[#22c55e]/90"}`}
+                                    className={`text-sm ${track.unavailable ? "text-[#8394a8] italic" : !track.inLibrary ? "text-red-400" : track.matchConfidence === "partial" ? "text-yellow-300/90" : "text-[#22c55e]/90"}`}
                                   >
                                     {track.title}
                                   </div>
@@ -3114,21 +3296,20 @@ function AppInner() {
                                     const pKey = `${entry.id}-${track.spotifyId}-${idx}-partial`;
                                     const guessed = findPartialMatchSong(track.spotifyId, track.title, track.artist, library);
                                     return (
-                                      <div className="relative inline-block mt-0.5">
+                                      <div className="relative inline-block mt-0.5" onMouseLeave={() => setPartialHoverKey(null)}>
                                         <button
                                           type="button"
                                           onMouseEnter={() => setPartialHoverKey(pKey)}
-                                          onMouseLeave={() => setPartialHoverKey(null)}
                                           className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-yellow-500/60 text-yellow-500/80 text-[9px] font-bold hover:border-yellow-400 hover:text-yellow-300 transition-colors cursor-default"
                                           title="Uncertain match — hover to see guessed track"
                                         >
                                           ?
                                         </button>
                                         {partialHoverKey === pKey && guessed && (
-                                          <div className="absolute left-5 top-0 z-50 w-56 bg-[#1a1a2e] border border-yellow-500/30 rounded-lg shadow-xl p-3 text-[11px]">
+                                          <div className="absolute left-5 top-0 z-50 w-56 bg-[#26263c] border border-yellow-500/30 rounded-lg shadow-xl p-3 text-[11px]">
                                             <div className="text-yellow-400/70 uppercase tracking-widest text-[9px] font-semibold mb-1.5">Guessed match</div>
                                             <div className="text-[#e2e8f0] font-medium leading-snug truncate">{guessed.title}</div>
-                                            <div className="text-[#94a3b8] truncate mb-2">{guessed.artist}</div>
+                                            <div className="text-[#a6b5c8] truncate mb-2">{guessed.artist}</div>
                                             <button
                                               type="button"
                                               onMouseDown={(e) => {
@@ -3225,7 +3406,7 @@ function AppInner() {
                                                       : key,
                                                   )
                                                 }
-                                                className="text-[#475569] hover:text-[#7c3aed] transition-colors cursor-pointer"
+                                                className="text-[#8394a8] hover:text-[#7c3aed] transition-colors cursor-pointer"
                                                 title="Find this track"
                                               >
                                                 <svg
@@ -3275,8 +3456,8 @@ function AppInner() {
                                                 </svg>
                                               </button>
                                               {openStoreLinkKey === key && (
-                                                <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-lg overflow-hidden">
-                                                  <div className="px-4 py-2 text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1e1e2e]">
+                                                <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[160px] rounded-md border border-[#363650] bg-[#20202e] shadow-lg overflow-hidden">
+                                                  <div className="px-4 py-2 text-[10px] text-[#8394a8] uppercase tracking-wider border-b border-[#2c2c42]">
                                                     Find on…
                                                   </div>
                                                   <a
@@ -3286,7 +3467,7 @@ function AppInner() {
                                                     onClick={() =>
                                                       setOpenStoreLinkKey(null)
                                                     }
-                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                                                   >
                                                     <img
                                                       src="https://www.google.com/s2/favicons?domain=beatport.com&sz=16"
@@ -3304,7 +3485,7 @@ function AppInner() {
                                                     onClick={() =>
                                                       setOpenStoreLinkKey(null)
                                                     }
-                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
                                                   >
                                                     <img
                                                       src="https://www.google.com/s2/favicons?domain=bandcamp.com&sz=16"
@@ -3322,7 +3503,7 @@ function AppInner() {
                                                     onClick={() =>
                                                       setOpenStoreLinkKey(null)
                                                     }
-                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#94a3b8] hover:bg-[#1a1a2e] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#1e1e2e]"
+                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
                                                   >
                                                     <img
                                                       src="https://www.google.com/s2/favicons?domain=traxsource.com&sz=16"
@@ -3356,7 +3537,7 @@ function AppInner() {
                                                     setOpenStoreLinkKey(null);
                                                   }
                                                 }}
-                                                className={`transition-colors cursor-pointer ${isSearchOpen ? "text-[#7c3aed]" : "text-[#475569] hover:text-[#7c3aed]"}`}
+                                                className={`transition-colors cursor-pointer ${isSearchOpen ? "text-[#7c3aed]" : "text-[#8394a8] hover:text-[#7c3aed]"}`}
                                                 title="Search in library"
                                                 aria-label="Search in library"
                                               >
@@ -3385,7 +3566,7 @@ function AppInner() {
                                                 </svg>
                                               </button>
                                               {isSearchOpen && (
-                                                <div className="absolute right-0 bottom-full mb-1 z-20 w-64 rounded-md border border-[#2a2a3a] bg-[#12121a] shadow-xl overflow-hidden">
+                                                <div className="absolute right-0 bottom-full mb-1 z-20 w-64 rounded-md border border-[#363650] bg-[#20202e] shadow-xl overflow-hidden">
                                                   <input
                                                     autoFocus
                                                     type="text"
@@ -3402,7 +3583,7 @@ function AppInner() {
                                                       }
                                                     }}
                                                     placeholder="Search library…"
-                                                    className="w-full bg-transparent px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#475569] focus:outline-none border-b border-[#1e1e2e]"
+                                                    className="w-full bg-transparent px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#8394a8] focus:outline-none border-b border-[#2c2c42]"
                                                   />
                                                   {searchResults.length > 0 ? (
                                                     <div className="max-h-48 overflow-y-auto">
@@ -3448,12 +3629,12 @@ function AppInner() {
                                                                 "",
                                                               );
                                                             }}
-                                                            className="w-full text-left px-3 py-2 text-xs hover:bg-[#1a1a2e] transition-colors border-t border-[#1e1e2e] first:border-t-0 cursor-pointer"
+                                                            className="w-full text-left px-3 py-2 text-xs hover:bg-[#26263c] transition-colors border-t border-[#2c2c42] first:border-t-0 cursor-pointer"
                                                           >
                                                             <div className="text-[#e2e8f0] truncate">
                                                               {song.title}
                                                             </div>
-                                                            <div className="text-[#475569] truncate">
+                                                            <div className="text-[#8394a8] truncate">
                                                               {song.artist}
                                                             </div>
                                                           </button>
@@ -3461,11 +3642,11 @@ function AppInner() {
                                                       )}
                                                     </div>
                                                   ) : manualMatchQuery.trim() ? (
-                                                    <div className="px-3 py-2.5 text-xs text-[#475569]">
+                                                    <div className="px-3 py-2.5 text-xs text-[#8394a8]">
                                                       No results
                                                     </div>
                                                   ) : (
-                                                    <div className="px-3 py-2.5 text-xs text-[#475569]">
+                                                    <div className="px-3 py-2.5 text-xs text-[#8394a8]">
                                                       Type to search your
                                                       library…
                                                     </div>
@@ -3473,6 +3654,33 @@ function AppInner() {
                                                 </div>
                                               )}
                                             </div>
+                                            {/* Copy Spotify link button — red tracks only */}
+                                            {!track.inLibrary && track.spotifyId && (
+                                              <button
+                                                onClick={() => {
+                                                  void navigator.clipboard.writeText(
+                                                    `https://open.spotify.com/track/${track.spotifyId}`
+                                                  ).then(() => {
+                                                    setCopiedLinkKey(key);
+                                                    setTimeout(() => setCopiedLinkKey(k => k === key ? null : k), 1500);
+                                                  });
+                                                }}
+                                                className="text-[#8394a8] hover:text-[#1db954] transition-colors cursor-pointer flex-shrink-0"
+                                                title="Copy Spotify link"
+                                                aria-label="Copy Spotify link"
+                                              >
+                                                {copiedLinkKey === key ? (
+                                                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1db954" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polyline points="20 6 9 17 4 12"/>
+                                                  </svg>
+                                                ) : (
+                                                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                                  </svg>
+                                                )}
+                                              </button>
+                                            )}
                                           </div>
                                         );
                                       })()}
@@ -3495,50 +3703,65 @@ function AppInner() {
       {spotifyPlaylistPicker && (
         <div
           className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-          onClick={() => setSpotifyPlaylistPicker(null)}
+          onClick={() => { setSpotifyPlaylistPicker(null); setSpotifyPickerSearch(""); }}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#12121a] flex flex-col max-h-[70vh]"
+            className="w-full max-w-md rounded-xl border border-[#363650] bg-[#20202e] flex flex-col max-h-[70vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e2e] shrink-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#2c2c42] shrink-0">
               <h3 className="text-sm font-semibold text-[#e2e8f0]">
                 Your Spotify Playlists
               </h3>
               <button
-                className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
-                onClick={() => setSpotifyPlaylistPicker(null)}
+                className="text-xs text-[#a6b5c8] hover:text-[#e2e8f0] cursor-pointer"
+                onClick={() => { setSpotifyPlaylistPicker(null); setSpotifyPickerSearch(""); }}
               >
                 Close
               </button>
             </div>
+            <div className="px-3 py-2 border-b border-[#2c2c42] shrink-0">
+              <input
+                autoFocus
+                type="text"
+                value={spotifyPickerSearch}
+                onChange={(e) => setSpotifyPickerSearch(e.target.value)}
+                placeholder="Search playlists…"
+                className="w-full bg-[#26263c] border border-[#363650] rounded-lg px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#7c3aed] transition-colors"
+              />
+            </div>
             <div className="overflow-y-auto flex-1">
-              {spotifyPlaylistPicker.length === 0 ? (
-                <p className="text-sm text-[#94a3b8] px-4 py-6 text-center">
-                  No playlists found.
-                </p>
-              ) : (
-                spotifyPlaylistPicker.map((pl) => (
+              {(() => {
+                const q = spotifyPickerSearch.trim().toLowerCase();
+                const filtered = q
+                  ? spotifyPlaylistPicker.filter((pl) => pl.name.toLowerCase().includes(q))
+                  : spotifyPlaylistPicker;
+                if (filtered.length === 0) return (
+                  <p className="text-sm text-[#a6b5c8] px-4 py-6 text-center">
+                    {q ? "No playlists match your search." : "No playlists found."}
+                  </p>
+                );
+                return filtered.map((pl) => (
                   <button
                     key={pl.id}
                     onClick={() => {
                       setSpotifyPlaylistPicker(null);
+                      setSpotifyPickerSearch("");
                       void runImport(
                         `https://open.spotify.com/playlist/${pl.id}`,
                         library,
                       );
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 border-b border-[#1e1e2e] hover:bg-[#1a1a2e] transition-colors cursor-pointer text-left"
+                    className="w-full flex items-center gap-3 px-4 py-3 border-b border-[#2c2c42] hover:bg-[#26263c] transition-colors cursor-pointer text-left"
                   >
-                    {pl.imageUrl && (
+                    {pl.imageUrl ? (
                       <img
                         src={pl.imageUrl}
                         alt=""
                         className="w-9 h-9 rounded object-cover shrink-0"
                       />
-                    )}
-                    {!pl.imageUrl && (
-                      <div className="w-9 h-9 rounded bg-[#2a2a3a] shrink-0 flex items-center justify-center text-[#475569] text-xs">
+                    ) : (
+                      <div className="w-9 h-9 rounded bg-[#363650] shrink-0 flex items-center justify-center text-[#8394a8] text-xs">
                         ♪
                       </div>
                     )}
@@ -3546,13 +3769,13 @@ function AppInner() {
                       <div className="text-sm text-[#e2e8f0] truncate">
                         {pl.name}
                       </div>
-                      <div className="text-[11px] text-[#475569]">
+                      <div className="text-[11px] text-[#8394a8]">
                         {pl.trackCount} tracks
                       </div>
                     </div>
                   </button>
-                ))
-              )}
+                ));
+              })()}
             </div>
           </div>
         </div>
@@ -3569,18 +3792,18 @@ function AppInner() {
           }}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#12121a] p-4"
+            className="w-full max-w-md rounded-xl border border-[#363650] bg-[#20202e] p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-[#e2e8f0]">
                 Select Playlists{" "}
-                <span className="text-[11px] font-normal text-[#475569]">
+                <span className="text-[11px] font-normal text-[#8394a8]">
                   (up to {MAX_APPLE_PLAYLISTS})
                 </span>
               </h3>
               <button
-                className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] cursor-pointer"
+                className="text-xs text-[#a6b5c8] hover:text-[#e2e8f0] cursor-pointer"
                 onClick={() => {
                   setPlaylistPicker(null);
                   setPlaylistSearch("");
@@ -3598,11 +3821,11 @@ function AppInner() {
                 value={playlistSearch}
                 onChange={(e) => setPlaylistSearch(e.target.value)}
                 autoFocus
-                className="w-full mb-3 px-3 py-2 text-sm rounded-md border border-[#2a2a3a] bg-[#0d0d14] text-[#e2e8f0] placeholder-[#475569] focus:outline-none focus:border-[#7c3aed] transition-colors"
+                className="w-full mb-3 px-3 py-2 text-sm rounded-md border border-[#363650] bg-[#1c1c2e] text-[#e2e8f0] placeholder-[#8394a8] focus:outline-none focus:border-[#7c3aed] transition-colors"
               />
             )}
             {playlistPicker.length === 0 ? (
-              <p className="text-sm text-[#94a3b8] py-4">
+              <p className="text-sm text-[#a6b5c8] py-4">
                 No playlists found in Apple Music.
               </p>
             ) : (
@@ -3611,7 +3834,7 @@ function AppInner() {
                   p.name.toLowerCase().includes(playlistSearch.toLowerCase()),
                 );
                 return filtered.length === 0 ? (
-                  <p className="text-sm text-[#94a3b8] py-4 text-center">
+                  <p className="text-sm text-[#a6b5c8] py-4 text-center">
                     No playlists match "{playlistSearch}".
                   </p>
                 ) : (
@@ -3640,8 +3863,8 @@ function AppInner() {
                             style={{
                               cursor: imported ? "default" : "pointer",
                               opacity: !imported && !selected && atLimit ? 0.4 : 1,
-                              borderColor: selected ? "#7c3aed" : "#2a2a3a",
-                              backgroundColor: selected ? "#1a0d2e" : "#0d0d14",
+                              borderColor: selected ? "#7c3aed" : "#363650",
+                              backgroundColor: selected ? "#1a0d2e" : "#1c1c2e",
                             }}
                           >
                             <div className="flex items-center gap-2">
@@ -3649,14 +3872,14 @@ function AppInner() {
                               <span
                                 className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0"
                                 style={{
-                                  borderColor: imported ? "#374151" : selected ? "#7c3aed" : "#2a2a3a",
-                                  backgroundColor: imported ? "#1f2937" : selected ? "#7c3aed" : "transparent",
+                                  borderColor: imported ? "#424f63" : selected ? "#7c3aed" : "#363650",
+                                  backgroundColor: imported ? "#262f3e" : selected ? "#7c3aed" : "transparent",
                                 }}
                               >
                                 {(selected || imported) && (
                                   <svg
                                     className="w-2.5 h-2.5"
-                                    style={{ color: imported ? "#6b7280" : "#fff" }}
+                                    style={{ color: imported ? "#8292a4" : "#fff" }}
                                     fill="none"
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
@@ -3666,10 +3889,10 @@ function AppInner() {
                                   </svg>
                                 )}
                               </span>
-                              <span className="text-sm flex-1 min-w-0 truncate" style={{ color: imported ? "#6b7280" : "#e2e8f0" }}>
+                              <span className="text-sm flex-1 min-w-0 truncate" style={{ color: imported ? "#8292a4" : "#e2e8f0" }}>
                                 {playlist.name}
                               </span>
-                              <span className="text-[11px] flex-shrink-0" style={{ color: imported ? "#4b5563" : "#475569" }}>
+                              <span className="text-[11px] flex-shrink-0" style={{ color: imported ? "#58656e" : "#8394a8" }}>
                                 {imported ? "in library" : `${playlist.count} track${playlist.count === 1 ? "" : "s"}`}
                               </span>
                             </div>
@@ -3691,7 +3914,7 @@ function AppInner() {
                                   return next;
                                 });
                               }}
-                              className="w-full rounded px-2 py-1 text-xs bg-[#0d0d14] border border-[#2a2a3a] text-[#94a3b8] focus:outline-none focus:border-[#7c3aed]"
+                              className="w-full rounded px-2 py-1 text-xs bg-[#1c1c2e] border border-[#363650] text-[#a6b5c8] focus:outline-none focus:border-[#7c3aed]"
                             >
                               <option value="">BPM range: Auto-detect</option>
                               {GENRE_BPM_RANGES.map(({ keywords, range }) => {
@@ -3712,8 +3935,8 @@ function AppInner() {
               })()
             )}
             {playlistPicker.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-[#2a2a3a] flex items-center justify-between gap-2">
-                <span className="text-[11px] text-[#475569]">
+              <div className="mt-3 pt-3 border-t border-[#363650] flex items-center justify-between gap-2">
+                <span className="text-[11px] text-[#8394a8]">
                   {selectedPlaylists.length}/{MAX_APPLE_PLAYLISTS} selected
                 </span>
                 <button
@@ -3747,15 +3970,15 @@ function AppInner() {
           onClick={() => setSwapModal(null)}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-[#2a2a3a] bg-[#12121a] p-4"
+            className="w-full max-w-md rounded-xl border border-[#363650] bg-[#20202e] p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#64748b]">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8]">
                 Best replacements
               </h3>
               <button
-                className="text-xs text-[#475569] hover:text-[#e2e8f0] cursor-pointer transition-colors"
+                className="text-xs text-[#8394a8] hover:text-[#e2e8f0] cursor-pointer transition-colors"
                 onClick={() => setSwapModal(null)}
               >
                 ✕
@@ -3763,11 +3986,11 @@ function AppInner() {
             </div>
 
             {swapModal.suggestions.length === 0 ? (
-              <p className="text-sm text-[#475569] py-4 text-center">
+              <p className="text-sm text-[#8394a8] py-4 text-center">
                 No other tracks in your library fit this slot well enough.
               </p>
             ) : (
-              <div className="flex flex-col divide-y divide-[#1e1e2e]">
+              <div className="flex flex-col divide-y divide-[#2c2c42]">
                 {swapModal.suggestions.map(({ song, breakdown }) => {
                   const color = camelotColor(song.camelot);
                   const eDeltaSign = breakdown.energyDelta >= 0 ? "+" : "";
@@ -3781,14 +4004,14 @@ function AppInner() {
                     <button
                       key={song.file}
                       onClick={() => applySwapSuggestion(song)}
-                      className="w-full text-left px-2 py-3 hover:bg-[#0d0d14] transition-colors cursor-pointer group rounded-lg"
+                      className="w-full text-left px-2 py-3 hover:bg-[#1c1c2e] transition-colors cursor-pointer group rounded-lg"
                     >
                       <div className="flex items-start gap-2">
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-[#e2e8f0] truncate group-hover:text-white">
                             {song.title}
                           </div>
-                          <div className="text-xs text-[#64748b] truncate mt-0.5">
+                          <div className="text-xs text-[#8394a8] truncate mt-0.5">
                             {song.artist}
                           </div>
                         </div>
@@ -3810,7 +4033,7 @@ function AppInner() {
                       <div className="flex items-center gap-3 mt-1.5">
                         <span
                           className="text-[10px] tabular-nums"
-                          style={{ color: bpmOk ? "#475569" : "#f59e0b" }}
+                          style={{ color: bpmOk ? "#8394a8" : "#f59e0b" }}
                         >
                           {song.bpm > 0 ? `${Math.round(song.bpm)} BPM` : "—"}
                         </span>
@@ -3819,7 +4042,7 @@ function AppInner() {
                           style={{
                             color:
                               Math.abs(breakdown.energyDelta) <= 0.2
-                                ? "#475569"
+                                ? "#8394a8"
                                 : "#f59e0b",
                           }}
                         >
@@ -3877,7 +4100,7 @@ function AppInner() {
           }}
         >
           <div
-            className={`w-full rounded-xl border border-[#2a2a3a] bg-[#12121a] p-6 ${spotifyExportStatus.phase === "review" ? "max-w-lg" : "max-w-sm"}`}
+            className={`w-full rounded-xl border border-[#363650] bg-[#20202e] p-6 ${spotifyExportStatus.phase === "review" ? "max-w-lg" : "max-w-sm"}`}
             onClick={(e) => e.stopPropagation()}
           >
             {spotifyExportStatus.phase === "searching" && (
@@ -3886,7 +4109,7 @@ function AppInner() {
                   Searching Spotify…
                 </h3>
                 <div className="flex flex-col gap-3">
-                  <div className="w-full h-1.5 rounded-full bg-[#1f2937] overflow-hidden">
+                  <div className="w-full h-1.5 rounded-full bg-[#262f3e] overflow-hidden">
                     <div
                       className="h-full bg-[#1db954] transition-all"
                       style={{
@@ -3897,7 +4120,7 @@ function AppInner() {
                       }}
                     />
                   </div>
-                  <span className="text-xs text-[#94a3b8] tabular-nums">
+                  <span className="text-xs text-[#a6b5c8] tabular-nums">
                     {spotifyExportStatus.completed} /{" "}
                     {spotifyExportStatus.total} tracks
                   </span>
@@ -3911,7 +4134,7 @@ function AppInner() {
                   <h3 className="text-sm font-semibold text-[#e2e8f0]">
                     Review Spotify matches
                   </h3>
-                  <span className="text-xs text-[#475569]">
+                  <span className="text-xs text-[#8394a8]">
                     {
                       spotifyExportStatus.matches.filter(
                         (m) => m.match && !m.excluded,
@@ -3925,16 +4148,16 @@ function AppInner() {
                     ({ track, match, confidence, excluded }, idx) => (
                       <div
                         key={track.file}
-                        className={`grid grid-cols-[20px_1fr_1fr_24px] gap-2 items-start py-1.5 border-b border-[#1e1e2e] last:border-0 ${excluded ? "opacity-40" : ""}`}
+                        className={`grid grid-cols-[20px_1fr_1fr_24px] gap-2 items-start py-1.5 border-b border-[#2c2c42] last:border-0 ${excluded ? "opacity-40" : ""}`}
                       >
-                        <span className="text-[11px] text-[#475569] tabular-nums pt-0.5">
+                        <span className="text-[11px] text-[#8394a8] tabular-nums pt-0.5">
                           {idx + 1}
                         </span>
                         <div className="min-w-0">
                           <div className="text-xs text-[#e2e8f0] truncate">
                             {track.title}
                           </div>
-                          <div className="text-[11px] text-[#475569] truncate">
+                          <div className="text-[11px] text-[#8394a8] truncate">
                             {track.artist}
                           </div>
                         </div>
@@ -3946,7 +4169,7 @@ function AppInner() {
                               >
                                 {match.name}
                               </div>
-                              <div className="text-[11px] text-[#475569] truncate">
+                              <div className="text-[11px] text-[#8394a8] truncate">
                                 {match.artists}
                               </div>
                             </>
@@ -3961,7 +4184,7 @@ function AppInner() {
                           title={
                             excluded ? "Re-include" : "Remove from playlist"
                           }
-                          className="mt-0.5 text-[#475569] hover:text-[#e2e8f0] transition-colors cursor-pointer text-xs leading-none"
+                          className="mt-0.5 text-[#8394a8] hover:text-[#e2e8f0] transition-colors cursor-pointer text-xs leading-none"
                         >
                           {excluded ? "↩" : "✕"}
                         </button>
@@ -3986,7 +4209,7 @@ function AppInner() {
                   </button>
                   <button
                     onClick={() => setSpotifyExportStatus(null)}
-                    className="px-4 py-2 rounded-md border border-[#2a2a3a] text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-md border border-[#363650] text-sm text-[#a6b5c8] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -3995,7 +4218,7 @@ function AppInner() {
             )}
 
             {spotifyExportStatus.phase === "creating" && (
-              <p className="text-sm text-[#94a3b8]">Creating playlist…</p>
+              <p className="text-sm text-[#a6b5c8]">Creating playlist…</p>
             )}
 
             {spotifyExportStatus.phase === "done" && (
@@ -4003,7 +4226,7 @@ function AppInner() {
                 <h3 className="text-sm font-semibold text-[#e2e8f0] mb-3">
                   Playlist created
                 </h3>
-                <p className="text-sm text-[#94a3b8] mb-4">
+                <p className="text-sm text-[#a6b5c8] mb-4">
                   {spotifyExportStatus.matched} of {spotifyExportStatus.total}{" "}
                   tracks added.
                 </p>
@@ -4019,7 +4242,7 @@ function AppInner() {
                   </a>
                   <button
                     onClick={() => setSpotifyExportStatus(null)}
-                    className="px-4 py-2 rounded-md border border-[#2a2a3a] text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-md border border-[#363650] text-sm text-[#a6b5c8] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     Close
                   </button>
@@ -4032,12 +4255,12 @@ function AppInner() {
                 <h3 className="text-sm font-semibold text-[#ef4444] mb-3">
                   Export failed
                 </h3>
-                <p className="text-sm text-[#94a3b8] mb-4">
+                <p className="text-sm text-[#a6b5c8] mb-4">
                   {spotifyExportStatus.message}
                 </p>
                 <button
                   onClick={() => setSpotifyExportStatus(null)}
-                  className="px-4 py-2 rounded-md border border-[#2a2a3a] text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-md border border-[#363650] text-sm text-[#a6b5c8] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
                   Close
                 </button>
@@ -4047,7 +4270,7 @@ function AppInner() {
         </div>
       )}
 
-      {activeTab === "Gig Finder" && (
+      {activeTab === "Gig Finder" && openAiSession && openAiFeatures.gigFinder && (
         <main className="flex-1 overflow-hidden">
           <GigFinderTab />
         </main>
@@ -4057,7 +4280,8 @@ function AppInner() {
 
       <SettingsModal
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => { setSettingsOpen(false); setSettingsScrollTo(undefined) }}
+        scrollToSection={settingsScrollTo}
         onSaved={(folderChanged) => {
           loadSettings();
           if (folderChanged) {
@@ -4080,6 +4304,19 @@ function AppInner() {
         discogsCollection={discogsCollection}
         discogsSyncPhase={discogsSyncStatus.phase}
         discogsSyncMessage={discogsSyncStatus.phase === 'error' ? discogsSyncStatus.message : undefined}
+        openAiSession={openAiSession}
+        openAiFeatures={openAiFeatures}
+        onOpenAiFeaturesChange={(features) => {
+          if (features === null) {
+            clearOpenAiSession();
+            setOpenAiSession(null);
+            setOpenAiFeatures({ gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false });
+            localStorage.removeItem('djfriend-openai-features');
+          } else {
+            setOpenAiFeatures(features);
+            localStorage.setItem('djfriend-openai-features', JSON.stringify(features));
+          }
+        }}
       />
 
       {/* ── AI Set Planner slide-in panel ── */}

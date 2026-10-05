@@ -29,6 +29,7 @@ export interface Settings {
   discogsAccessToken?:        string
   discogsAccessTokenSecret?:  string
   discogsUsername?:           string
+  openAiClientId?:            string
 }
 
 export function readSettings(): Partial<Settings> {

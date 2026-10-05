@@ -335,6 +335,20 @@ export async function searchTracksOnSpotify(
   return results;
 }
 
+export async function createPlaylistFromSpotifyIds(
+  spotifyIds: string[],
+  playlistName: string,
+  token: string,
+): Promise<{ playlistUrl: string; count: number }> {
+  const userId = await getSpotifyUserId(token);
+  const playlist = await createPlaylist(userId, playlistName, token);
+  const uris = spotifyIds.map((id) => `spotify:track:${id}`);
+  if (uris.length > 0) {
+    await addTracksToPlaylist(playlist.id, uris, token);
+  }
+  return { playlistUrl: playlist.external_urls.spotify, count: uris.length };
+}
+
 export async function createPlaylistFromMatches(
   matches: SpotifyMatchResult[],
   playlistName: string,

@@ -44,7 +44,7 @@ export default function LibraryStatsBar({ songs, onScrollToMissing }: Props) {
   const pct = Math.round((stats.analyzed / songs.length) * 100);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 px-1 pb-3 border-b border-[#1e1e2e] mb-4">
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 px-1 pb-3 border-b border-[#2c2c42] mb-4">
       <Stat label="Tracks" value={songs.length.toLocaleString()} />
       <Stat label="Analyzed" value={`${pct}%`} dim={pct < 80} />
       {stats.bpmMin != null && (
@@ -74,8 +74,8 @@ export default function LibraryStatsBar({ songs, onScrollToMissing }: Props) {
 function Stat({ label, value, dim }: { label: string; value: string | number; dim?: boolean }) {
   return (
     <div className="flex items-baseline gap-1.5">
-      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#4b5568]">{label}</span>
-      <span className={`text-[11px] font-semibold tabular-nums ${dim ? "text-[#f59e0b]" : "text-[#94a3b8]"}`}>{value}</span>
+      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">{label}</span>
+      <span className={`text-[11px] font-semibold tabular-nums ${dim ? "text-[#f59e0b]" : "text-[#a6b5c8]"}`}>{value}</span>
     </div>
   );
 }

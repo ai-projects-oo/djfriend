@@ -1,8 +1,12 @@
 export interface ManualData {
-  bpm?:         number;
-  camelot?:     string;
-  comment?:     string;
-  matchedFile?: string;
+  bpm?:            number;
+  camelot?:        string;
+  comment?:        string;
+  matchedFile?:    string;
+  aiGenre?:        string;
+  aiBpmMin?:       number;
+  aiBpmMax?:       number;
+  aiTags?:         string[];
 }
 
 export const MANUAL_STORAGE_KEY   = 'djfriend-crates-manual';

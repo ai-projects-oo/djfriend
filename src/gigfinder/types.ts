@@ -52,7 +52,6 @@ export interface GigContact {
 
 export interface LeadScores {
   opportunity: number       // 0–100
-  musicFit: number          // 0–100
   contactability: number    // 0–100
   potentialValue: number    // 0–100
   locationFit: number       // 0–100
@@ -73,7 +72,6 @@ export interface GigLead {
   scores: LeadScores
   contact: GigContact
   whyItFits: string[]
-  suggestedMessage: string
   evidence: EvidenceItem[]
   status: LeadStatus
   discoveredAt: string
@@ -86,6 +84,8 @@ export interface GigLead {
 export interface GigFinderProfile {
   djName: string
   baseLocation: string
+  baseLat?: number
+  baseLon?: number
   searchRadiusKm: number
   maxTravelMinutes: number | null
   preferredAreas: string[]
@@ -93,10 +93,10 @@ export interface GigFinderProfile {
   preferredCharacteristics: string[]
   avoidGenres: string[]
   preferredVenueTypes: string[]
+  seedInstagramHandles?: string[]  // Known scene handles used to seed co-mention discovery
   minimumLeadScore: number
   scoringWeights: {
     opportunity: number
-    musicFit: number
     contactability: number
     potentialValue: number
     locationFit: number

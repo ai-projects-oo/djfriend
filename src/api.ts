@@ -19,7 +19,7 @@ import { upstashEnabled, redisGet, redisSet } from './upstash.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
-import { readProfile, writeProfile, readLeads, updateLead, deleteLead } from './gigfinder/store.js'
+import { readProfile, writeProfile, readLeads, writeLeads, updateLead, deleteLead } from './gigfinder/store.js'
 import { runGigFinderAgent } from './gigfinder/agent.js'
 
 
@@ -960,7 +960,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
       const defaultTip = { help: true, info: true, ai: true }
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip, hasDiscogsOAuth: !!(s.discogsAccessToken && s.discogsUsername), discogsUsername: s.discogsUsername ?? '', hasDiscogsConsumerKey: !!(s.discogsConsumerKey && s.discogsConsumerSecret), platform: process.platform }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip, hasDiscogsOAuth: !!(s.discogsAccessToken && s.discogsUsername), discogsUsername: s.discogsUsername ?? '', hasDiscogsConsumerKey: !!(s.discogsConsumerKey && s.discogsConsumerSecret), openAiClientId: s.openAiClientId ?? '', platform: process.platform }))
       return
     }
     if (req.method === 'POST') {
@@ -968,6 +968,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const updates: Partial<import('./settings.js').Settings> = {}
       if (typeof body.spotifyClientId === 'string') updates.spotifyClientId = body.spotifyClientId.trim()
       if (typeof body.spotifyClientSecret === 'string' && body.spotifyClientSecret.trim()) updates.spotifyClientSecret = body.spotifyClientSecret.trim()
+      if (typeof body.openAiClientId === 'string') updates.openAiClientId = body.openAiClientId.trim()
       if (typeof body.musicFolder === 'string') updates.musicFolder = body.musicFolder.trim()
       if (typeof body.rekordboxFolder === 'string') updates.rekordboxFolder = body.rekordboxFolder.trim()
       if (body.analysisMode === 'performance' || body.analysisMode === 'normal' || body.analysisMode === 'power-saving') updates.analysisMode = body.analysisMode as 'performance' | 'normal' | 'power-saving'
@@ -2134,6 +2135,11 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       res.end(JSON.stringify(readLeads()))
       return
     }
+    if (req.method === 'DELETE') {
+      writeLeads([])
+      res.end(JSON.stringify({ ok: true }))
+      return
+    }
     next()
   })
 
@@ -2161,22 +2167,54 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     next()
   })
 
+  let gigFinderRunning = false
+
   middlewares.use('/api/gigfinder/search', async (req, res, next) => {
     if (req.method !== 'GET') { next(); return }
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
 
+    if (gigFinderRunning) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'A search is already running. Please wait for it to finish before starting a new one.' })}\n\n`)
+      res.end()
+      return
+    }
+
+    gigFinderRunning = true
     const profile = readProfile()
     try {
       await runGigFinderAgent(profile, (event) => {
+        if (event.type === 'log') console.log(`[gigfinder] ${event.message}`)
+        else if (event.type === 'lead') console.log(`[gigfinder] ✓ lead: ${event.lead.venueName} (score ${event.lead.scores.overall})`)
+        else if (event.type === 'error') console.log(`[gigfinder] ✗ error: ${event.message}`)
+        else if (event.type === 'done') console.log(`[gigfinder] done — ${event.session.leadsQualified}/${event.session.leadsFound} qualified`)
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       })
     } catch (err) {
       res.write(`data: ${JSON.stringify({ type: 'error', message: err instanceof Error ? err.message : 'Agent error' })}\n\n`)
+    } finally {
+      gigFinderRunning = false
     }
     res.end()
   })
 
+  middlewares.use('/api/gigfinder/test-search', async (req, res, next) => {
+    if (req.method !== 'GET') { next(); return }
+    try {
+      const resp = await fetch('https://lite.duckduckgo.com/lite/?q=DJ+Tel+Aviv&kl=il-he', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
+      })
+      res.setHeader('Content-Type', 'application/json')
+      if (!resp.ok) {
+        res.end(JSON.stringify({ ok: false, error: `HTTP ${resp.status}` }))
+      } else {
+        res.end(JSON.stringify({ ok: true }))
+      }
+    } catch (err) {
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Network error' }))
+    }
+  })
 
 }

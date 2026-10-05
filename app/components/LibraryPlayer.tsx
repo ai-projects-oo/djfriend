@@ -24,8 +24,8 @@ function AlbumArtSmall({ filePath }: { filePath?: string }) {
 
   if (!src) {
     return (
-      <div className="w-10 h-10 rounded bg-[#1e1e2e] flex items-center justify-center flex-shrink-0">
-        <span className="text-sm text-[#374151]">♪</span>
+      <div className="w-10 h-10 rounded bg-[#2c2c42] flex items-center justify-center flex-shrink-0">
+        <span className="text-sm text-[#424f63]">♪</span>
       </div>
     );
   }
@@ -67,21 +67,21 @@ export default function LibraryPlayer({ song, onPrev, onNext }: Props) {
     el.currentTime = Number(e.target.value);
   }, []);
 
-  const cc = song ? camelotColor(song.camelot) : "#4b5568";
+  const cc = song ? camelotColor(song.camelot) : "#64748b";
 
   if (!song) {
     return (
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1e1e2e] bg-[#0d0d14] flex-shrink-0">
-        <div className="w-10 h-10 rounded bg-[#1e1e2e] flex items-center justify-center flex-shrink-0">
-          <span className="text-sm text-[#374151]">♪</span>
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2c2c42] bg-[#1c1c2e] flex-shrink-0">
+        <div className="w-10 h-10 rounded bg-[#2c2c42] flex items-center justify-center flex-shrink-0">
+          <span className="text-sm text-[#424f63]">♪</span>
         </div>
-        <span className="text-xs text-[#374151]">Double-click a track to play</span>
+        <span className="text-xs text-[#424f63]">Double-click a track to play</span>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#1e1e2e] bg-[#0d0d14] flex-shrink-0">
+    <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#2c2c42] bg-[#1c1c2e] flex-shrink-0">
       <audio
         ref={audioRef}
         onPlay={() => setPlaying(true)}
@@ -102,12 +102,12 @@ export default function LibraryPlayer({ song, onPrev, onNext }: Props) {
           {song.camelot && song.camelot !== "Unknown" && (
             <span className="text-[9px] font-semibold px-1 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: cc + "26", color: cc, border: `1px solid ${cc}55` }}>{song.camelot}</span>
           )}
-          {song.bpm > 0 && <span className="text-[10px] text-[#475569] flex-shrink-0 tabular-nums">{Math.round(song.bpm)}</span>}
+          {song.bpm > 0 && <span className="text-[10px] text-[#8394a8] flex-shrink-0 tabular-nums">{Math.round(song.bpm)}</span>}
         </div>
-        <p className="text-xs text-[#64748b] truncate">{song.artist}</p>
+        <p className="text-xs text-[#8394a8] truncate">{song.artist}</p>
         {/* Waveform / progress */}
         <div className="flex items-center gap-2 mt-1.5">
-          <span className="text-[10px] text-[#374151] tabular-nums w-6 flex-shrink-0">{fmt(current)}</span>
+          <span className="text-[10px] text-[#424f63] tabular-nums w-6 flex-shrink-0">{fmt(current)}</span>
           {song.waveform && song.waveform.length > 0 ? (
             <WaveformSeeker
               waveform={song.waveform}
@@ -134,13 +134,13 @@ export default function LibraryPlayer({ song, onPrev, onNext }: Props) {
               style={{ WebkitAppearance: "none" }}
             />
           )}
-          <span className="text-[10px] text-[#374151] tabular-nums w-6 flex-shrink-0 text-right">{fmt(duration)}</span>
+          <span className="text-[10px] text-[#424f63] tabular-nums w-6 flex-shrink-0 text-right">{fmt(duration)}</span>
         </div>
       </div>
 
       {/* Controls */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <button type="button" onClick={onPrev} disabled={!onPrev} className="w-7 h-7 flex items-center justify-center text-[#475569] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors">
+        <button type="button" onClick={onPrev} disabled={!onPrev} className="w-7 h-7 flex items-center justify-center text-[#8394a8] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
         </button>
         <button
@@ -158,7 +158,7 @@ export default function LibraryPlayer({ song, onPrev, onNext }: Props) {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: "1px" }}><path d="M8 5v14l11-7z"/></svg>
           )}
         </button>
-        <button type="button" onClick={onNext} disabled={!onNext} className="w-7 h-7 flex items-center justify-center text-[#475569] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors">
+        <button type="button" onClick={onNext} disabled={!onNext} className="w-7 h-7 flex items-center justify-center text-[#8394a8] hover:text-[#94a3b8] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm2.5-6 5.5 3.9V8.1L8.5 12zM16 6v12h2V6h-2z"/></svg>
         </button>
       </div>

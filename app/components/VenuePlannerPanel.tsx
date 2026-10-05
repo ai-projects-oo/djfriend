@@ -22,15 +22,15 @@ export default function VenuePlannerPanel({ onApply, venue, phase, onVenueChange
   }
 
   const selectClass =
-    'bg-[#0d0d14] border border-[#2a2a3a] text-[#e2e8f0] text-xs rounded px-2 py-1.5 focus:outline-none focus:border-[#7c3aed] cursor-pointer';
+    'bg-[#1c1c2e] border border-[#363650] text-[#e2e8f0] text-xs rounded px-2 py-1.5 focus:outline-none focus:border-[#7c3aed] cursor-pointer';
 
   return (
-    <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 flex flex-col gap-3">
+    <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4 flex flex-col gap-3">
 
       {/* Selectors */}
       <div className="flex gap-2">
         <div className="flex-1 flex flex-col gap-1">
-          <span className="text-[9px] uppercase tracking-widest text-[#4b5568]">Venue</span>
+          <span className="text-[9px] uppercase tracking-widest text-[#8394a8]">Venue</span>
           <select
             value={venue}
             onChange={e => { onVenueChange(e.target.value as VenueType); setApplied(false); }}
@@ -40,7 +40,7 @@ export default function VenuePlannerPanel({ onApply, venue, phase, onVenueChange
           </select>
         </div>
         <div className="flex-1 flex flex-col gap-1">
-          <span className="text-[9px] uppercase tracking-widest text-[#4b5568]">Phase</span>
+          <span className="text-[9px] uppercase tracking-widest text-[#8394a8]">Phase</span>
           <select
             value={phase}
             onChange={e => { onPhaseChange(e.target.value as SetPhase); setApplied(false); }}
@@ -52,22 +52,22 @@ export default function VenuePlannerPanel({ onApply, venue, phase, onVenueChange
       </div>
 
       {/* Plan preview */}
-      <div className="bg-[#0d0d14] rounded-lg p-3 flex flex-col gap-2 border border-[#1e1e2e]">
+      <div className="bg-[#1c1c2e] rounded-lg p-3 flex flex-col gap-2 border border-[#2c2c42]">
 
         {/* Mini curve preview */}
         <MiniCurve points={plan.curve} />
 
         {/* BPM row */}
-        <div className="flex items-center gap-2 text-[10px] text-[#64748b]">
-          <span className="text-[#475569]">BPM</span>
-          <span className="font-semibold text-[#94a3b8]">{plan.bpmMin}–{plan.bpmMax}</span>
-          <span className="text-[#2a2a3a]">·</span>
-          <span className="text-[#475569]">target</span>
-          <span className="font-semibold text-[#94a3b8]">{plan.bpmTarget}</span>
+        <div className="flex items-center gap-2 text-[10px] text-[#8394a8]">
+          <span className="text-[#64748b]">BPM</span>
+          <span className="font-semibold text-[#a6b5c8]">{plan.bpmMin}–{plan.bpmMax}</span>
+          <span className="text-[#6b7a94]">·</span>
+          <span className="text-[#64748b]">target</span>
+          <span className="font-semibold text-[#a6b5c8]">{plan.bpmTarget}</span>
         </div>
 
         {/* Weights row */}
-        <div className="flex items-center gap-2 text-[10px] text-[#475569] flex-wrap">
+        <div className="flex items-center gap-2 text-[10px] text-[#64748b] flex-wrap">
           <WeightChip label="Harmonic" value={plan.scoringWeights.harmonicWeight} />
           <WeightChip label="Energy"   value={plan.scoringWeights.energyWeight} />
           <WeightChip label="BPM"      value={plan.scoringWeights.bpmWeight} />
@@ -75,7 +75,7 @@ export default function VenuePlannerPanel({ onApply, venue, phase, onVenueChange
         </div>
 
         {/* Reasoning */}
-        <p className="text-[10px] text-[#64748b] italic leading-snug">{plan.reasoning}</p>
+        <p className="text-[10px] text-[#8394a8] italic leading-snug">{plan.reasoning}</p>
       </div>
 
       {/* Apply button */}
@@ -101,7 +101,7 @@ function WeightChip({ label, value }: { label: string; value: number }) {
       <span>{label}</span>
       <span
         className="font-semibold"
-        style={{ color: pct >= 40 ? '#a78bfa' : pct >= 25 ? '#7c3aed' : '#4b5568' }}
+        style={{ color: pct >= 40 ? '#a78bfa' : pct >= 25 ? '#7c3aed' : '#8394a8' }}
       >
         {pct}%
       </span>

@@ -9,6 +9,8 @@ const PROFILE_PATH = path.join(os.homedir(), 'Music', 'djfriend-gigfinder-profil
 const DEFAULT_PROFILE: GigFinderProfile = {
   djName: 'Oz',
   baseLocation: 'Petah Tikva, Israel',
+  baseLat: 32.089,
+  baseLon: 34.887,
   searchRadiusKm: 40,
   maxTravelMinutes: null,
   preferredAreas: ['Tel Aviv', 'Ramat Gan', 'Herzliya', 'Rishon LeZion'],
@@ -16,8 +18,8 @@ const DEFAULT_PROFILE: GigFinderProfile = {
   preferredCharacteristics: ['Underground', 'Non-mainstream', 'Disco influence', 'Funk', 'Soul', 'Groove-oriented', 'Dancefloor-focused', 'Sunset', 'Beach', 'Rooftop'],
   avoidGenres: ['Mainstream commercial EDM', 'Generic pop', 'Pure Latin/salsa'],
   preferredVenueTypes: ['Clubs', 'Rooftops', 'Beach venues', 'Restaurants', 'Hotels', 'Bars', 'Event venues', 'Festivals', 'Promoters', 'Party collectives'],
-  minimumLeadScore: 70,
-  scoringWeights: { opportunity: 0.25, musicFit: 0.25, contactability: 0.20, potentialValue: 0.15, locationFit: 0.15 },
+  minimumLeadScore: 45,
+  scoringWeights: { opportunity: 0.35, contactability: 0.30, potentialValue: 0.20, locationFit: 0.15 },
   locationFitThresholds: [
     { maxKm: 10, score: 100 },
     { maxKm: 20, score: 90 },
@@ -48,13 +50,18 @@ export function writeProfile(p: GigFinderProfile): void {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(p, null, 2), 'utf-8')
 }
 
+let _leadsCache: GigLead[] | null = null
+
 export function readLeads(): GigLead[] {
+  if (_leadsCache !== null) return _leadsCache
   try {
-    if (!fs.existsSync(LEADS_PATH)) return []
+    if (!fs.existsSync(LEADS_PATH)) { _leadsCache = []; return _leadsCache }
     const raw = JSON.parse(fs.readFileSync(LEADS_PATH, 'utf-8')) as GigLead[]
-    return Array.isArray(raw) ? raw : []
+    _leadsCache = Array.isArray(raw) ? raw : []
+    return _leadsCache
   } catch {
-    return []
+    _leadsCache = []
+    return _leadsCache
   }
 }
 
@@ -62,6 +69,7 @@ export function writeLeads(leads: GigLead[]): void {
   const dir = path.dirname(LEADS_PATH)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(LEADS_PATH, JSON.stringify(leads, null, 2), 'utf-8')
+  _leadsCache = leads
 }
 
 export function upsertLead(lead: GigLead): void {

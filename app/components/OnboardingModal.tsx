@@ -120,7 +120,7 @@ export default function OnboardingModal({
   const options = isElectron ? electronOptions : webOptions;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0d0d14]/95 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-[#1c1c2e]/95 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
@@ -128,9 +128,9 @@ export default function OnboardingModal({
             <img src="/icon.png" alt="" width={32} height={32} className="rounded-md" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             <span className="text-2xl font-bold tracking-tight text-[#e2e8f0]">DJFriend</span>
           </div>
-          <p className="text-[#64748b] text-sm leading-relaxed">
+          <p className="text-[#8394a8] text-sm leading-relaxed">
             Generate perfect DJ sets from your music library.<br/>
-            <span className="text-[#475569]">Start by loading your tracks.</span>
+            <span className="text-[#64748b]">Start by loading your tracks.</span>
           </p>
         </div>
 
@@ -146,15 +146,15 @@ export default function OnboardingModal({
               style={{
                 backgroundColor: opt.primary
                   ? hovered === opt.id ? '#7c3aed22' : '#7c3aed11'
-                  : hovered === opt.id ? '#1e1e2e' : '#12121a',
+                  : hovered === opt.id ? '#2c2c42' : '#20202e',
                 borderColor: opt.primary
                   ? hovered === opt.id ? '#7c3aed88' : '#7c3aed44'
-                  : hovered === opt.id ? '#2a2a3a' : '#1e1e2e',
+                  : hovered === opt.id ? '#363650' : '#2c2c42',
               }}
             >
               <span
                 className="flex-shrink-0"
-                style={{ color: opt.primary ? '#a78bfa' : '#475569' }}
+                style={{ color: opt.primary ? '#a78bfa' : '#64748b' }}
               >
                 {opt.icon}
               </span>
@@ -165,7 +165,7 @@ export default function OnboardingModal({
                 >
                   {opt.title}
                 </div>
-                <div className="text-[11px] text-[#334155] leading-snug mt-0.5">
+                <div className="text-[11px] text-[#6b7a94] leading-snug mt-0.5">
                   {opt.description}
                 </div>
               </div>
@@ -179,12 +179,12 @@ export default function OnboardingModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-[11px] text-[#334155] px-1">
+        <div className="flex items-center justify-between text-[11px] text-[#6b7a94] px-1">
           <div className="flex items-center gap-2">
             {!hasSpotifyCredentials && (
               <button
                 onClick={() => onOpenSettings()}
-                className="hover:text-[#64748b] transition-colors cursor-pointer"
+                className="hover:text-[#8394a8] transition-colors cursor-pointer"
               >
                 Connect Spotify →
               </button>
@@ -192,7 +192,7 @@ export default function OnboardingModal({
           </div>
           <button
             onClick={onDismiss}
-            className="hover:text-[#64748b] transition-colors cursor-pointer"
+            className="hover:text-[#8394a8] transition-colors cursor-pointer"
           >
             Skip for now →
           </button>

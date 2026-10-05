@@ -4,8 +4,9 @@ export interface ManualData {
   comment?:        string;
   matchedFile?:    string;
   aiGenre?:        string;
-  aiBpmMin?:       number;
-  aiBpmMax?:       number;
+  aiBpm?:          number;   // precise BPM when AI is confident
+  aiBpmMin?:       number;   // range low when uncertain
+  aiBpmMax?:       number;   // range high when uncertain
   aiTags?:         string[];
 }
 

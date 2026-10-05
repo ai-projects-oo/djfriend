@@ -565,7 +565,7 @@ export default function CratesTab({
       const raw = await chatComplete([
         {
           role: 'system',
-          content: `You are an expert DJ and vinyl record analyst with deep knowledge of dance music history. Given a release, estimate the BPM range as precisely as possible — use a range of 4–6 BPM for well-known genres (e.g. 124–128 for house, 130–135 for trance, 138–142 for techno). Only widen to 10+ BPM if the genre is genuinely varied. Return only valid JSON, no markdown.`,
+          content: `You are an expert DJ and vinyl record analyst with deep knowledge of dance music history. Given a release, provide the BPM as precisely as possible. If you know the exact BPM (e.g. a well-known track or a genre with a fixed tempo like 120 BPM italo disco, 128 BPM classic house), return "bpm": XX. Only use "bpmMin"/"bpmMax" range when you genuinely cannot determine a single BPM. Return only valid JSON, no markdown.`,
         },
         {
           role: 'user',
@@ -577,18 +577,20 @@ export default function CratesTab({
             `Discogs genres: ${genres || 'none'}`,
             `Styles: ${styles || 'none'}`,
             tracklist ? `Tracks: ${tracklist}` : '',
-          ].filter(Boolean).join('\n') + `\n\nReturn: {"genre":"specific sub-genre","bpmMin":XX,"bpmMax":YY,"confidence":"low|medium|high"}`,
+          ].filter(Boolean).join('\n') + `\n\nReturn one of:\n{"genre":"specific sub-genre","bpm":XX,"confidence":"high"}\nor if uncertain:\n{"genre":"specific sub-genre","bpmMin":XX,"bpmMax":YY,"confidence":"low|medium"}`,
         },
       ], { maxTokens: 80 });
-      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { genre?: string; bpmMin?: number; bpmMax?: number };
+      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { genre?: string; bpm?: number; bpmMin?: number; bpmMax?: number };
       const base = currentManualData ?? manualData;
       const next = new Map(base);
       const curr = next.get(release.releaseId) ?? {};
       next.set(release.releaseId, {
         ...curr,
         ...(parsed.genre ? { aiGenre: parsed.genre } : {}),
-        ...(parsed.bpmMin ? { aiBpmMin: parsed.bpmMin } : {}),
-        ...(parsed.bpmMax ? { aiBpmMax: parsed.bpmMax } : {}),
+        // Prefer precise BPM; clear the other fields so stale data doesn't linger
+        aiBpm:    parsed.bpm ?? undefined,
+        aiBpmMin: parsed.bpm ? undefined : (parsed.bpmMin ?? undefined),
+        aiBpmMax: parsed.bpm ? undefined : (parsed.bpmMax ?? undefined),
       });
       saveManualData(next);
       onManualDataChange(next);
@@ -671,7 +673,7 @@ export default function CratesTab({
     const unestimated = releases.filter(r => {
       const m = manualData.get(r.releaseId);
       const matched = !!(library.find(s => s.file === m?.matchedFile)) || r.inLibrary;
-      return !matched && !(m?.aiBpmMin && m?.aiBpmMax);
+      return !matched && !(m?.aiBpm || (m?.aiBpmMin && m?.aiBpmMax));
     });
     if (unestimated.length === 0) return;
     setAiEstimateAllProgress({ done: 0, total: unestimated.length });
@@ -788,7 +790,7 @@ export default function CratesTab({
             const unmatchedWithoutEstimate = releases.filter(r => {
               const m = manualData.get(r.releaseId);
               const matched = !!(library.find(s => s.file === m?.matchedFile)) || r.inLibrary;
-              return !matched && !(m?.aiBpmMin && m?.aiBpmMax);
+              return !matched && !(m?.aiBpm || (m?.aiBpmMin && m?.aiBpmMax));
             });
             if (unmatchedWithoutEstimate.length === 0) return null;
             return (
@@ -927,19 +929,25 @@ export default function CratesTab({
                   {/* AI estimate — unmatched releases only */}
                   {canEdit && hasAi && (() => {
                     const aiData = manual;
-                    const hasBpmEstimate = aiData?.aiBpmMin && aiData?.aiBpmMax;
+                    const hasExact  = !!aiData?.aiBpm;
+                    const hasRange  = !!(aiData?.aiBpmMin && aiData?.aiBpmMax);
+                    const hasAnyBpm = hasExact || hasRange;
                     const isRunning = aiLoading === release.releaseId;
                     return (
                       <div className="flex flex-col gap-1">
-                        {/* AI genre tag */}
                         {aiData?.aiGenre && (
                           <span className="self-start px-1.5 py-0.5 rounded text-[9px] font-medium bg-[#7c3aed]/20 text-[#c4b5fd] border border-[#7c3aed]/30">
                             ✦ {aiData.aiGenre}
                           </span>
                         )}
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {hasBpmEstimate && (
-                            <span className="text-[10px] text-white/60 tabular-nums font-mono">
+                          {hasExact && (
+                            <span className="text-[10px] text-white/80 tabular-nums font-mono font-semibold">
+                              {aiData!.aiBpm} BPM
+                            </span>
+                          )}
+                          {hasRange && (
+                            <span className="text-[10px] text-white/50 tabular-nums font-mono">
                               ~{aiData!.aiBpmMin}–{aiData!.aiBpmMax} BPM
                             </span>
                           )}
@@ -948,7 +956,7 @@ export default function CratesTab({
                             disabled={isRunning || !!aiEstimateAllProgress}
                             className="text-[9px] text-white/30 hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer"
                           >
-                            {isRunning ? '…' : hasBpmEstimate ? '↻' : '✦ AI estimate'}
+                            {isRunning ? '…' : hasAnyBpm ? '↻' : '✦ AI estimate'}
                           </button>
                         </div>
                       </div>

@@ -415,6 +415,7 @@ export default function CratesTab({
   const [releaseInfoCache, setReleaseInfoCache] = useState<Map<number, {
     label?: string; catno?: string; country?: string; notes?: string;
     formats?: string[]; year?: number;
+    tracklist?: Array<{ position: string; title: string; duration?: string }>;
   }>>(() => {
     try {
       const raw = localStorage.getItem('djfriend-release-info');
@@ -424,6 +425,7 @@ export default function CratesTab({
 
 
   const [aiLoading, setAiLoading] = useState<number | null>(null);
+  const [aiEstimateAllProgress, setAiEstimateAllProgress] = useState<{ done: number; total: number } | null>(null);
   const hasAi = !!getAccessToken();
 
   const commentRef = useRef<HTMLTextAreaElement>(null);
@@ -552,32 +554,52 @@ export default function CratesTab({
     saveVinylStore(next);
   }, [vinylStore]);
 
-  const aiEstimateVinyl = useCallback(async (release: DiscogsRelease) => {
+  const aiEstimateVinyl = useCallback(async (release: DiscogsRelease, currentManualData?: Map<number, import('../lib/discogsManualData').ManualData>) => {
     setAiLoading(release.releaseId);
     try {
-      const label = releaseInfoCache.get(release.releaseId)?.label ?? '';
+      const info = releaseInfoCache.get(release.releaseId);
+      const label = info?.label ?? '';
+      const tracklist = info?.tracklist?.map(t => t.title).filter(Boolean).slice(0, 8).join(', ') ?? '';
+      const styles = release.styles.join(', ');
+      const genres = release.genres.join(', ');
       const raw = await chatComplete([
-        { role: 'system', content: 'You are a vinyl record expert. Return only valid JSON, no markdown.' },
-        { role: 'user', content: `Estimate the genre and BPM range for this vinyl release.\nTitle: "${release.title}"\nArtist: ${release.artist}\nLabel: ${(label || release.genres[0]) ?? 'unknown'}\nYear: ${release.year ?? 'unknown'}\nDiscogs genres: ${[...release.genres, ...release.styles].join(', ') || 'none'}\n\nReturn: {"genre":"...","bpmMin":XX,"bpmMax":YY,"confidence":"low|medium|high"}` },
+        {
+          role: 'system',
+          content: `You are an expert DJ and vinyl record analyst with deep knowledge of dance music history. Given a release, estimate the BPM range as precisely as possible — use a range of 4–6 BPM for well-known genres (e.g. 124–128 for house, 130–135 for trance, 138–142 for techno). Only widen to 10+ BPM if the genre is genuinely varied. Return only valid JSON, no markdown.`,
+        },
+        {
+          role: 'user',
+          content: [
+            `Title: "${release.title}"`,
+            `Artist: ${release.artist}`,
+            `Label: ${label || 'unknown'}`,
+            `Year: ${release.year ?? 'unknown'}`,
+            `Discogs genres: ${genres || 'none'}`,
+            `Styles: ${styles || 'none'}`,
+            tracklist ? `Tracks: ${tracklist}` : '',
+          ].filter(Boolean).join('\n') + `\n\nReturn: {"genre":"specific sub-genre","bpmMin":XX,"bpmMax":YY,"confidence":"low|medium|high"}`,
+        },
       ], { maxTokens: 80 });
       const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { genre?: string; bpmMin?: number; bpmMax?: number };
-      const next = new Map(manualData);
+      const base = currentManualData ?? manualData;
+      const next = new Map(base);
       const curr = next.get(release.releaseId) ?? {};
-      const updates = {
+      next.set(release.releaseId, {
         ...curr,
         ...(parsed.genre ? { aiGenre: parsed.genre } : {}),
         ...(parsed.bpmMin ? { aiBpmMin: parsed.bpmMin } : {}),
         ...(parsed.bpmMax ? { aiBpmMax: parsed.bpmMax } : {}),
-      };
-      next.set(release.releaseId, updates);
+      });
       saveManualData(next);
       onManualDataChange(next);
       if (parsed.genre) {
         const existing = vinylStore[release.releaseId] ?? { tracks: [] };
         updateVinylData(release.releaseId, { ...existing, genre: parsed.genre });
       }
-    } catch { /* silent — AI estimate is best-effort */ }
+      return next;
+    } catch { /* silent — best-effort */ }
     finally { setAiLoading(null); }
+    return currentManualData ?? manualData;
   }, [manualData, onManualDataChange, releaseInfoCache, vinylStore, updateVinylData]);
 
   const aiSummarizeNotes = useCallback(async (releaseId: number, notes: string) => {
@@ -644,6 +666,23 @@ export default function CratesTab({
 
   const inLibraryCount    = collection?.releases.filter(r => r.inLibrary && r.matchConfidence === 'exact' && !rejectedMatches.has(r.releaseId)).length ?? 0;
   const notInLibraryCount = (collection?.releases.length ?? 0) - inLibraryCount;
+
+  const aiEstimateAll = useCallback(async () => {
+    const unestimated = releases.filter(r => {
+      const m = manualData.get(r.releaseId);
+      const matched = !!(library.find(s => s.file === m?.matchedFile)) || r.inLibrary;
+      return !matched && !(m?.aiBpmMin && m?.aiBpmMax);
+    });
+    if (unestimated.length === 0) return;
+    setAiEstimateAllProgress({ done: 0, total: unestimated.length });
+    let current = manualData;
+    for (let i = 0; i < unestimated.length; i++) {
+      current = await aiEstimateVinyl(unestimated[i], current) ?? current;
+      setAiEstimateAllProgress({ done: i + 1, total: unestimated.length });
+      if (i < unestimated.length - 1) await new Promise(res => setTimeout(res, 300));
+    }
+    setAiEstimateAllProgress(null);
+  }, [releases, manualData, library, aiEstimateVinyl]);
 
   if (!collection) {
     return (
@@ -744,6 +783,36 @@ export default function CratesTab({
             </svg>
             {syncPhase === 'syncing' ? 'Syncing…' : 'Sync'}
           </button>
+
+          {hasAi && (() => {
+            const unmatchedWithoutEstimate = releases.filter(r => {
+              const m = manualData.get(r.releaseId);
+              const matched = !!(library.find(s => s.file === m?.matchedFile)) || r.inLibrary;
+              return !matched && !(m?.aiBpmMin && m?.aiBpmMax);
+            });
+            if (unmatchedWithoutEstimate.length === 0) return null;
+            return (
+              <button
+                type="button"
+                onClick={() => void aiEstimateAll()}
+                disabled={!!aiEstimateAllProgress}
+                title={`Estimate BPM + genre for ${unmatchedWithoutEstimate.length} unmatched release${unmatchedWithoutEstimate.length !== 1 ? 's' : ''}`}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[11px] text-[#a78bfa] hover:border-[#7c3aed] hover:bg-[#7c3aed]/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              >
+                {aiEstimateAllProgress ? (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full border border-[#a78bfa]/40 border-t-[#a78bfa] animate-spin" />
+                    {aiEstimateAllProgress.done}/{aiEstimateAllProgress.total}
+                  </>
+                ) : (
+                  <>
+                    <span>✦</span>
+                    Estimate all ({unmatchedWithoutEstimate.length})
+                  </>
+                )}
+              </button>
+            );
+          })()}
         </div>
 
         {autoImportProgress && (
@@ -859,18 +928,29 @@ export default function CratesTab({
                   {canEdit && hasAi && (() => {
                     const aiData = manual;
                     const hasBpmEstimate = aiData?.aiBpmMin && aiData?.aiBpmMax;
+                    const isRunning = aiLoading === release.releaseId;
                     return (
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {hasBpmEstimate && (
-                          <span className="text-[10px] text-white/50 tabular-nums">~{aiData!.aiBpmMin}–{aiData!.aiBpmMax} BPM</span>
+                      <div className="flex flex-col gap-1">
+                        {/* AI genre tag */}
+                        {aiData?.aiGenre && (
+                          <span className="self-start px-1.5 py-0.5 rounded text-[9px] font-medium bg-[#7c3aed]/20 text-[#c4b5fd] border border-[#7c3aed]/30">
+                            ✦ {aiData.aiGenre}
+                          </span>
                         )}
-                        <button type="button"
-                          onClick={() => void aiEstimateVinyl(release)}
-                          disabled={aiLoading === release.releaseId}
-                          className="text-[9px] text-white/30 hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer"
-                        >
-                          {aiLoading === release.releaseId ? '…' : hasBpmEstimate ? '↻ Re-estimate' : '✦ AI estimate'}
-                        </button>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {hasBpmEstimate && (
+                            <span className="text-[10px] text-white/60 tabular-nums font-mono">
+                              ~{aiData!.aiBpmMin}–{aiData!.aiBpmMax} BPM
+                            </span>
+                          )}
+                          <button type="button"
+                            onClick={() => void aiEstimateVinyl(release)}
+                            disabled={isRunning || !!aiEstimateAllProgress}
+                            className="text-[9px] text-white/30 hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer"
+                          >
+                            {isRunning ? '…' : hasBpmEstimate ? '↻' : '✦ AI estimate'}
+                          </button>
+                        </div>
                       </div>
                     );
                   })()}

@@ -224,7 +224,6 @@ function AppInner() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsScrollTo, setSettingsScrollTo] = useState<string | undefined>()
-  const [mediaOpen, setMediaOpen] = useState(true);
   const [spotifyPickerSearch, setSpotifyPickerSearch] = useState("");
   const [reanalyzingLibrary, setReanalyzingLibrary] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
@@ -232,8 +231,8 @@ function AppInner() {
   const [hasRekordboxFolder, setHasRekordboxFolder] = useState(false);
   const [openAiSession, setOpenAiSession] = useState<OpenAiSession | null>(() => getStoredSession());
   const [openAiFeatures, setOpenAiFeatures] = useState<import('./components/SettingsModal').OpenAiFeatures>(() => {
-    try { return JSON.parse(localStorage.getItem('djfriend-openai-features') ?? 'null') ?? { gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false }; }
-    catch { return { gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false }; }
+    try { return JSON.parse(localStorage.getItem('djfriend-openai-features') ?? 'null') ?? { enhancedAnalysis: false, vinylAnalysis: false }; }
+    catch { return { enhancedAnalysis: false, vinylAnalysis: false }; }
   });
   const [hasDiscogsOAuth, setHasDiscogsOAuth] = useState(false);
   const [isMacOS, setIsMacOS] = useState(true); // assume macOS until settings load
@@ -1468,14 +1467,12 @@ function AppInner() {
         <div className="px-2 flex gap-1">
           {(["Set Generator", "Library", "History", "Crates", "Gig Finder"] as const).map((tab) => {
             const isCratesLocked = tab === "Crates" && !hasDiscogsOAuth;
-            const isGigFinderLocked = tab === "Gig Finder" && !(openAiSession && openAiFeatures.gigFinder);
-            const isLocked = isCratesLocked || isGigFinderLocked;
+            const isLocked = isCratesLocked;
             return (
               <button
                 key={tab}
                 onClick={() => {
                   if (isCratesLocked) { setSettingsOpen(true); return; }
-                  if (isGigFinderLocked) { setSettingsOpen(true); setSettingsScrollTo('settings-gig-finder'); return; }
                   setActiveTab(tab as typeof activeTab);
                 }}
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
@@ -1485,7 +1482,7 @@ function AppInner() {
                     ? "border-[#7c3aed] text-[#e2e8f0]"
                     : "border-transparent text-[#8394a8] hover:text-[#a6b5c8]"
                 }`}
-                title={isCratesLocked ? "Connect Discogs in Settings to unlock Crates" : isGigFinderLocked ? "Sign in with ChatGPT to unlock Gig Finder" : undefined}
+                title={isCratesLocked ? "Connect Discogs in Settings to unlock Crates" : undefined}
               >
                 <span className="flex items-center gap-1.5">
                   {tab === "Crates"
@@ -1673,141 +1670,88 @@ function AppInner() {
                       </div>
                     </div>
                   </div>
+                  {discogsCollection && (
+                    <div className="flex flex-col gap-2 pt-1 border-t border-[#2c2c42]">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8] whitespace-nowrap">Media</span>
+                        <div className="flex gap-1.5">
+                          {(['library', 'crates-first', 'crates'] as DiscogsMode[]).map(mode => {
+                            const labels: Record<DiscogsMode, string> = { library: 'Digital', 'crates-first': 'Mixed', crates: 'Vinyl' };
+                            const active = discogsMode === mode;
+                            return (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setDiscogsMode(mode)}
+                                title={{ library: 'Digital library only', 'crates-first': 'Vinyl + digital — vinyl scores higher', crates: 'Vinyl only' }[mode]}
+                                className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
+                                style={{
+                                  backgroundColor: active ? '#7c3aed' : 'transparent',
+                                  color: active ? '#fff' : '#8394a8',
+                                  borderColor: active ? '#7c3aed' : '#363650',
+                                }}
+                              >
+                                {labels[mode]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {(discogsMode === 'crates-first' || discogsMode === 'crates') && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8] whitespace-nowrap">Turntables</span>
+                          <div className="flex rounded overflow-hidden border border-[#363650] text-[10px] font-medium">
+                            {([0, 1, 2] as const).map(n => {
+                              const vinylCount = djSystem.channels.filter(k => k === 'vinyl').length;
+                              const active = vinylCount === n;
+                              return (
+                                <button key={n} type="button"
+                                  onClick={() => {
+                                    const chCount = djSystem.channels.length;
+                                    const next: ChannelKind[] = Array(chCount).fill('digital' as ChannelKind);
+                                    for (let i = 0; i < Math.min(n, chCount); i++) next[i] = 'vinyl';
+                                    handleSetDjSystem({ channels: next });
+                                  }}
+                                  className="px-2.5 py-1 transition-colors cursor-pointer"
+                                  style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#8394a8' }}
+                                >
+                                  {n}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {discogsMode === 'crates' && discogsDaysSince !== null && (
+                        <div className="flex items-center gap-2">
+                          <p className="text-[11px] text-[#8394a8]">
+                            <span className="text-[#a6b5c8] font-medium">{discogsCollection.totalReleases}</span> vinyl
+                            {discogsDaysSince >= 30 && <span className="text-[#f59e0b] ml-2">{discogsDaysSince}d since sync ⚠</span>}
+                          </p>
+                          <button
+                            type="button"
+                            title="Re-sync Discogs collection"
+                            onClick={() => void syncDiscogsCollection()}
+                            disabled={discogsSyncStatus.phase === 'syncing'}
+                            className="text-[10px] text-[#8394a8] hover:text-[#a78bfa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                            aria-label="Re-sync Discogs collection"
+                          >
+                            {discogsSyncStatus.phase === 'syncing' ? '…' : '↺'}
+                          </button>
+                        </div>
+                      )}
+                      {discogsMode === 'crates-first' && (
+                        <p className="text-[11px] text-[#8394a8]">
+                          <span className="text-[#a6b5c8] font-medium">{discogsCollection.totalReleases}</span> vinyl · <span className="text-[#a6b5c8] font-medium">{library.length}</span> digital
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {playlistFilterIds.length > 0 && playlistFilterFiles && (
                     <p className="text-[11px] text-[#8394a8]">
                       <span className="text-[#a6b5c8] font-medium">{playlistFilterFiles.size}</span> tracks in playlist
                     </p>
                   )}
-                </div>
-              )}
-
-              {/* Discogs filter — visible only when a collection has been synced */}
-              {discogsCollection && (
-                <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setMediaOpen(o => !o)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1c1c2e] transition-colors cursor-pointer"
-                  >
-                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Media</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`text-[#8394a8] transition-transform duration-150 ${mediaOpen ? 'rotate-180' : ''}`}>
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </button>
-                  {mediaOpen && <div className="border-t border-[#2c2c42] p-4 flex flex-col gap-2.5">
-                  <div className="flex rounded-lg border border-[#363650] overflow-hidden text-xs font-medium">
-                    {(['library', 'crates-first', 'crates'] as DiscogsMode[]).map((mode) => {
-                      const labels: Record<DiscogsMode, string> = { library: 'Library', 'crates-first': 'Mixed', crates: 'Vinyl' };
-                      const titles: Record<DiscogsMode, string> = { library: 'Digital library only', 'crates-first': 'Vinyl + digital — vinyl scores higher', crates: 'Vinyl only' };
-                      const active = discogsMode === mode;
-                      const isLibraryLoading = mode === 'library' && isInitializing;
-                      const icon = mode === 'library' ? (
-                        isInitializing ? (
-                          <div className="flex flex-col items-center gap-2">
-                            <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none">
-                              <circle cx="12" cy="12" r="10" stroke="#363650" strokeWidth="3"/>
-                              <path d="M12 2a10 10 0 0 1 10 10" stroke="#7c3aed" strokeWidth="3" strokeLinecap="round"/>
-                            </svg>
-                          </div>
-                        ) : (
-                          <img src="/icons/cdj.png" style={{ height: 48, width: 'auto' }} alt="CDJ" />
-                        )
-                      ) : mode === 'crates-first' ? (
-                        <div className="flex items-center gap-1">
-                          <img src="/icons/cdj.png" style={{ height: 36, width: 'auto' }} alt="CDJ" />
-                          <img src="/icons/turntable.png" style={{ height: 36, width: 'auto' }} alt="Turntable" />
-                        </div>
-                      ) : (
-                        <img src="/icons/turntable.png" style={{ height: 48, width: 'auto' }} alt="Turntable" />
-                      );
-                      return (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => setDiscogsMode(mode)}
-                          className="flex-1 cursor-pointer flex flex-col items-center transition-opacity"
-                          style={{ backgroundColor: 'transparent', opacity: active ? 1 : 0.3, borderBottom: active ? '2px solid #7c3aed' : '2px solid transparent', minHeight: 100 }}
-                          title={titles[mode]}
-                          aria-label={labels[mode]}
-                          onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.7'; }}
-                          onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.opacity = '0.3'; }}
-                        >
-                          <div className="flex-1 flex items-center justify-center">{icon}</div>
-                          <span className="text-[9px] font-medium pb-2" style={{ color: active ? '#e2e8f0' : '#8394a8' }}>
-                            {isLibraryLoading ? 'Loading…' : labels[mode]}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {discogsMode === 'library' && (
-                    <p className="text-[11px] text-[#8394a8]">
-                      {isInitializing
-                        ? <span className="text-[#8394a8]">Loading library…</span>
-                        : <><span className="text-[#a6b5c8] font-medium">{library.length}</span> tracks</>
-                      }
-                    </p>
-                  )}
-                  {discogsMode === 'crates' && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] text-[#8394a8]">
-                        <span className="text-[#a6b5c8] font-medium">{discogsCollection.totalReleases}</span> vinyl
-                      </p>
-                      <div className="flex items-center gap-2 ml-auto">
-                        {discogsDaysSince !== null && (
-                          <span className={`text-[10px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#8394a8]'}`}>
-                            {discogsDaysSince === 0 ? 'Synced today' : `Synced ${discogsDaysSince}d ago`}
-                            {discogsDaysSince >= 30 && ' ⚠'}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          title="Re-sync Discogs collection"
-                          onClick={() => void syncDiscogsCollection()}
-                          disabled={discogsSyncStatus.phase === 'syncing'}
-                          className="text-[10px] text-[#8394a8] hover:text-[#a78bfa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                          aria-label="Re-sync Discogs collection"
-                        >
-                          {discogsSyncStatus.phase === 'syncing' ? '…' : '↺'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {discogsMode === 'crates-first' && (
-                    <p className="text-[11px] text-[#8394a8]">
-                      <span className="text-[#a6b5c8] font-medium">{discogsCollection.totalReleases}</span> vinyl
-                      {' · '}
-                      <span className="text-[#a6b5c8] font-medium">{library.length}</span> digital
-                    </p>
-                  )}
-
-                  {/* DJ System */}
-                  <div className="pt-2 border-t border-[#2c2c42]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Turntables</span>
-                      <div className="flex rounded overflow-hidden border border-[#363650] text-[10px] font-medium">
-                        {([0, 1, 2] as const).map(n => {
-                          const vinylCount = djSystem.channels.filter(k => k === 'vinyl').length;
-                          const active = vinylCount === n;
-                          return (
-                            <button key={n} type="button"
-                              onClick={() => {
-                                const chCount = djSystem.channels.length;
-                                const next: ChannelKind[] = Array(chCount).fill('digital' as ChannelKind);
-                                for (let i = 0; i < Math.min(n, chCount); i++) next[i] = 'vinyl';
-                                handleSetDjSystem({ channels: next });
-                              }}
-                              className="px-2.5 py-1 transition-colors cursor-pointer"
-                              style={{ backgroundColor: active ? '#7c3aed' : 'transparent', color: active ? '#fff' : '#8394a8' }}
-                            >
-                              {n}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                  </div>}
                 </div>
               )}
 
@@ -4251,7 +4195,7 @@ function AppInner() {
         </div>
       )}
 
-      {activeTab === "Gig Finder" && openAiSession && openAiFeatures.gigFinder && (
+      {activeTab === "Gig Finder" && (
         <main className="flex-1 overflow-hidden">
           <GigFinderTab />
         </main>
@@ -4291,7 +4235,7 @@ function AppInner() {
           if (features === null) {
             clearOpenAiSession();
             setOpenAiSession(null);
-            setOpenAiFeatures({ gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false });
+            setOpenAiFeatures({ enhancedAnalysis: false, vinylAnalysis: false });
             localStorage.removeItem('djfriend-openai-features');
           } else {
             setOpenAiSession(getStoredSession());

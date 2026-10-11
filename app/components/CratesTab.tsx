@@ -558,7 +558,17 @@ export default function CratesTab({
   const aiEstimateVinyl = useCallback(async (release: DiscogsRelease, currentManualData?: Map<number, import('../lib/discogsManualData').ManualData>) => {
     setAiLoading(release.releaseId);
     try {
-      const info = releaseInfoCache.get(release.releaseId);
+      // Fetch tracklist if not yet cached (needed for per-track BPM lookup)
+      let info = releaseInfoCache.get(release.releaseId);
+      if (!info) {
+        try {
+          const r = await fetch(`/api/discogs/release-tracklist?id=${release.releaseId}`);
+          if (r.ok) {
+            info = await r.json() as typeof info;
+            setReleaseInfoCache(prev => new Map(prev).set(release.releaseId, info!));
+          }
+        } catch { /* ignore — will fall back to album-level search */ }
+      }
       const label = info?.label ?? '';
       const discogsTracklist = info?.tracklist?.filter(t => t.title?.trim()) ?? [];
       const styles = release.styles.join(', ');
@@ -567,26 +577,25 @@ export default function CratesTab({
       // 1. Look up real BPM per track from Spotify / MusicBrainz
       let overallBpm: number | null = null;
       let trackBpms: Array<{ position: string; title: string; bpm: number | null }> = [];
-      if (discogsTracklist.length > 0) {
-        try {
-          const r = await fetch('/api/discogs/bpm-lookup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              artist: release.artist,
-              tracks: discogsTracklist.map(t => ({ position: t.position ?? '', title: t.title })),
-            }),
-          });
-          if (r.ok) {
-            const d = await r.json() as {
-              trackBpms: Array<{ position: string; title: string; bpm: number | null }>;
-              overallBpm: number | null;
-            };
-            trackBpms = d.trackBpms ?? [];
-            overallBpm = d.overallBpm;
-          }
-        } catch { /* network issue — fall through to AI */ }
-      }
+      // If no tracklist available, search by album title as a single entry
+      const lookupTracks = discogsTracklist.length > 0
+        ? discogsTracklist.map(t => ({ position: t.position ?? '', title: t.title }))
+        : [{ position: '', title: release.title }];
+      try {
+        const r = await fetch('/api/discogs/bpm-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ artist: release.artist, tracks: lookupTracks }),
+        });
+        if (r.ok) {
+          const d = await r.json() as {
+            trackBpms: Array<{ position: string; title: string; bpm: number | null }>;
+            overallBpm: number | null;
+          };
+          trackBpms = d.trackBpms ?? [];
+          overallBpm = d.overallBpm;
+        }
+      } catch { /* network issue — fall through to AI */ }
 
       // 2. Use AI for genre (and BPM fallback if lookup found nothing)
       const raw = await chatComplete([
@@ -629,10 +638,23 @@ export default function CratesTab({
 
       // Merge per-track BPMs into the vinyl store
       const existing = vinylStore[release.releaseId] ?? { tracks: [] };
-      const updatedTracks = existing.tracks.map(t => {
+      let updatedTracks = existing.tracks.map(t => {
         const hit = trackBpms.find(tb => tb.position === t.position || (tb.title && tb.title === t.title));
-        return hit?.bpm ? { ...t, bpm: hit.bpm } : t;
+        // Per-track lookup hit, or fall back to overall BPM for tracks without one
+        const bpm = hit?.bpm ?? (effectiveBpm && !t.bpm ? effectiveBpm : t.bpm);
+        return bpm ? { ...t, bpm } : t;
       });
+      // If tracks list was empty, create entries from lookup results
+      if (updatedTracks.length === 0 && trackBpms.length > 0) {
+        updatedTracks = trackBpms
+          .filter(tb => tb.title)
+          .map(tb => ({
+            id: `${release.releaseId}-${tb.position || tb.title}-auto`,
+            position: tb.position || 'A',
+            title: tb.title,
+            ...(tb.bpm ? { bpm: tb.bpm } : effectiveBpm ? { bpm: effectiveBpm } : {}),
+          }));
+      }
       updateVinylData(release.releaseId, {
         ...existing,
         ...(parsed.genre ? { genre: parsed.genre } : {}),
@@ -645,7 +667,7 @@ export default function CratesTab({
       setAiEstimateError(msg);
       return null;
     } finally { setAiLoading(null); }
-  }, [manualData, onManualDataChange, releaseInfoCache, vinylStore, updateVinylData]);
+  }, [manualData, onManualDataChange, releaseInfoCache, setReleaseInfoCache, vinylStore, updateVinylData]);
 
   const aiSummarizeNotes = useCallback(async (releaseId: number, notes: string) => {
     if (!notes.trim()) return;

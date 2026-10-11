@@ -974,13 +974,18 @@ export default function CratesTab({
                               ~{aiData!.aiBpmMin}–{aiData!.aiBpmMax} BPM
                             </span>
                           )}
-                          <button type="button"
-                            onClick={() => void aiEstimateVinyl(release)}
-                            disabled={isRunning || !!aiEstimateAllProgress}
-                            className="text-[9px] text-white/30 hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer"
-                          >
-                            {isRunning ? '…' : hasAnyBpm ? '↻' : '✦ AI estimate'}
-                          </button>
+                          {!hasAnyBpm && (
+                            <button type="button"
+                              onClick={() => void aiEstimateVinyl(release)}
+                              disabled={isRunning || !!aiEstimateAllProgress}
+                              className="text-[9px] text-white/30 hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer"
+                            >
+                              {isRunning ? '…' : '✦ AI estimate'}
+                            </button>
+                          )}
+                          {hasAnyBpm && isRunning && (
+                            <span className="text-[9px] text-white/30">…</span>
+                          )}
                         </div>
                       </div>
                     );

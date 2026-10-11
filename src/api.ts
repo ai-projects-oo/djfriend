@@ -19,8 +19,8 @@ import { upstashEnabled, redisGet, redisSet } from './upstash.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
-import { readProfile, writeProfile, readLeads, writeLeads, updateLead, deleteLead } from './gigfinder/store.js'
-import { runGigFinderAgent } from './gigfinder/agent.js'
+import { readProfile, writeProfile, readLeads, writeLeads, upsertLead, updateLead, deleteLead } from './gigfinder/store.js'
+import type { GigLead } from './gigfinder/types.js'
 
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
@@ -2135,6 +2135,41 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       res.end(JSON.stringify(readLeads()))
       return
     }
+    if (req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req) as { venueName?: string; city?: string; country?: string; contact?: Partial<GigLead['contact']>; notes?: string }
+        if (!body.venueName || !body.city || !body.country) {
+          res.statusCode = 400; res.end(JSON.stringify({ error: 'venueName, city, and country are required' })); return
+        }
+        const newLead: GigLead = {
+          id: crypto.randomUUID(),
+          venueName: body.venueName,
+          city: body.city,
+          country: body.country,
+          locationClass: 'LOCAL',
+          opportunityDescription: '',
+          opportunityTier: 'POTENTIAL',
+          genre: { genres: [], confidence: 0, level: 'UNKNOWN', evidenceBullets: [], why: '' },
+          scores: { opportunity: 0, contactability: 0, potentialValue: 0, locationFit: 0, overall: 0 },
+          contact: {
+            confidence: 0,
+            whyThisContact: '',
+            bestChannel: '',
+            bestChannelReason: '',
+            ...(body.contact ?? {}),
+          },
+          whyItFits: [],
+          evidence: [],
+          status: 'NEW',
+          discoveredAt: new Date().toISOString(),
+          ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        }
+        upsertLead(newLead)
+        res.statusCode = 201
+        res.end(JSON.stringify(newLead))
+      } catch (err) { res.statusCode = 400; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Bad request' })) }
+      return
+    }
     if (req.method === 'DELETE') {
       writeLeads([])
       res.end(JSON.stringify({ ok: true }))
@@ -2167,54 +2202,42 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     next()
   })
 
-  let gigFinderRunning = false
-
-  middlewares.use('/api/gigfinder/search', async (req, res, next) => {
-    if (req.method !== 'GET') { next(); return }
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
-    res.setHeader('Connection', 'keep-alive')
-
-    if (gigFinderRunning) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: 'A search is already running. Please wait for it to finish before starting a new one.' })}\n\n`)
-      res.end()
-      return
+  middlewares.use('/api/ai/completions', async (req, res, next) => {
+    if (req.method === 'OPTIONS') {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      res.writeHead(204); res.end(); return
     }
-
-    gigFinderRunning = true
-    const profile = readProfile()
-    try {
-      await runGigFinderAgent(profile, (event) => {
-        if (event.type === 'log') console.log(`[gigfinder] ${event.message}`)
-        else if (event.type === 'lead') console.log(`[gigfinder] ✓ lead: ${event.lead.venueName} (score ${event.lead.scores.overall})`)
-        else if (event.type === 'error') console.log(`[gigfinder] ✗ error: ${event.message}`)
-        else if (event.type === 'done') console.log(`[gigfinder] done — ${event.session.leadsQualified}/${event.session.leadsFound} qualified`)
-        res.write(`data: ${JSON.stringify(event)}\n\n`)
-      })
-    } catch (err) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: err instanceof Error ? err.message : 'Agent error' })}\n\n`)
-    } finally {
-      gigFinderRunning = false
-    }
-    res.end()
-  })
-
-  middlewares.use('/api/gigfinder/test-search', async (req, res, next) => {
-    if (req.method !== 'GET') { next(); return }
-    try {
-      const resp = await fetch('https://lite.duckduckgo.com/lite/?q=DJ+Tel+Aviv&kl=il-he', {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
-      })
-      res.setHeader('Content-Type', 'application/json')
-      if (!resp.ok) {
-        res.end(JSON.stringify({ ok: false, error: `HTTP ${resp.status}` }))
-      } else {
-        res.end(JSON.stringify({ ok: true }))
+    if (req.method !== 'POST') { next(); return }
+    let body = ''
+    req.on('data', (chunk: Buffer) => { body += chunk.toString() })
+    req.on('end', async () => {
+      try {
+        const { messages, model, maxTokens, apiKey } = JSON.parse(body) as {
+          messages: unknown[]; model?: string; maxTokens?: number; apiKey: string
+        }
+        if (!apiKey) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: { message: 'No API key provided' } })); return
+        }
+        const r = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ model: model ?? 'gpt-4o-mini', messages, max_tokens: maxTokens ?? 400 }),
+        })
+        const data = await r.json()
+        if (!r.ok) {
+          console.error('[AI proxy] OpenAI error', r.status, JSON.stringify(data))
+        }
+        res.writeHead(r.status, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(data))
+      } catch (err) {
+        console.error('[AI proxy] error', err)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: { message: String(err) } }))
       }
-    } catch (err) {
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Network error' }))
-    }
+    })
   })
 
 }

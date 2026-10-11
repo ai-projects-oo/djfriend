@@ -19,18 +19,16 @@ export async function chatComplete(
   opts: { model?: string; maxTokens?: number } = {},
 ): Promise<string> {
   const token = getAccessToken();
-  if (!token) throw new Error('Not signed in with ChatGPT. Sign in via Settings.');
+  if (!token) throw new Error('No OpenAI API key set. Add one in Settings → AI.');
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await fetch('/api/ai/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: opts.model ?? 'gpt-4o-mini',
       messages,
-      max_tokens: opts.maxTokens ?? 400,
+      model: opts.model ?? 'gpt-4o-mini',
+      maxTokens: opts.maxTokens ?? 400,
+      apiKey: token,
     }),
   });
 

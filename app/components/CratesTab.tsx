@@ -426,6 +426,7 @@ export default function CratesTab({
 
   const [aiLoading, setAiLoading] = useState<number | null>(null);
   const [aiEstimateAllProgress, setAiEstimateAllProgress] = useState<{ done: number; total: number; errors?: number } | null>(null);
+  const [aiEstimateError, setAiEstimateError] = useState<string | null>(null);
   const hasAi = !!getAccessToken();
 
   const commentRef = useRef<HTMLTextAreaElement>(null);
@@ -600,7 +601,9 @@ export default function CratesTab({
       }
       return next;
     } catch (err) {
-      console.warn('[AI estimate] failed for', release.title, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[AI estimate] failed for', release.title, msg);
+      setAiEstimateError(msg);
       return null;
     } finally { setAiLoading(null); }
   }, [manualData, onManualDataChange, releaseInfoCache, vinylStore, updateVinylData]);
@@ -677,6 +680,7 @@ export default function CratesTab({
       return !matched && !(m?.aiBpm || (m?.aiBpmMin && m?.aiBpmMax));
     });
     if (unestimated.length === 0) return;
+    setAiEstimateError(null);
     setAiEstimateAllProgress({ done: 0, total: unestimated.length, errors: 0 });
     let current = new Map(manualData);
     let errors = 0;
@@ -829,6 +833,12 @@ export default function CratesTab({
             );
           })()}
         </div>
+
+        {aiEstimateError && (
+          <div className="text-[10px] text-[#ef4444] leading-tight">
+            AI error: {aiEstimateError}
+          </div>
+        )}
 
         {autoImportProgress && (
           <div className="flex items-center gap-2 text-[10px] text-[#8394a8]">

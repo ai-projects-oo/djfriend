@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { apiFetch } from '../lib/apiFetch'
 import { redirectToSpotifyLogin } from '../lib/spotifyExport'
 import { saveApiKey, clearSession as clearOpenAiKey } from '../lib/openAiAuth'
+import { validateApiKey } from '../lib/openAiApi'
 import type { OpenAiSession } from '../lib/openAiAuth'
 import { SpotifyIcon, RekordboxIcon } from './Icons'
 
@@ -108,6 +109,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [openAiKeyInput, setOpenAiKeyInput] = useState('')
   const [savingOpenAiKey, setSavingOpenAiKey] = useState(false)
   const [openAiKeySaved, setOpenAiKeySaved] = useState(false)
+  const [openAiKeyError, setOpenAiKeyError] = useState('')
   const [clearing, setClearing] = useState(false)
   const [clearConfirm, setClearConfirm] = useState(false)
   const [error, setError] = useState('')
@@ -203,16 +205,32 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     if (onSyncDiscogs) onSyncDiscogs()
   }
 
-  async function handleSaveOpenAiKey() {
-    if (!openAiKeyInput.trim()) return
+  async function handleSaveOpenAiKey(key = openAiKeyInput) {
+    const trimmed = key.trim()
+    if (!trimmed) return
     setSavingOpenAiKey(true)
+    setOpenAiKeyError('')
     try {
-      saveApiKey(openAiKeyInput.trim())
+      await validateApiKey(trimmed)
+      saveApiKey(trimmed)
       setOpenAiKeySaved(true)
       setOpenAiKeyInput('')
       onOpenAiFeaturesChange?.({ ...(openAiFeatures ?? { gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false }) })
+    } catch (e) {
+      setOpenAiKeyError(e instanceof Error ? e.message : 'Could not verify key.')
     } finally {
       setSavingOpenAiKey(false)
+    }
+  }
+
+  function handleOpenAiKeyPaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const pasted = e.clipboardData.getData('text').trim()
+    if (pasted.startsWith('sk-')) {
+      e.preventDefault()
+      setOpenAiKeyInput(pasted)
+      setOpenAiKeyError('')
+      setOpenAiKeySaved(false)
+      void handleSaveOpenAiKey(pasted)
     }
   }
 
@@ -509,20 +527,24 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                   <input
                     type="password"
                     value={openAiKeyInput}
-                    onChange={e => { setOpenAiKeyInput(e.target.value); setOpenAiKeySaved(false); }}
-                    placeholder="sk-…"
+                    onChange={e => { setOpenAiKeyInput(e.target.value); setOpenAiKeySaved(false); setOpenAiKeyError(''); }}
+                    onPaste={handleOpenAiKeyPaste}
+                    placeholder="Paste your sk-… key to connect instantly"
                     autoComplete="off"
-                    className="flex-1 px-3 py-1.5 text-xs rounded-md border border-[#363650] bg-[#1c1c2e] text-[#e2e8f0] placeholder:text-[#5a6a80] focus:outline-none focus:border-[#7c3aed] font-mono"
+                    className={`flex-1 px-3 py-1.5 text-xs rounded-md border bg-[#1c1c2e] text-[#e2e8f0] placeholder:text-[#5a6a80] focus:outline-none font-mono transition-colors ${openAiKeyError ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#363650] focus:border-[#7c3aed]'}`}
                   />
                   <button
                     type="button"
                     onClick={() => void handleSaveOpenAiKey()}
                     disabled={savingOpenAiKey || !openAiKeyInput.trim()}
-                    className="px-4 py-1.5 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer font-medium"
+                    className="px-4 py-1.5 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer font-medium whitespace-nowrap"
                   >
-                    {savingOpenAiKey ? 'Saving…' : openAiKeySaved ? '✓ Saved' : 'Save key'}
+                    {savingOpenAiKey ? 'Verifying…' : openAiKeySaved ? '✓ Connected' : 'Connect'}
                   </button>
                 </div>
+                {openAiKeyError && (
+                  <p className="mt-1.5 text-[11px] text-[#ef4444]">{openAiKeyError}</p>
+                )}
               </div>
             </div>
           ) : (

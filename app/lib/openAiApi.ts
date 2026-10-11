@@ -1,5 +1,14 @@
 import { getAccessToken } from './openAiAuth';
 
+export async function validateApiKey(key: string): Promise<void> {
+  const res = await fetch('https://api.openai.com/v1/models', {
+    headers: { Authorization: `Bearer ${key}` },
+  });
+  if (res.status === 401) throw new Error('Invalid API key — check you copied it correctly.');
+  if (res.status === 429) throw new Error('Rate limited — wait a moment and try again.');
+  if (!res.ok) throw new Error(`OpenAI returned ${res.status}. Check your key and try again.`);
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;

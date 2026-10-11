@@ -670,8 +670,9 @@ export default function CratesTab({
           const hit = trackBpms.find(
             tb => tb.position === t.position || (tb.title && t.title && tb.title === t.title),
           );
-          // Each track gets its own Spotify BPM; fall back to overall if not found
-          const bpm = hit?.bpm ?? (effectiveBpm ?? t.bpm);
+          // Only write BPM if Spotify confirmed this specific track — never propagate
+          // the overall median to tracks it didn't match (avoids all-same-BPM problem)
+          const bpm = hit?.bpm ?? t.bpm;
           return bpm ? { ...t, bpm } : t;
         });
         // If no tracks existed yet, create them from the lookup results
@@ -682,7 +683,7 @@ export default function CratesTab({
               id: `${release.releaseId}-${tb.position || tb.title}-auto`,
               position: tb.position || 'A',
               title: tb.title,
-              bpm: tb.bpm ?? effectiveBpm ?? undefined,
+              ...(tb.bpm ? { bpm: tb.bpm } : {}),
             }));
         }
         return {

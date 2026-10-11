@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type {
@@ -816,16 +816,110 @@ function ProfileModal({
   )
 }
 
+// ─── AddLeadModal ─────────────────────────────────────────────────────────────
+
+function AddLeadModal({ onAdd, onClose }: { onAdd: (lead: GigLead) => void; onClose: () => void }) {
+  const [venueName, setVenueName] = useState('')
+  const [city, setCity] = useState('')
+  const [country, setCountry] = useState('')
+  const [email, setEmail] = useState('')
+  const [instagram, setInstagram] = useState('')
+  const [notes, setNotes] = useState('')
+
+  const labelCls = 'text-[10px] uppercase tracking-widest text-[#8394a8] font-semibold block mb-1'
+  const inputCls = 'w-full bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#8394a8] focus:outline-none focus:border-[#7c3aed] transition-colors'
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!venueName.trim() || !city.trim() || !country.trim()) return
+    const lead: GigLead = {
+      id: crypto.randomUUID(),
+      venueName: venueName.trim(),
+      city: city.trim(),
+      country: country.trim(),
+      locationClass: 'LOCAL',
+      opportunityDescription: '',
+      opportunityTier: 'POTENTIAL',
+      genre: { genres: [], confidence: 0, level: 'UNKNOWN', evidenceBullets: [], why: '' },
+      scores: { opportunity: 0, contactability: 0, potentialValue: 0, locationFit: 0, overall: 0 },
+      contact: {
+        confidence: 0,
+        whyThisContact: '',
+        bestChannel: '',
+        bestChannelReason: '',
+        ...(email.trim() ? { email: email.trim() } : {}),
+        ...(instagram.trim() ? { instagram: instagram.trim().replace(/^@/, '') } : {}),
+      },
+      whyItFits: [],
+      evidence: [],
+      status: 'NEW',
+      discoveredAt: new Date().toISOString(),
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
+    }
+    onAdd(lead)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
+      <div className="bg-[#12121a] border border-[#2c2c42] rounded-xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-[#e2e8f0]">Add Lead</h2>
+          <button onClick={onClose} className="text-[#8394a8] hover:text-[#a6b5c8] cursor-pointer text-lg leading-none">✕</button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className={labelCls}>Venue Name <span className="text-[#ef4444]">*</span></label>
+            <input className={inputCls} value={venueName} onChange={e => setVenueName(e.target.value)} placeholder="e.g. Kuli Alma" required />
+          </div>
+          <div>
+            <label className={labelCls}>City <span className="text-[#ef4444]">*</span></label>
+            <input className={inputCls} value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Tel Aviv" required />
+          </div>
+          <div>
+            <label className={labelCls}>Country <span className="text-[#ef4444]">*</span></label>
+            <input className={inputCls} value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. Israel" required />
+          </div>
+          <div>
+            <label className={labelCls}>Email</label>
+            <input className={inputCls} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="booking@venue.com" />
+          </div>
+          <div>
+            <label className={labelCls}>Instagram</label>
+            <input className={inputCls} value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@venuehandle" />
+          </div>
+          <div>
+            <label className={labelCls}>Notes</label>
+            <textarea className={inputCls + ' resize-none'} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes…" rows={2} />
+          </div>
+          <div className="flex gap-2 justify-end pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs text-[#a6b5c8] border border-[#2c2c42] rounded-lg hover:border-[#363650] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-xs font-medium bg-[#7c3aed] text-white rounded-lg hover:bg-[#6d28d9] transition-colors cursor-pointer"
+            >
+              Add Lead
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── GigFinderTab ─────────────────────────────────────────────────────────────
 
 export default function GigFinderTab() {
   const [leads, setLeads] = useState<GigLead[]>([])
   const [profile, setProfile] = useState<GigFinderProfile | null>(null)
-  const [searching, setSearching] = useState(false)
-  const [logs, setLogs] = useState<string[]>([])
   const [showProfileModal, setShowProfileModal] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
   const [showRejected, setShowRejected] = useState(false)
-  const logBoxRef = useRef<HTMLDivElement>(null)
 
   // Fetch on mount
   useEffect(() => {
@@ -833,59 +927,21 @@ export default function GigFinderTab() {
     void apiFetch('/api/gigfinder/leads').then(r => r.json()).then(l => setLeads(l as GigLead[])).catch(() => {})
   }, [])
 
-  // Scroll log to bottom on new entries
-  useEffect(() => {
-    if (logBoxRef.current) {
-      logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight
-    }
-  }, [logs])
-
-  const startSearch = useCallback(() => {
-    const evtSource = new EventSource('/api/gigfinder/search')
-    evtSource.onmessage = (e) => {
-      try {
-        const event = JSON.parse(e.data as string) as { type: string; message?: string; lead?: GigLead; session?: unknown }
-        if (event.type === 'log' && event.message) {
-          setLogs(l => {
-            const next = [...l, event.message!]
-            return next.length > 300 ? next.slice(-300) : next
-          })
-        } else if (event.type === 'lead' && event.lead) {
-          setLeads(prev => {
-            const filtered = prev.filter(l => l.id !== event.lead!.id)
-            return [...filtered, event.lead!].sort((a, b) => b.scores.overall - a.scores.overall)
-          })
-        } else if (event.type === 'done') {
-          setLogs(l => [...l, 'Search complete.'])
-          evtSource.close()
-          setSearching(false)
-          // Refresh leads list
-          void apiFetch('/api/gigfinder/leads').then(r => r.json()).then(l => setLeads(l as GigLead[])).catch(() => {})
-        } else if (event.type === 'error') {
-          setLogs(l => [...l, `Error: ${event.message ?? 'Unknown error'}`])
-          evtSource.close()
-          setSearching(false)
-        }
-      } catch { /* skip malformed */ }
-    }
-    evtSource.onerror = () => {
-      setLogs(l => [...l, 'Connection error. Search stopped.'])
-      evtSource.close()
-      setSearching(false)
-    }
+  const handleAddLead = useCallback((lead: GigLead) => {
+    void apiFetch('/api/gigfinder/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lead),
+    }).then(r => r.json()).then(created => {
+      setLeads(prev => [created as GigLead, ...prev])
+      setShowAddModal(false)
+    }).catch(() => {})
   }, [])
-
-  const handleSearch = useCallback(() => {
-    if (searching) return
-    setSearching(true)
-    setLogs([])
-    startSearch()
-  }, [searching, startSearch])
 
   const handleClearLeads = useCallback(() => {
     if (!window.confirm('Clear all leads?')) return
     void apiFetch('/api/gigfinder/leads', { method: 'DELETE' })
-      .then(() => { setLeads([]); setLogs([]) })
+      .then(() => { setLeads([]) })
       .catch(() => {})
   }, [])
 
@@ -932,7 +988,7 @@ export default function GigFinderTab() {
               Edit Profile
             </button>
           )}
-          {leads.length > 0 && !searching && (
+          {leads.length > 0 && (
             <button
               onClick={handleClearLeads}
               aria-label="Clear all leads"
@@ -942,15 +998,11 @@ export default function GigFinderTab() {
             </button>
           )}
           <button
-            onClick={handleSearch}
-            disabled={searching}
-            aria-label="Find gigs"
-            className="flex items-center gap-2 px-4 py-1.5 text-xs font-medium bg-[#7c3aed] text-white rounded-lg hover:bg-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            onClick={() => setShowAddModal(true)}
+            aria-label="Add lead"
+            className="flex items-center gap-2 px-4 py-1.5 text-xs font-medium bg-[#7c3aed] text-white rounded-lg hover:bg-[#6d28d9] transition-colors cursor-pointer"
           >
-            {searching && (
-              <span className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-            )}
-            {searching ? 'Searching…' : 'Find Gigs'}
+            Add Lead
           </button>
         </div>
       </div>
@@ -968,21 +1020,6 @@ export default function GigFinderTab() {
               <span key={g} className="text-[#7c3aed]">{g}</span>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Progress log */}
-      {(searching || logs.length > 0) && (
-        <div
-          ref={logBoxRef}
-          className="mx-4 mt-3 bg-[#1c1c2e] border border-[#2c2c42] rounded-lg p-3 h-28 overflow-y-auto flex-shrink-0 font-mono"
-        >
-          {logs.map((l, i) => (
-            <div key={i} className="text-[10px] text-[#a6b5c8] leading-5">{l}</div>
-          ))}
-          {searching && (
-            <div className="text-[10px] text-[#7c3aed] animate-pulse">Searching…</div>
-          )}
         </div>
       )}
 
@@ -1007,11 +1044,11 @@ export default function GigFinderTab() {
           </label>
         </div>
 
-        {visibleLeads.length === 0 && !searching && (
+        {visibleLeads.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="text-4xl mb-3">🎯</div>
             <p className="text-sm text-[#8394a8] mb-1">No leads yet</p>
-            <p className="text-xs text-[#6b7a94]">Click "Find Gigs" to search for venues and events.<br/>Add your Brave Search API key in Settings first.</p>
+            <p className="text-xs text-[#6b7a94]">Add your first lead with the "Add Lead" button above.</p>
           </div>
         )}
 
@@ -1029,6 +1066,10 @@ export default function GigFinderTab() {
           onSave={handleSaveProfile}
           onClose={() => setShowProfileModal(false)}
         />
+      )}
+
+      {showAddModal && (
+        <AddLeadModal onAdd={handleAddLead} onClose={() => setShowAddModal(false)} />
       )}
     </div>
   )

@@ -60,7 +60,6 @@ function FolderInput({ label, labelIcon, value, status, placeholder, hint, onCha
 }
 
 export interface OpenAiFeatures {
-  gigFinder: boolean
   enhancedAnalysis: boolean
   vinylAnalysis: boolean
 }
@@ -215,7 +214,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       saveApiKey(trimmed)
       setOpenAiKeySaved(true)
       setOpenAiKeyInput('')
-      onOpenAiFeaturesChange?.({ ...(openAiFeatures ?? { gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false }) })
+      onOpenAiFeaturesChange?.({ ...(openAiFeatures ?? { enhancedAnalysis: false, vinylAnalysis: false }) })
     } catch (e) {
       setOpenAiKeyError(e instanceof Error ? e.message : 'Could not verify key.')
     } finally {
@@ -565,7 +564,6 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               <div className="flex flex-col gap-2">
                 <p className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8] mb-1">Enable features</p>
                 {([
-                  { key: 'gigFinder' as const, label: 'Gig Finder', desc: 'Discover venue leads and booking opportunities' },
                   { key: 'enhancedAnalysis' as const, label: 'Enhanced Track Analysis', desc: 'AI transition explanations, set narrative, and track finder' },
                   { key: 'vinylAnalysis' as const, label: 'Vinyl Auto-Detection', desc: 'Automatically detect genre and BPM for Discogs vinyl records' },
                 ] as const).map(({ key, label, desc }) => {
@@ -574,7 +572,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                     <button
                       key={key}
                       type="button"
-                      onClick={() => onOpenAiFeaturesChange?.({ ...(openAiFeatures ?? { gigFinder: false, enhancedAnalysis: false, vinylAnalysis: false }), [key]: !enabled })}
+                      onClick={() => onOpenAiFeaturesChange?.({ ...(openAiFeatures ?? { enhancedAnalysis: false, vinylAnalysis: false }), [key]: !enabled })}
                       className="flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer text-left"
                       style={{ borderColor: enabled ? '#7c3aed' : '#2c2c42', backgroundColor: enabled ? '#7c3aed1a' : 'transparent' }}
                     >

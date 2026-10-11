@@ -2240,4 +2240,84 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     })
   })
 
+  // BPM lookup: searches Spotify (then MusicBrainz) for each track individually.
+  // Returns per-track BPMs so the UI can populate VinylTrackEntry.bpm for every track.
+  middlewares.use('/api/discogs/bpm-lookup', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    let body = ''
+    req.on('data', (chunk: Buffer) => { body += chunk.toString() })
+    req.on('end', async () => {
+      try {
+        const { artist, tracks } = JSON.parse(body) as {
+          artist: string
+          tracks: Array<{ position: string; title: string }>
+        }
+        if (!tracks?.length) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ trackBpms: [], overallBpm: null, source: null })); return
+        }
+
+        type TrackResult = { position: string; title: string; bpm: number | null; source: string | null }
+        const results: TrackResult[] = tracks.map(t => ({ position: t.position, title: t.title, bpm: null, source: null }))
+
+        // --- Spotify ---
+        const { spotifyClientId, spotifyClientSecret } = readSettings()
+        if (spotifyClientId && spotifyClientSecret) {
+          try {
+            const token = await authenticate(spotifyClientId, spotifyClientSecret)
+            for (let i = 0; i < Math.min(tracks.length, 10); i++) {
+              const t = tracks[i]
+              if (!t.title?.trim()) continue
+              const match = await searchTrack(artist, t.title, token).catch(() => null)
+              if (!match?.spotifyId) continue
+              const feats = await getAudioFeatures(match.spotifyId, token).catch(() => null)
+              if (feats?.bpm && feats.bpm > 50) {
+                results[i].bpm = Math.round(feats.bpm)
+                results[i].source = 'spotify'
+              }
+            }
+          } catch (e) {
+            console.warn('[bpm-lookup] Spotify failed:', e)
+          }
+        }
+
+        // --- MusicBrainz fallback for tracks still missing ---
+        const MB_UA = 'DJFriend/1.0 (https://djfriend.app)'
+        const stillMissing = results.filter(r => r.bpm === null && r.title?.trim())
+        for (const entry of stillMissing.slice(0, 5)) {
+          try {
+            const q = encodeURIComponent(`recording:"${entry.title}" AND artist:"${artist}"`)
+            const r = await fetch(
+              `https://musicbrainz.org/ws/2/recording/?query=${q}&fmt=json&limit=3`,
+              { headers: { 'User-Agent': MB_UA, Accept: 'application/json' } },
+            )
+            if (!r.ok) break
+            const data = await r.json() as { recordings?: Array<{ bpm?: number; score?: number }> }
+            const hit = data.recordings?.find(rec => (rec.score ?? 0) >= 80 && rec.bpm && rec.bpm > 50)
+            if (hit?.bpm) {
+              entry.bpm = hit.bpm
+              entry.source = 'musicbrainz'
+            }
+            await new Promise(r => setTimeout(r, 1100)) // 1 req/sec rate limit
+          } catch (e) {
+            console.warn('[bpm-lookup] MusicBrainz failed for', entry.title, e)
+            break
+          }
+        }
+
+        const foundBpms = results.filter(r => r.bpm !== null).map(r => r.bpm as number)
+        const overallBpm = foundBpms.length > 0
+          ? Math.round([...foundBpms].sort((a, b) => a - b)[Math.floor(foundBpms.length / 2)])
+          : null
+        const source = results.find(r => r.source)?.source ?? null
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ trackBpms: results, overallBpm, source }))
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ trackBpms: [], overallBpm: null, source: null, error: String(err) }))
+      }
+    })
+  })
+
 }

@@ -560,13 +560,41 @@ export default function CratesTab({
     try {
       const info = releaseInfoCache.get(release.releaseId);
       const label = info?.label ?? '';
-      const tracklist = info?.tracklist?.map(t => t.title).filter(Boolean).slice(0, 8).join(', ') ?? '';
+      const discogsTracklist = info?.tracklist?.filter(t => t.title?.trim()) ?? [];
       const styles = release.styles.join(', ');
       const genres = release.genres.join(', ');
+
+      // 1. Look up real BPM per track from Spotify / MusicBrainz
+      let overallBpm: number | null = null;
+      let trackBpms: Array<{ position: string; title: string; bpm: number | null }> = [];
+      if (discogsTracklist.length > 0) {
+        try {
+          const r = await fetch('/api/discogs/bpm-lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              artist: release.artist,
+              tracks: discogsTracklist.map(t => ({ position: t.position ?? '', title: t.title })),
+            }),
+          });
+          if (r.ok) {
+            const d = await r.json() as {
+              trackBpms: Array<{ position: string; title: string; bpm: number | null }>;
+              overallBpm: number | null;
+            };
+            trackBpms = d.trackBpms ?? [];
+            overallBpm = d.overallBpm;
+          }
+        } catch { /* network issue — fall through to AI */ }
+      }
+
+      // 2. Use AI for genre (and BPM fallback if lookup found nothing)
       const raw = await chatComplete([
         {
           role: 'system',
-          content: `You are an expert DJ and vinyl record analyst with deep knowledge of dance music history. Given a release, provide the BPM as precisely as possible. If you know the exact BPM (e.g. a well-known track or a genre with a fixed tempo like 120 BPM italo disco, 128 BPM classic house), return "bpm": XX. Only use "bpmMin"/"bpmMax" range when you genuinely cannot determine a single BPM. Return only valid JSON, no markdown.`,
+          content: overallBpm
+            ? 'You are a DJ music tagger. Return only valid JSON, no markdown.'
+            : `You are an expert DJ and vinyl record analyst with deep knowledge of dance music history. Given a release, provide the BPM as precisely as possible. If you know the exact BPM return "bpm": XX. Only use "bpmMin"/"bpmMax" range when you genuinely cannot determine a single BPM. Return only valid JSON, no markdown.`,
         },
         {
           role: 'user',
@@ -577,28 +605,39 @@ export default function CratesTab({
             `Year: ${release.year ?? 'unknown'}`,
             `Discogs genres: ${genres || 'none'}`,
             `Styles: ${styles || 'none'}`,
-            tracklist ? `Tracks: ${tracklist}` : '',
-          ].filter(Boolean).join('\n') + `\n\nReturn one of:\n{"genre":"specific sub-genre","bpm":XX,"confidence":"high"}\nor if uncertain:\n{"genre":"specific sub-genre","bpmMin":XX,"bpmMax":YY,"confidence":"low|medium"}`,
+            discogsTracklist.length ? `Tracks: ${discogsTracklist.map(t => t.title).slice(0, 8).join(', ')}` : '',
+          ].filter(Boolean).join('\n') + (overallBpm
+            ? `\n\nReturn only: {"genre":"specific sub-genre"}`
+            : `\n\nReturn one of:\n{"genre":"specific sub-genre","bpm":XX,"confidence":"high"}\nor if uncertain:\n{"genre":"specific sub-genre","bpmMin":XX,"bpmMax":YY,"confidence":"low|medium"}`),
         },
-      ], { maxTokens: 80 });
+      ], { maxTokens: overallBpm ? 30 : 80 });
+
       const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { genre?: string; bpm?: number; bpmMin?: number; bpmMax?: number };
+      const effectiveBpm = overallBpm ?? parsed.bpm;
       const base = currentManualData ?? manualData;
       const next = new Map(base);
       const curr = next.get(release.releaseId) ?? {};
       next.set(release.releaseId, {
         ...curr,
         ...(parsed.genre ? { aiGenre: parsed.genre } : {}),
-        // Prefer precise BPM; clear the other fields so stale data doesn't linger
-        aiBpm:    parsed.bpm ?? undefined,
-        aiBpmMin: parsed.bpm ? undefined : (parsed.bpmMin ?? undefined),
-        aiBpmMax: parsed.bpm ? undefined : (parsed.bpmMax ?? undefined),
+        aiBpm:    effectiveBpm ?? undefined,
+        aiBpmMin: effectiveBpm ? undefined : (parsed.bpmMin ?? undefined),
+        aiBpmMax: effectiveBpm ? undefined : (parsed.bpmMax ?? undefined),
       });
       saveManualData(next);
       onManualDataChange(next);
-      if (parsed.genre) {
-        const existing = vinylStore[release.releaseId] ?? { tracks: [] };
-        updateVinylData(release.releaseId, { ...existing, genre: parsed.genre });
-      }
+
+      // Merge per-track BPMs into the vinyl store
+      const existing = vinylStore[release.releaseId] ?? { tracks: [] };
+      const updatedTracks = existing.tracks.map(t => {
+        const hit = trackBpms.find(tb => tb.position === t.position || (tb.title && tb.title === t.title));
+        return hit?.bpm ? { ...t, bpm: hit.bpm } : t;
+      });
+      updateVinylData(release.releaseId, {
+        ...existing,
+        ...(parsed.genre ? { genre: parsed.genre } : {}),
+        tracks: updatedTracks,
+      });
       return next;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

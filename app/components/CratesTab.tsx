@@ -555,6 +555,19 @@ export default function CratesTab({
     saveVinylStore(next);
   }, [vinylStore]);
 
+  // Functional update — always reads current store state, safe inside stale closures
+  const patchVinylRelease = useCallback((
+    releaseId: number,
+    transform: (existing: VinylReleaseData) => VinylReleaseData,
+  ) => {
+    setVinylStore(prev => {
+      const existing = prev[releaseId] ?? { tracks: [] };
+      const next = { ...prev, [releaseId]: transform(existing) };
+      saveVinylStore(next);
+      return next;
+    });
+  }, []);
+
   const clearAiEstimate = useCallback((releaseId: number) => {
     const next = new Map(manualData);
     const curr = next.get(releaseId) ?? {};
@@ -563,14 +576,11 @@ export default function CratesTab({
     next.set(releaseId, rest);
     saveManualData(next);
     onManualDataChange(next);
-    const existing = vinylStore[releaseId];
-    if (existing) {
-      updateVinylData(releaseId, {
-        ...existing,
-        tracks: existing.tracks.map(t => { const { bpm: _, ...r } = t; void _; return r; }),
-      });
-    }
-  }, [manualData, onManualDataChange, vinylStore, updateVinylData]);
+    patchVinylRelease(releaseId, existing => ({
+      ...existing,
+      tracks: existing.tracks.map(t => { const { bpm: _, ...r } = t; void _; return r; }),
+    }));
+  }, [manualData, onManualDataChange, patchVinylRelease]);
 
   const aiEstimateVinyl = useCallback(async (release: DiscogsRelease, currentManualData?: Map<number, import('../lib/discogsManualData').ManualData>) => {
     setAiLoading(release.releaseId);
@@ -653,29 +663,33 @@ export default function CratesTab({
       saveManualData(next);
       onManualDataChange(next);
 
-      // Merge per-track BPMs into the vinyl store
-      const existing = vinylStore[release.releaseId] ?? { tracks: [] };
-      let updatedTracks = existing.tracks.map(t => {
-        const hit = trackBpms.find(tb => tb.position === t.position || (tb.title && tb.title === t.title));
-        // Per-track lookup hit, or fall back to overall BPM for tracks without one
-        const bpm = hit?.bpm ?? (effectiveBpm && !t.bpm ? effectiveBpm : t.bpm);
-        return bpm ? { ...t, bpm } : t;
-      });
-      // If tracks list was empty, create entries from lookup results
-      if (updatedTracks.length === 0 && trackBpms.length > 0) {
-        updatedTracks = trackBpms
-          .filter(tb => tb.title)
-          .map(tb => ({
-            id: `${release.releaseId}-${tb.position || tb.title}-auto`,
-            position: tb.position || 'A',
-            title: tb.title,
-            ...(tb.bpm ? { bpm: tb.bpm } : effectiveBpm ? { bpm: effectiveBpm } : {}),
-          }));
-      }
-      updateVinylData(release.releaseId, {
-        ...existing,
-        ...(parsed.genre ? { genre: parsed.genre } : {}),
-        tracks: updatedTracks,
+      // Merge per-track BPMs using a functional update so we always read the
+      // latest vinyl store state — avoids stale-closure empty-track bugs.
+      patchVinylRelease(release.releaseId, existing => {
+        let updatedTracks = existing.tracks.map(t => {
+          const hit = trackBpms.find(
+            tb => tb.position === t.position || (tb.title && t.title && tb.title === t.title),
+          );
+          // Each track gets its own Spotify BPM; fall back to overall if not found
+          const bpm = hit?.bpm ?? (effectiveBpm ?? t.bpm);
+          return bpm ? { ...t, bpm } : t;
+        });
+        // If no tracks existed yet, create them from the lookup results
+        if (updatedTracks.length === 0 && trackBpms.length > 0) {
+          updatedTracks = trackBpms
+            .filter(tb => tb.title)
+            .map(tb => ({
+              id: `${release.releaseId}-${tb.position || tb.title}-auto`,
+              position: tb.position || 'A',
+              title: tb.title,
+              bpm: tb.bpm ?? effectiveBpm ?? undefined,
+            }));
+        }
+        return {
+          ...existing,
+          ...(parsed.genre ? { genre: parsed.genre } : {}),
+          tracks: updatedTracks,
+        };
       });
       return next;
     } catch (err) {
@@ -684,7 +698,7 @@ export default function CratesTab({
       setAiEstimateError(msg);
       return null;
     } finally { setAiLoading(null); }
-  }, [manualData, onManualDataChange, releaseInfoCache, setReleaseInfoCache, vinylStore, updateVinylData]);
+  }, [manualData, onManualDataChange, releaseInfoCache, setReleaseInfoCache, patchVinylRelease]);
 
   const aiSummarizeNotes = useCallback(async (releaseId: number, notes: string) => {
     if (!notes.trim()) return;
@@ -1049,10 +1063,20 @@ export default function CratesTab({
                   {/* AI estimate — unmatched releases only */}
                   {canEdit && hasAi && (() => {
                     const aiData = manual;
-                    const hasExact  = !!aiData?.aiBpm;
-                    const hasRange  = !!(aiData?.aiBpmMin && aiData?.aiBpmMax);
-                    const hasAnyBpm = hasExact || hasRange;
                     const isRunning = aiLoading === release.releaseId;
+
+                    // Compute BPM display from per-track data (preferred) or release-level fallback
+                    const trackBpmValues = (vinylStore[release.releaseId]?.tracks ?? [])
+                      .map(t => t.bpm).filter((b): b is number => !!b);
+                    const minTBpm = trackBpmValues.length ? Math.min(...trackBpmValues) : null;
+                    const maxTBpm = trackBpmValues.length ? Math.max(...trackBpmValues) : null;
+                    const bpmLabel = minTBpm !== null
+                      ? (minTBpm !== maxTBpm ? `${minTBpm}–${maxTBpm} BPM` : `${minTBpm} BPM`)
+                      : aiData?.aiBpm ? `${aiData.aiBpm} BPM`
+                      : (aiData?.aiBpmMin && aiData?.aiBpmMax) ? `~${aiData.aiBpmMin}–${aiData.aiBpmMax} BPM`
+                      : null;
+                    const hasAnyBpm = !!bpmLabel || !!(aiData?.aiBpmMin && aiData?.aiBpmMax);
+
                     return (
                       <div className="flex flex-col gap-1">
                         {aiData?.aiGenre && (
@@ -1061,14 +1085,9 @@ export default function CratesTab({
                           </span>
                         )}
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {hasExact && (
+                          {bpmLabel && (
                             <span className="text-[10px] text-white/80 tabular-nums font-mono font-semibold">
-                              {aiData!.aiBpm} BPM
-                            </span>
-                          )}
-                          {hasRange && (
-                            <span className="text-[10px] text-white/50 tabular-nums font-mono">
-                              ~{aiData!.aiBpmMin}–{aiData!.aiBpmMax} BPM
+                              {bpmLabel}
                             </span>
                           )}
                           {!hasAnyBpm && (

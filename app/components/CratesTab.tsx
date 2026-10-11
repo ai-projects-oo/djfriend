@@ -555,6 +555,23 @@ export default function CratesTab({
     saveVinylStore(next);
   }, [vinylStore]);
 
+  const clearAiEstimate = useCallback((releaseId: number) => {
+    const next = new Map(manualData);
+    const curr = next.get(releaseId) ?? {};
+    const { aiBpm: _, aiBpmMin: __, aiBpmMax: ___, aiGenre: ____, ...rest } = curr;
+    void _; void __; void ___; void ____;
+    next.set(releaseId, rest);
+    saveManualData(next);
+    onManualDataChange(next);
+    const existing = vinylStore[releaseId];
+    if (existing) {
+      updateVinylData(releaseId, {
+        ...existing,
+        tracks: existing.tracks.map(t => { const { bpm: _, ...r } = t; void _; return r; }),
+      });
+    }
+  }, [manualData, onManualDataChange, vinylStore, updateVinylData]);
+
   const aiEstimateVinyl = useCallback(async (release: DiscogsRelease, currentManualData?: Map<number, import('../lib/discogsManualData').ManualData>) => {
     setAiLoading(release.releaseId);
     try {
@@ -1046,6 +1063,16 @@ export default function CratesTab({
                           )}
                           {hasAnyBpm && isRunning && (
                             <span className="text-[9px] text-white/30">…</span>
+                          )}
+                          {(hasAnyBpm || aiData?.aiGenre) && !isRunning && (
+                            <button
+                              type="button"
+                              onClick={() => clearAiEstimate(release.releaseId)}
+                              title="Clear AI estimation"
+                              className="text-[9px] text-white/20 hover:text-[#ef4444] transition-colors cursor-pointer ml-auto"
+                            >
+                              ✕ clear
+                            </button>
                           )}
                         </div>
                       </div>

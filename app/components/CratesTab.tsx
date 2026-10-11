@@ -884,30 +884,49 @@ export default function CratesTab({
               const matched = !!(library.find(s => s.file === m?.matchedFile)) || r.inLibrary;
               return !matched && !(m?.aiBpm || (m?.aiBpmMin && m?.aiBpmMax));
             });
-            if (unmatchedWithoutEstimate.length === 0) return null;
+            const estimatedCount = releases.filter(r => {
+              const m = manualData.get(r.releaseId);
+              return !!(m?.aiBpm || (m?.aiBpmMin && m?.aiBpmMax) || m?.aiGenre);
+            }).length;
             return (
-              <button
-                type="button"
-                onClick={() => void aiEstimateAll()}
-                disabled={!!aiEstimateAllProgress}
-                title={`Estimate BPM + genre for ${unmatchedWithoutEstimate.length} unmatched release${unmatchedWithoutEstimate.length !== 1 ? 's' : ''}`}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[11px] text-[#a78bfa] hover:border-[#7c3aed] hover:bg-[#7c3aed]/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-              >
-                {aiEstimateAllProgress ? (
-                  <>
-                    <span className="w-2.5 h-2.5 rounded-full border border-[#a78bfa]/40 border-t-[#a78bfa] animate-spin" />
-                    {aiEstimateAllProgress.done}/{aiEstimateAllProgress.total}
-                    {!!aiEstimateAllProgress.errors && (
-                      <span className="text-[#ef4444]"> {aiEstimateAllProgress.errors} failed</span>
+              <>
+                {unmatchedWithoutEstimate.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void aiEstimateAll()}
+                    disabled={!!aiEstimateAllProgress}
+                    title={`Estimate BPM + genre for ${unmatchedWithoutEstimate.length} unmatched release${unmatchedWithoutEstimate.length !== 1 ? 's' : ''}`}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[11px] text-[#a78bfa] hover:border-[#7c3aed] hover:bg-[#7c3aed]/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                  >
+                    {aiEstimateAllProgress ? (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full border border-[#a78bfa]/40 border-t-[#a78bfa] animate-spin" />
+                        {aiEstimateAllProgress.done}/{aiEstimateAllProgress.total}
+                        {!!aiEstimateAllProgress.errors && (
+                          <span className="text-[#ef4444]"> {aiEstimateAllProgress.errors} failed</span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span>✦</span>
+                        Estimate all ({unmatchedWithoutEstimate.length})
+                      </>
                     )}
-                  </>
-                ) : (
-                  <>
-                    <span>✦</span>
-                    Estimate all ({unmatchedWithoutEstimate.length})
-                  </>
+                  </button>
                 )}
-              </button>
+                {estimatedCount > 0 && !aiEstimateAllProgress && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      releases.forEach(r => clearAiEstimate(r.releaseId));
+                    }}
+                    title={`Clear AI estimations for ${estimatedCount} record${estimatedCount !== 1 ? 's' : ''}`}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#ef4444]/30 bg-[#ef4444]/5 text-[11px] text-[#f87171] hover:border-[#ef4444]/60 hover:bg-[#ef4444]/10 transition-colors cursor-pointer flex-shrink-0"
+                  >
+                    ✕ Clear all ({estimatedCount})
+                  </button>
+                )}
+              </>
             );
           })()}
         </div>

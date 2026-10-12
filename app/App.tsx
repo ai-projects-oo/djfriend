@@ -3768,14 +3768,13 @@ function AppInner() {
                       const imported = analyzedApplePlaylists.has(playlist.name);
                       const selected = selectedPlaylists.includes(playlist.name);
                       const atLimit = selectedPlaylists.length >= MAX_APPLE_PLAYLISTS;
-                      const disabled = imported || (!selected && atLimit);
+                      const disabled = !selected && atLimit;
                       const hint = playlistBpmHints.get(playlist.name);
                       return (
                         <div key={playlist.name} className="flex flex-col gap-1.5">
                           <button
                             disabled={disabled}
                             onClick={() => {
-                              if (imported) return;
                               setSelectedPlaylists((prev) =>
                                 prev.includes(playlist.name)
                                   ? prev.filter((n) => n !== playlist.name)
@@ -3786,8 +3785,8 @@ function AppInner() {
                             }}
                             className="w-full text-left rounded-md border px-3 py-2.5 transition-colors disabled:cursor-not-allowed"
                             style={{
-                              cursor: imported ? "default" : "pointer",
-                              opacity: !imported && !selected && atLimit ? 0.4 : 1,
+                              cursor: "pointer",
+                              opacity: !selected && atLimit ? 0.4 : 1,
                               borderColor: selected ? "#7c3aed" : "#363650",
                               backgroundColor: selected ? "#1a0d2e" : "#1c1c2e",
                             }}
@@ -3797,14 +3796,14 @@ function AppInner() {
                               <span
                                 className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0"
                                 style={{
-                                  borderColor: imported ? "#424f63" : selected ? "#7c3aed" : "#363650",
-                                  backgroundColor: imported ? "#262f3e" : selected ? "#7c3aed" : "transparent",
+                                  borderColor: selected ? "#7c3aed" : imported ? "#424f63" : "#363650",
+                                  backgroundColor: selected ? "#7c3aed" : imported ? "#262f3e" : "transparent",
                                 }}
                               >
                                 {(selected || imported) && (
                                   <svg
                                     className="w-2.5 h-2.5"
-                                    style={{ color: imported ? "#8292a4" : "#fff" }}
+                                    style={{ color: selected ? "#fff" : "#8292a4" }}
                                     fill="none"
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
@@ -3818,7 +3817,7 @@ function AppInner() {
                                 {playlist.name}
                               </span>
                               <span className="text-[11px] flex-shrink-0" style={{ color: imported ? "#58656e" : "#8394a8" }}>
-                                {imported ? "in library" : `${playlist.count} track${playlist.count === 1 ? "" : "s"}`}
+                                {`${playlist.count} track${playlist.count === 1 ? "" : "s"}`}{imported ? (selected ? " · re-sync" : " · in library") : ""}
                               </span>
                             </div>
                           </button>
@@ -3878,7 +3877,7 @@ function AppInner() {
                   }}
                   className="text-xs font-medium px-3 py-1.5 rounded-md bg-[#7c3aed] text-white hover:bg-[#9333ea] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Analyze{" "}
+                  {selectedPlaylists.length > 0 && selectedPlaylists.every((n) => analyzedApplePlaylists.has(n)) ? "Re-sync" : "Analyze"}{" "}
                   {selectedPlaylists.length > 0
                     ? `${selectedPlaylists.length} playlist${selectedPlaylists.length === 1 ? "" : "s"}`
                     : ""}

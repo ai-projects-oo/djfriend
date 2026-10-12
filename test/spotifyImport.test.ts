@@ -173,3 +173,20 @@ describe('spotifyTrackToSong', () => {
     expect(song.genres).toEqual([])
   })
 })
+
+describe('matchInLibrary artist joiners', () => {
+  it('matches "Tiga, Audion" against "Tiga VS Audion"', () => {
+    const lib = [{ file: 'a.mp3', artist: 'Tiga VS Audion', title: "Let's Go Dancing (Solomun Remix)" }] as unknown as Parameters<typeof matchInLibrary>[3];
+    expect(matchInLibrary('x', "Let's Go Dancing - Solomun Remix", 'Tiga, Audion', lib)).toBe('fuzzy');
+  });
+});
+
+describe('matchInLibrary with wrong spotify match / filename prefix', () => {
+  it('matches via local title when spotifyTitle is a wrong match', () => {
+    const lib = [{
+      file: 'x.mp3', artist: 'Noir, Haze', title: '4A - 5 - Around (Extended Version)',
+      spotifyTitle: 'Around - Solomun Vox', spotifyArtist: 'Noir',
+    }] as unknown as Parameters<typeof matchInLibrary>[3];
+    expect(matchInLibrary('x', 'Around - Extended Version', 'Noir, Haze', lib)).toBe('fuzzy');
+  });
+});

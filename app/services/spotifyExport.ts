@@ -294,12 +294,14 @@ async function searchTrack(artist: string, title: string, token: string): Promis
   return null;
 }
 
+// Every playlist DJFriend creates on Spotify is private. Spotify doesn't always honour
+// `public: false` on create, so the visibility is set again right after.
 async function createPlaylist(
   userId: string,
   name: string,
   token: string,
 ): Promise<{ id: string; external_urls: { spotify: string } }> {
-  return spotifyFetch(
+  const playlist = await spotifyFetch<{ id: string; public?: boolean | null; external_urls: { spotify: string } }>(
     `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists`,
     token,
     {
@@ -307,6 +309,21 @@ async function createPlaylist(
       body: JSON.stringify({ name, public: false, description: 'Created by DJFriend' }),
     },
   );
+  await makePlaylistPrivate(playlist.id, token);
+  return playlist;
+}
+
+async function makePlaylistPrivate(playlistId: string, token: string): Promise<void> {
+  // Change-details returns an empty body, so this can't go through spotifyFetch (which parses JSON)
+  const res = await fetch(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ public: false }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(`Spotify: couldn't make the playlist private — ${err.error?.message ?? res.statusText}`);
+  }
 }
 
 async function addTracksToPlaylist(playlistId: string, uris: string[], token: string): Promise<void> {

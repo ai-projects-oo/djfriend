@@ -28,6 +28,8 @@ vi.mock('../app/services/appleMusicExport', () => ({
 const { usePlaylists } = await import('../app/hooks/usePlaylists')
 const { default: AppleMusicExportDialog } = await import('../app/components/AppleMusicExportDialog')
 const { buildAppleMusicJob } = await import('../app/lib/appleMusicExport')
+const { default: SmartPlaylistEditor } = await import('../app/components/SmartPlaylistEditor')
+const { evaluateSmart } = await import('../app/lib/smartPlaylists')
 const { default: LibrarySidebar } = await import('../app/components/LibrarySidebar')
 const { default: LibraryTab } = await import('../app/components/LibraryTab')
 
@@ -266,6 +268,44 @@ describe('LibraryTab playlist view', () => {
   it('explains an empty playlist', () => {
     renderTable({ viewKey: 'pl:p9', viewTitle: 'Empty', viewSongs: [], ordered: true, onReorder: () => {} })
     expect(container.textContent).toContain('This playlist is empty')
+  })
+})
+
+// ── Smart playlist editor ────────────────────────────────────────────────────
+
+describe('SmartPlaylistEditor', () => {
+  const setValue = (el: HTMLInputElement | HTMLSelectElement, value: string) => act(() => {
+    const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, value)
+    el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
+  })
+  const count = (c: Parameters<typeof evaluateSmart>[0]) => evaluateSmart(c, songs, { now: 0, stats: new Map(), members: () => new Set() }).length
+
+  it('builds rules with a live match count and saves them', () => {
+    const onSave = vi.fn()
+    act(() => root.render(h(SmartPlaylistEditor, { playlists: [], countMatches: count, onSave, onClose: () => {} })))
+    // Default rule: BPM between 120 and 128 → all three test songs are 124 BPM
+    expect(container.textContent).toContain('3 tracks match')
+    setValue(container.querySelector('[aria-label="Value"]') as HTMLInputElement, '125')
+    expect(container.textContent).toContain('0 tracks match')
+
+    click(byLabel('Add rule')!)
+    const fields = container.querySelectorAll('[aria-label="Field"]')
+    expect(fields).toHaveLength(2)
+    setValue(container.querySelector('[aria-label="Match all or any"]') as HTMLSelectElement, 'any')
+    setValue(container.querySelectorAll('[aria-label="Value"]')[1] as HTMLInputElement, 'house')
+    expect(container.textContent).toContain('3 tracks match')
+
+    setValue(byLabel('Smart playlist name') as HTMLInputElement, 'House or fast')
+    click([...container.querySelectorAll('button')].find(b => b.textContent === 'Create')!)
+    expect(onSave).toHaveBeenCalledWith('House or fast', expect.objectContaining({ match: 'any', rules: expect.arrayContaining([expect.objectContaining({ field: 'genre', value: 'house' })]) }))
+  })
+
+  it('blocks saving while a rule is incomplete', () => {
+    act(() => root.render(h(SmartPlaylistEditor, { playlists: [], countMatches: count, onSave: () => {}, onClose: () => {} })))
+    setValue(container.querySelector('[aria-label="Value"]') as HTMLInputElement, '')
+    expect(container.textContent).toContain('Fill in the highlighted rule')
+    expect(([...container.querySelectorAll('button')].find(b => b.textContent === 'Create') as HTMLButtonElement).disabled).toBe(true)
   })
 })
 

@@ -282,6 +282,42 @@ export interface Playlist {
   // Where the playlist came from, if it was imported or saved from elsewhere
   source?: { kind: 'apple-music' | 'spotify' | 'set'; ref: string };
   appleMusicId?: string;       // persistent ID of the linked Music.app playlist (set by export)
+  smart?: SmartCriteria;       // set = smart playlist: tracks are computed from these rules, `tracks` is unused
+}
+
+// ─── Smart playlists ──────────────────────────────────────────────────────────
+
+export type SmartField =
+  | 'bpm' | 'energy' | 'year' | 'duration'           // numbers (energy 0–100, duration in minutes)
+  | 'title' | 'artist' | 'genre' | 'comment' | 'vibe' | 'mood'   // text
+  | 'key'                                             // Camelot key
+  | 'vocal'                                           // vocal / mostly-vocal / instrumental
+  | 'dateAdded'                                       // days ago
+  | 'playlist'                                        // membership in another playlist
+  | 'setCount' | 'lastPlayed';                        // from set history
+
+export type SmartOp =
+  | 'is' | 'isNot' | 'gt' | 'lt' | 'between'          // numbers (+ is/isNot for key, vocal, text)
+  | 'contains' | 'notContains'                        // text
+  | 'compatible'                                      // key: harmonically compatible with value
+  | 'inLast' | 'notInLast'                            // dateAdded / lastPlayed: within N days
+  | 'in' | 'notIn';                                   // playlist membership
+
+/** One rule. Values are kept as strings (as typed in the editor) and parsed when evaluated. */
+export interface SmartRule {
+  id: string;
+  field: SmartField;
+  op: SmartOp;
+  value: string;
+  value2?: string;             // upper bound for 'between'
+}
+
+export type SmartLimitBy = 'random' | 'bpm' | 'energy' | 'dateAdded' | 'title' | 'mostPlayed' | 'leastPlayed';
+
+export interface SmartCriteria {
+  match: 'all' | 'any';
+  rules: SmartRule[];
+  limit?: { count: number; by: SmartLimitBy };
 }
 
 export interface PlaylistFolder {

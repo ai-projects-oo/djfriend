@@ -274,7 +274,8 @@ function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSen
   );
   const sep = () => <div className="my-1 border-t border-[#2c2c42]" />;
 
-  const addEntries = useMemo(() => (playlistLibrary ? flattenPlaylistTree(playlistLibrary) : []), [playlistLibrary]);
+  // Smart playlists get their tracks from rules, so they can't be added to
+  const addEntries = useMemo(() => (playlistLibrary ? flattenPlaylistTree(playlistLibrary, p => !p.smart) : []), [playlistLibrary]);
   const inEntries = useMemo(
     () => (playlistLibrary ? flattenPlaylistTree(playlistLibrary, p => p.tracks.includes(menu.song.file)) : []),
     [playlistLibrary, menu.song.file],

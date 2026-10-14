@@ -1,4 +1,4 @@
-import type { Playlist, PlaylistFolder, PlaylistLibrary, Song } from '../types';
+import type { Playlist, PlaylistFolder, PlaylistLibrary, SmartCriteria, Song } from '../types';
 
 // Pure operations on the playlist library. Callers pass in ids and timestamps so every
 // function stays deterministic; each returns a new library and never mutates its input.
@@ -26,11 +26,17 @@ export function parsePlaylistLibrary(raw: unknown): PlaylistLibrary {
   const playlists = Array.isArray(r.playlists)
     ? r.playlists
         .filter((p): p is Playlist => typeof p?.id === 'string' && typeof p?.name === 'string' && Array.isArray(p?.tracks))
-        .map(p => ({
-          ...p,
-          tracks: p.tracks.filter((t): t is string => typeof t === 'string'),
-          ...(p.folderId && !folderIds.has(p.folderId) ? { folderId: undefined } : {}),
-        }))
+        .map(p => {
+          const smartOk = p.smart && (p.smart.match === 'all' || p.smart.match === 'any') && Array.isArray(p.smart.rules);
+          const { smart: _smart, ...rest } = p;
+          void _smart;
+          return {
+            ...rest,
+            tracks: p.tracks.filter((t): t is string => typeof t === 'string'),
+            ...(p.folderId && !folderIds.has(p.folderId) ? { folderId: undefined } : {}),
+            ...(smartOk ? { smart: { ...p.smart!, rules: p.smart!.rules.filter(r => typeof r?.id === 'string' && typeof r?.field === 'string' && typeof r?.op === 'string' && typeof r?.value === 'string') } } : {}),
+          };
+        })
     : [];
   return { schemaVersion: 1, playlists, folders, ...(typeof r.appleMusicRootId === 'string' ? { appleMusicRootId: r.appleMusicRootId } : {}) };
 }
@@ -48,18 +54,34 @@ export function uniqueName(lib: PlaylistLibrary, base: string): string {
 
 export function createPlaylist(
   lib: PlaylistLibrary,
-  opts: { id: string; name: string; now: number; folderId?: string; tracks?: string[]; source?: Playlist['source'] },
+  opts: { id: string; name: string; now: number; folderId?: string; tracks?: string[]; source?: Playlist['source']; smart?: SmartCriteria },
 ): PlaylistLibrary {
   const playlist: Playlist = {
     id: opts.id,
     name: uniqueName(lib, opts.name),
-    tracks: dedupe(opts.tracks ?? []),
+    tracks: opts.smart ? [] : dedupe(opts.tracks ?? []),
     createdAt: opts.now,
     updatedAt: opts.now,
     ...(opts.folderId ? { folderId: opts.folderId } : {}),
     ...(opts.source ? { source: opts.source } : {}),
+    ...(opts.smart ? { smart: opts.smart } : {}),
   };
   return { ...lib, playlists: [...lib.playlists, playlist] };
+}
+
+/** Replaces a smart playlist's rules (no-op for regular playlists). */
+export function setSmartCriteria(lib: PlaylistLibrary, id: string, smart: SmartCriteria, now: number): PlaylistLibrary {
+  return updatePlaylist(lib, id, now, p => (p.smart ? { ...p, smart } : p));
+}
+
+/** Turns a smart playlist into a regular one holding `files` (its current matches). */
+export function freezeSmartPlaylist(lib: PlaylistLibrary, id: string, files: string[], now: number): PlaylistLibrary {
+  return updatePlaylist(lib, id, now, p => {
+    if (!p.smart) return p;
+    const { smart: _smart, ...rest } = p;
+    void _smart;
+    return { ...rest, tracks: dedupe(files) };
+  });
 }
 
 export function renamePlaylist(lib: PlaylistLibrary, id: string, name: string, now: number): PlaylistLibrary {
@@ -75,7 +97,7 @@ export function deletePlaylist(lib: PlaylistLibrary, id: string): PlaylistLibrar
 export function duplicatePlaylist(lib: PlaylistLibrary, id: string, newId: string, now: number): PlaylistLibrary {
   const src = lib.playlists.find(p => p.id === id);
   if (!src) return lib;
-  return createPlaylist(lib, { id: newId, name: `${src.name} copy`, now, folderId: src.folderId, tracks: src.tracks });
+  return createPlaylist(lib, { id: newId, name: `${src.name} copy`, now, folderId: src.folderId, tracks: src.tracks, ...(src.smart ? { smart: src.smart } : {}) });
 }
 
 function dedupe(files: string[]): string[] {
@@ -85,6 +107,7 @@ function dedupe(files: string[]): string[] {
 /** Adds tracks (skipping ones already in the playlist) at `index`, or at the end. */
 export function addTracks(lib: PlaylistLibrary, id: string, files: string[], now: number, index?: number): PlaylistLibrary {
   return updatePlaylist(lib, id, now, p => {
+    if (p.smart) return p;   // smart playlists get their tracks from rules
     const existing = new Set(p.tracks);
     const incoming = dedupe(files).filter(f => !existing.has(f));
     if (incoming.length === 0) return p;
@@ -95,7 +118,7 @@ export function addTracks(lib: PlaylistLibrary, id: string, files: string[], now
 
 export function removeTracks(lib: PlaylistLibrary, id: string, files: string[], now: number): PlaylistLibrary {
   const drop = new Set(files);
-  return updatePlaylist(lib, id, now, p => ({ ...p, tracks: p.tracks.filter(f => !drop.has(f)) }));
+  return updatePlaylist(lib, id, now, p => (p.smart ? p : { ...p, tracks: p.tracks.filter(f => !drop.has(f)) }));
 }
 
 /**
@@ -103,7 +126,7 @@ export function removeTracks(lib: PlaylistLibrary, id: string, files: string[], 
  * `toIndex` in the playlist; `toIndex === tracks.length` moves them to the end.
  */
 export function moveTracks(lib: PlaylistLibrary, id: string, files: string[], toIndex: number, now: number): PlaylistLibrary {
-  return updatePlaylist(lib, id, now, p => ({ ...p, tracks: moveWithin(p.tracks, files, toIndex) }));
+  return updatePlaylist(lib, id, now, p => (p.smart ? p : { ...p, tracks: moveWithin(p.tracks, files, toIndex) }));
 }
 
 export function moveWithin(tracks: string[], files: string[], toIndex: number): string[] {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AppleMusicExportResult, Playlist, PlaylistLibrary } from "../types";
+import type { AppleMusicExportResult, Playlist, PlaylistLibrary, SmartCriteria } from "../types";
 import * as P from "../lib/playlists";
 import { applyAppleMusicResult } from "../lib/appleMusicExport";
 import { fetchPlaylistLibrary, savePlaylistLibrary } from "../services/playlistsApi";
@@ -55,8 +55,8 @@ export function usePlaylists() {
     });
   }, []);
 
-  /** Creates a playlist and returns its id. */
-  const createPlaylist = useCallback((name: string, opts: { folderId?: string; tracks?: string[]; source?: Playlist["source"] } = {}): string => {
+  /** Creates a playlist (smart when `opts.smart` is set) and returns its id. */
+  const createPlaylist = useCallback((name: string, opts: { folderId?: string; tracks?: string[]; source?: Playlist["source"]; smart?: SmartCriteria } = {}): string => {
     const id = newId();
     update(l => P.createPlaylist(l, { id, name, now: Date.now(), ...opts }));
     return id;
@@ -86,6 +86,8 @@ export function usePlaylists() {
     toggleFolder:     useCallback((id: string) => update(l => P.toggleFolder(l, id)), [update]),
     moveFolder:       useCallback((id: string, parentId: string | undefined) => update(l => P.moveFolder(l, id, parentId)), [update]),
     applyAppleMusicResult: useCallback((result: AppleMusicExportResult) => update(l => applyAppleMusicResult(l, result)), [update]),
+    setSmartCriteria: useCallback((id: string, smart: SmartCriteria) => update(l => P.setSmartCriteria(l, id, smart, Date.now())), [update]),
+    freezeSmartPlaylist: useCallback((id: string, files: string[]) => update(l => P.freezeSmartPlaylist(l, id, files, Date.now())), [update]),
   };
 }
 

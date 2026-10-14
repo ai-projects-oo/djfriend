@@ -25,6 +25,10 @@ interface Props {
   onPushToAppleMusic?: (playlistIds: string[] | "all", title: string) => void;
   /** Playlists containing the tracks selected in the table — marked with a dot. */
   highlightIds?: Set<string>;
+  /** Open the smart playlist editor: for an existing playlist, or a new one (optionally in a folder). */
+  onEditSmart?: (playlist: Playlist | null, folderId?: string) => void;
+  /** Turn a smart playlist into a regular one with its current tracks. */
+  onFreezeSmart?: (playlist: Playlist) => void;
 }
 
 type Renaming = { kind: "playlist" | "folder"; id: string } | null;
@@ -92,6 +96,7 @@ const MenuLabel = ({ text }: { text: string }) => <div className="px-3 pt-1 pb-0
 export default function LibrarySidebar({
   playlists, view, onSelectView, libraryCount, playlistCounts, appleSources, spotifySources, setSources,
   onDropTracks, onSaveAsPlaylist, onImportApple, onImportSpotify, onExportPlaylist, renameRequest, onPushToAppleMusic, highlightIds,
+  onEditSmart, onFreezeSmart,
 }: Props) {
   const hasHighlight = (node: FolderNode): boolean =>
     !!highlightIds && (node.playlists.some(p => highlightIds.has(p.id)) || node.folders.some(hasHighlight));
@@ -161,19 +166,19 @@ export default function LibrarySidebar({
         key={p.id}
         draggable={renaming?.id !== p.id}
         onDragStart={e => { e.dataTransfer.setData(DRAG_PLAYLIST, p.id); e.dataTransfer.effectAllowed = "move"; }}
-        onDragOver={e => acceptsDrop(e, key, [DRAG_TRACKS])}
+        onDragOver={e => { if (!p.smart) acceptsDrop(e, key, [DRAG_TRACKS]); }}
         onDragLeave={() => setDropTarget(t => (t === key ? null : t))}
         onDrop={e => dropOnPlaylist(e, p)}
         onClick={() => onSelectView({ kind: "playlist", id: p.id })}
         onDoubleClick={() => setRenaming({ kind: "playlist", id: p.id })}
         onContextMenu={e => openMenu(e, { kind: "playlist", playlist: p })}
         role="button"
-        aria-label={`Playlist ${p.name}`}
+        aria-label={`${p.smart ? "Smart playlist" : "Playlist"} ${p.name}`}
         aria-current={active ? "true" : undefined}
         className={`${itemBase} ${dropTarget === key ? "bg-[#7c3aed]/30 ring-1 ring-[#7c3aed]" : active ? "bg-[#7c3aed]/15 text-white" : "text-[#a6b5c8] hover:bg-[#20202e]"}`}
         style={{ paddingLeft: 8 + depth * 12 }}
       >
-        <span className="text-[#7c3aed] flex-shrink-0" aria-hidden>♫</span>
+        <span className="text-[#7c3aed] flex-shrink-0" aria-hidden>{p.smart ? "⚙" : "♫"}</span>
         {renaming?.kind === "playlist" && renaming.id === p.id ? (
           <RenameInput initial={p.name} onCancel={() => setRenaming(null)} onCommit={name => { playlists.renamePlaylist(p.id, name); setRenaming(null); }} />
         ) : (
@@ -289,6 +294,7 @@ export default function LibrarySidebar({
         "Playlists",
         <>
           {iconBtn("New folder", "📁", () => newFolder())}
+          {onEditSmart && iconBtn("New smart playlist", "⚙", () => onEditSmart(null))}
           {iconBtn("New playlist", "+", () => newPlaylist())}
         </>,
         {
@@ -352,8 +358,10 @@ export default function LibrarySidebar({
               const p = t.playlist;
               return (
                 <>
+                  {p.smart && onEditSmart && <MenuItem label="Edit Rules…" onClick={close(() => onEditSmart(p))} />}
                   <MenuItem label="Rename" onClick={close(() => setRenaming({ kind: "playlist", id: p.id }))} />
                   <MenuItem label="Duplicate" onClick={close(() => playlists.duplicatePlaylist(p.id))} />
+                  {p.smart && onFreezeSmart && <MenuItem label="Convert to Regular Playlist" onClick={close(() => onFreezeSmart(p))} />}
                   {onPushToAppleMusic && <MenuItem label={p.appleMusicId ? "Update in Apple Music" : "Push to Apple Music"} onClick={close(() => onPushToAppleMusic([p.id], `Push “${p.name}” to Apple Music`))} />}
                   {onExportPlaylist && <MenuItem label="Export as M3U" onClick={close(() => onExportPlaylist(p, "M3U"))} />}
                   {onExportPlaylist && <MenuItem label="Export as Rekordbox XML" onClick={close(() => onExportPlaylist(p, "XML"))} />}
@@ -377,6 +385,7 @@ export default function LibrarySidebar({
               return (
                 <>
                   <MenuItem label="New playlist here" onClick={close(() => newPlaylist(f.id))} />
+                  {onEditSmart && <MenuItem label="New smart playlist here" onClick={close(() => onEditSmart(null, f.id))} />}
                   <MenuItem label="New folder here" onClick={close(() => newFolder(f.id))} />
                   <MenuItem label="Rename" onClick={close(() => setRenaming({ kind: "folder", id: f.id }))} />
                   {onPushToAppleMusic && playlistsInFolder(lib, f.id).length > 0 && (

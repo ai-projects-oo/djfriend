@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind, ManualData, VinylStore, Song, Playlist } from "./types";
+import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind, ManualData, VinylStore, Song, Playlist, SmartCriteria } from "./types";
 import { DEFAULT_TIP_CONFIG, DEFAULT_DJ_SYSTEM, vinylDeckCount } from "./types";
 import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
@@ -58,6 +58,8 @@ import LibrarySidebar from "./components/LibrarySidebar";
 import type { ContainingSource, LibraryView, SourceItem } from "./lib/libraryView";
 import { usePlaylists } from "./hooks/usePlaylists";
 import { resolvePlaylist } from "./lib/playlists";
+import { materializeSmartPlaylists, evaluateSmart, playStatsByFile } from "./lib/smartPlaylists";
+import SmartPlaylistEditor from "./components/SmartPlaylistEditor";
 import { buildAppleMusicJob, type AppleMusicExportOptions } from "./lib/appleMusicExport";
 import AppleMusicExportDialog from "./components/AppleMusicExportDialog";
 import {
@@ -380,6 +382,14 @@ function AppInner() {
   // Playlist filter — which import entries restrict the generator pool (multi-select)
   const [playlistFilterIds, setPlaylistFilterIds] = useState<string[]>([]);
   const playlistsApi = usePlaylists();
+  // Playlists as the app reads them: smart playlists' tracks computed from their rules.
+  // `smartNow` is fixed per session so "in the last N days" rules don't change on every render.
+  const [smartNow] = useState(() => Date.now());
+  const playlistLib = useMemo(
+    () => materializeSmartPlaylists(playlistsApi.library, library, history, smartNow),
+    [playlistsApi.library, library, history, smartNow],
+  );
+  const [smartEditor, setSmartEditor] = useState<{ playlist: Playlist | null; folderId?: string } | null>(null);
   const [libraryView, setLibraryView] = useState<LibraryView>({ kind: "all" });
   const [playlistToRename, setPlaylistToRename] = useState<string | undefined>(undefined);
   const [musicExport, setMusicExport] = useState<{ ids: string[] | "all"; title: string } | null>(null);
@@ -511,7 +521,7 @@ function AppInner() {
         continue;
       }
       if (id.startsWith("pl:")) {
-        const pl = playlistsApi.library.playlists.find(p => p.id === id.slice(3));
+        const pl = playlistLib.playlists.find(p => p.id === id.slice(3));
         if (pl) {
           const inLibrary = new Set(library.map(s => s.file));
           pl.tracks.forEach(f => { if (inLibrary.has(f)) combined.add(f); });
@@ -531,7 +541,7 @@ function AppInner() {
       if (entry) findSongsForImport(entry.tracks, library).forEach(s => combined.add(s.file));
     }
     return combined.size > 0 ? combined : undefined;
-  }, [playlistFilterIds, importHistory, library, applePlaylistFiles, librarySelection, playlistsApi.library]);
+  }, [playlistFilterIds, importHistory, library, applePlaylistFiles, librarySelection, playlistLib]);
 
   // ── Library sidebar: resolve the selected view to songs ──────────────────
   const songsByFile = useMemo(() => new Map(library.map(s => [s.file, s])), [library]);
@@ -547,7 +557,7 @@ function AppInner() {
     switch (v.kind) {
       case "all": return null;
       case "playlist": {
-        const p = playlistsApi.library.playlists.find(x => x.id === v.id);
+        const p = playlistLib.playlists.find(x => x.id === v.id);
         return p ? resolvePlaylist(p, songsByFile) : null;
       }
       case "apple": {
@@ -564,24 +574,35 @@ function AppInner() {
         return entry ? { songs: unique(entry.tracks.map(t => songsByFile.get(t.file) ?? t)), missing: 0 } : null;
       }
     }
-  }, [playlistsApi.library, songsByFile, songsByPath, applePlaylistFiles, importHistory, history, library]);
+  }, [playlistLib, songsByFile, songsByPath, applePlaylistFiles, importHistory, history, library]);
 
   const libraryViewData = useMemo(() => {
     const resolved = resolveLibraryView(libraryView);
     const v = resolved ? libraryView : ({ kind: "all" } as LibraryView);
     switch (v.kind) {
-      case "playlist": return { key: `pl:${v.id}`, title: playlistsApi.library.playlists.find(p => p.id === v.id)?.name ?? "Playlist", ...resolved!, playlistId: v.id };
+      case "playlist": return { key: `pl:${v.id}`, title: playlistLib.playlists.find(p => p.id === v.id)?.name ?? "Playlist", ...resolved!, playlistId: v.id };
       case "apple":    return { key: `apple:${v.name}`, title: v.name, ...resolved! };
       case "spotify":  return { key: `spotify:${v.id}`, title: importHistory.find(e => e.id === v.id)?.name ?? "Spotify playlist", ...resolved! };
       case "set":      return { key: `set:${v.id}`, title: history.find(h => h.id === v.id)?.name ?? "Set", ...resolved! };
       default:         return { key: "all", title: "All Tracks", songs: undefined, missing: 0 };
     }
-  }, [libraryView, resolveLibraryView, playlistsApi.library, importHistory, history]);
+  }, [libraryView, resolveLibraryView, playlistLib, importHistory, history]);
   const activePlaylistId = "playlistId" in libraryViewData ? libraryViewData.playlistId : undefined;
+  const activeIsSmart = !!activePlaylistId && !!playlistLib.playlists.find(p => p.id === activePlaylistId)?.smart;
+
+  // Live match count for the smart playlist editor
+  const countSmartMatches = useCallback((criteria: SmartCriteria) => {
+    const members = new Map(playlistLib.playlists.map(p => [p.id, new Set(p.tracks)]));
+    return evaluateSmart(criteria, library, {
+      now: smartNow,
+      stats: playStatsByFile(history),
+      members: id => members.get(id) ?? new Set(),
+    }).length;
+  }, [playlistLib, library, history, smartNow]);
 
   const playlistCounts = useMemo(
-    () => new Map(playlistsApi.library.playlists.map(p => [p.id, p.tracks.filter(f => songsByFile.has(f)).length])),
-    [playlistsApi.library, songsByFile],
+    () => new Map(playlistLib.playlists.map(p => [p.id, p.tracks.filter(f => songsByFile.has(f)).length])),
+    [playlistLib, songsByFile],
   );
   const appleSources = useMemo<SourceItem[]>(
     () => Object.keys(applePlaylistFiles).sort((a, b) => a.localeCompare(b)).map(name => {
@@ -617,19 +638,19 @@ function AppInner() {
     setLastPlaylistId(id);
   }, [addPlTracks]);
   const lastPlaylist = useMemo(() => {
-    const p = lastPlaylistId ? playlistsApi.library.playlists.find(x => x.id === lastPlaylistId) : undefined;
+    const p = lastPlaylistId ? playlistLib.playlists.find(x => x.id === lastPlaylistId) : undefined;
     return p ? { id: p.id, name: p.name } : undefined;
-  }, [lastPlaylistId, playlistsApi.library]);
+  }, [lastPlaylistId, playlistLib]);
 
   // file → DJFriend playlists containing it
   const playlistsByFile = useMemo(() => {
     const m = new Map<string, Playlist[]>();
-    for (const p of playlistsApi.library.playlists) for (const f of p.tracks) {
+    for (const p of playlistLib.playlists) for (const f of p.tracks) {
       const list = m.get(f);
       if (list) list.push(p); else m.set(f, [p]);
     }
     return m;
-  }, [playlistsApi.library]);
+  }, [playlistLib]);
   const playlistNamesFor = useCallback((file: string) => (playlistsByFile.get(file) ?? []).map(p => p.name), [playlistsByFile]);
   const highlightPlaylistIds = useMemo(
     () => new Set(selectedLibraryFiles.flatMap(f => (playlistsByFile.get(f) ?? []).map(p => p.id))),
@@ -655,10 +676,10 @@ function AppInner() {
   }, []);
 
   const prepareMusicExport = useCallback(
-    (opts: AppleMusicExportOptions) => buildAppleMusicJob(playlistsApi.library, musicExport?.ids ?? [], songsByFile, opts),
-    [playlistsApi.library, musicExport, songsByFile],
+    (opts: AppleMusicExportOptions) => buildAppleMusicJob(playlistLib, musicExport?.ids ?? [], songsByFile, opts),
+    [playlistLib, musicExport, songsByFile],
   );
-  const playlistNames = useMemo(() => new Map(playlistsApi.library.playlists.map(p => [p.id, p.name])), [playlistsApi.library]);
+  const playlistNames = useMemo(() => new Map(playlistLib.playlists.map(p => [p.id, p.name])), [playlistLib]);
 
   const exportPlaylistFile = useCallback((name: string, songs: Song[], format: "M3U" | "XML") => {
     if (format === "M3U") downloadM3U(songs.map((s, i) => ({ ...s, slot: i, targetEnergy: s.energy, harmonicWarning: false })), name);
@@ -1725,7 +1746,7 @@ function AppInner() {
             <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4 lg:overflow-y-auto">
 
               {/* Card 1: Source — visible when playlists exist (Apple Music or Spotify) */}
-              {Object.keys(applePlaylistFiles).length === 0 && importHistory.length === 0 && playlistsApi.library.playlists.length === 0 ? (
+              {Object.keys(applePlaylistFiles).length === 0 && importHistory.length === 0 && playlistLib.playlists.length === 0 ? (
                 <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4 flex flex-col gap-2.5">
                   <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Source</span>
                   <div className="flex flex-col gap-1.5 py-1">
@@ -1785,7 +1806,7 @@ function AppInner() {
                               ? (playlistFilterIds[0] === "__selection__"
                                   ? `Selection (${librarySelection?.size ?? 0})`
                                   : playlistFilterIds[0].startsWith("pl:")
-                                  ? playlistsApi.library.playlists.find(p => p.id === playlistFilterIds[0].slice(3))?.name ?? "Playlist"
+                                  ? playlistLib.playlists.find(p => p.id === playlistFilterIds[0].slice(3))?.name ?? "Playlist"
                                   : playlistFilterIds[0].startsWith("apple:")
                                   ? playlistFilterIds[0].slice(6)
                                   : importHistory.find((e) => e.id === playlistFilterIds[0])?.name ?? "Playlist")
@@ -1804,7 +1825,7 @@ function AppInner() {
                             >
                               — Full Library (no filter) —
                             </button>
-                            {[...playlistsApi.library.playlists].sort((a, b) => a.name.localeCompare(b.name)).map((pl) => {
+                            {[...playlistLib.playlists].sort((a, b) => a.name.localeCompare(b.name)).map((pl) => {
                               const id = `pl:${pl.id}`;
                               const isSelected = playlistFilterIds.includes(id);
                               return (
@@ -3058,7 +3079,29 @@ function AppInner() {
             onPushToAppleMusic={navigator.userAgent.toLowerCase().includes("electron") && isMacOS
               ? (ids, title) => setMusicExport({ ids, title })
               : undefined}
+            onEditSmart={(playlist, folderId) => setSmartEditor({ playlist, folderId })}
+            onFreezeSmart={(p) => playlistsApi.freezeSmartPlaylist(p.id, playlistLib.playlists.find(x => x.id === p.id)?.tracks ?? [])}
           />
+          {smartEditor && (
+            <SmartPlaylistEditor
+              initial={smartEditor.playlist?.smart ? { name: smartEditor.playlist.name, smart: smartEditor.playlist.smart } : undefined}
+              playlists={playlistLib.playlists.filter(p => p.id !== smartEditor.playlist?.id)}
+              countMatches={countSmartMatches}
+              onSave={(name, criteria) => {
+                const editing = smartEditor.playlist;
+                if (editing) {
+                  playlistsApi.setSmartCriteria(editing.id, criteria);
+                  if (name !== editing.name) playlistsApi.renamePlaylist(editing.id, name);
+                  setLibraryView({ kind: "playlist", id: editing.id });
+                } else {
+                  const id = createPl(name, { smart: criteria, folderId: smartEditor.folderId });
+                  setLibraryView({ kind: "playlist", id });
+                }
+                setSmartEditor(null);
+              }}
+              onClose={() => setSmartEditor(null)}
+            />
+          )}
           {musicExport && (
             <AppleMusicExportDialog
               title={musicExport.title}
@@ -3077,13 +3120,13 @@ function AppInner() {
             viewSongs={libraryViewData.songs}
             ordered={libraryView.kind !== "all"}
             missingCount={libraryViewData.missing}
-            onReorder={activePlaylistId ? (files, before) => {
-              const pl = playlistsApi.library.playlists.find(p => p.id === activePlaylistId);
+            onReorder={activePlaylistId && !activeIsSmart ? (files, before) => {
+              const pl = playlistLib.playlists.find(p => p.id === activePlaylistId);
               if (!pl) return;
               playlistsApi.moveTracks(activePlaylistId, files, before ? pl.tracks.indexOf(before) : pl.tracks.length);
             } : undefined}
-            onRemoveFromView={activePlaylistId ? (files) => playlistsApi.removeTracks(activePlaylistId, files) : undefined}
-            playlistLibrary={playlistsApi.library}
+            onRemoveFromView={activePlaylistId && !activeIsSmart ? (files) => playlistsApi.removeTracks(activePlaylistId, files) : undefined}
+            playlistLibrary={playlistLib}
             lastPlaylist={lastPlaylist}
             onAddToPlaylist={addToPlaylist}
             containingSources={containingSources}

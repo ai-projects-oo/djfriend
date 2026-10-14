@@ -106,3 +106,58 @@ describe('results-store', () => {
     expect(fs.existsSync(file)).toBe(false)
   })
 })
+
+describe('results-store — outside writes while changes are pending', () => {
+  it('re-applies only our changed keys on top of a file another process rewrote', () => {
+    vi.useFakeTimers()
+    fs.writeFileSync(file, JSON.stringify({ a: { bpm: 120 }, b: { bpm: 100 } }), 'utf-8')
+    const data = loadResults<Entry>(file)
+    data.a.bpm = 128
+    saveResults(file, data, { defer: true, keys: ['a'] })
+
+    // Another writer (e.g. the CLI) rewrites the file and adds a track
+    fs.writeFileSync(file, JSON.stringify({ a: { bpm: 120 }, b: { bpm: 101 }, c: { bpm: 90 } }), 'utf-8')
+    const future = new Date(Date.now() + 10_000)
+    fs.utimesSync(file, future, future)
+
+    vi.advanceTimersByTime(5000)
+    expect(readDisk()).toEqual({ a: { bpm: 128 }, b: { bpm: 101 }, c: { bpm: 90 } })
+  })
+
+  it('applies deletions from our key list after an outside write', () => {
+    fs.writeFileSync(file, JSON.stringify({ a: { bpm: 120 }, b: { bpm: 100 } }), 'utf-8')
+    const data = loadResults<Entry>(file)
+    delete data.a
+    saveResults(file, data, { defer: true, keys: ['a'] })
+    fs.writeFileSync(file, JSON.stringify({ a: { bpm: 120 }, b: { bpm: 100 }, c: { bpm: 90 } }), 'utf-8')
+    const future = new Date(Date.now() + 10_000)
+    fs.utimesSync(file, future, future)
+    flushResults(file)
+    expect(readDisk()).toEqual({ b: { bpm: 100 }, c: { bpm: 90 } })
+  })
+
+  it('accumulates keys across several deferred saves', () => {
+    fs.writeFileSync(file, JSON.stringify({ a: { bpm: 1 }, b: { bpm: 2 } }), 'utf-8')
+    const data = loadResults<Entry>(file)
+    data.a.bpm = 10
+    saveResults(file, data, { defer: true, keys: ['a'] })
+    data.b.bpm = 20
+    saveResults(file, data, { defer: true, keys: ['b'] })
+    fs.writeFileSync(file, JSON.stringify({ a: { bpm: 1 }, b: { bpm: 2 }, z: { bpm: 3 } }), 'utf-8')
+    const future = new Date(Date.now() + 10_000)
+    fs.utimesSync(file, future, future)
+    flushResults(file)
+    expect(readDisk()).toEqual({ a: { bpm: 10 }, b: { bpm: 20 }, z: { bpm: 3 } })
+  })
+
+  it('loadResults sees the merged view before the flush', () => {
+    fs.writeFileSync(file, JSON.stringify({ a: { bpm: 1 } }), 'utf-8')
+    const data = loadResults<Entry>(file)
+    data.a.bpm = 10
+    saveResults(file, data, { defer: true, keys: ['a'] })
+    fs.writeFileSync(file, JSON.stringify({ a: { bpm: 1 }, n: { bpm: 5 } }), 'utf-8')
+    const future = new Date(Date.now() + 10_000)
+    fs.utimesSync(file, future, future)
+    expect(loadResults<Entry>(file)).toEqual({ a: { bpm: 10 }, n: { bpm: 5 } })
+  })
+})

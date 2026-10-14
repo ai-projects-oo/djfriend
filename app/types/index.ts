@@ -187,6 +187,7 @@ export interface VinylTrackEntry {
   camelot?: string;
   genre?:   string;
   comment?: string;
+  aiFields?: Array<'bpm' | 'camelot' | 'genre'>;  // fields filled by the AI pass (cleared by "Clear AI estimations"; hand-entered values are kept)
 }
 
 export interface VinylReleaseData {

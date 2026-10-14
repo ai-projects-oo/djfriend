@@ -201,8 +201,11 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   // Auto-load saved library on mount
   useEffect(() => {
     const MB = 1024 * 1024;
-    // Let the overlay paint (and finish its fade) before a step that blocks the UI thread
-    const settle = () => new Promise<void>(r => setTimeout(r, STATUS_FADE_MS * 2));
+    // Let the overlay paint before a step that blocks the UI thread. Only big files wait for the
+    // status fade to finish — small libraries parse fast enough that the wait would just add delay.
+    const BIG_FILE = 20 * MB;
+    const nextFrame = () => new Promise<void>(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const settle = (bytes: number) => bytes > BIG_FILE ? new Promise<void>(r => setTimeout(r, STATUS_FADE_MS * 2)) : nextFrame();
 
     // Streams a results file, reporting download progress, then parses it
     const loadResults = async (url: string, label: string): Promise<Song[] | null> => {
@@ -227,14 +230,14 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
         }
       }
       setInitStatus({ label: `Reading ${Math.max(1, Math.round(received / MB))} MB of track data…` });
-      await settle();
+      await settle(received);
       const text = new TextDecoder().decode(await new Blob(chunks as BlobPart[]).arrayBuffer());
       const data = JSON.parse(text) as unknown;
       if (!data) return null;
       const songs = parseSongs(data);
       if (!songs || songs.length === 0) return null;
       setInitStatus({ label: `Preparing ${songs.length.toLocaleString()} tracks…` });
-      await settle();
+      await nextFrame();
       return songs;
     };
 

@@ -900,7 +900,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
             ...(song.dateAdded != null ? { dateAdded: song.dateAdded } : {}),
           })
         }
-        saveResults(resultsPath, data, { defer: true })
+        saveResults(resultsPath, data, { defer: true, keys: entries.filter(e => e.resultsPath === resultsPath).map(e => e.key) })
       } catch { /* ignore */ }
     }
 
@@ -918,8 +918,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (!fs.existsSync(resultsPath)) return
       let data: Record<string, AppSong>
       try { data = loadResults<AppSong>(resultsPath) } catch { return }
-      let dirty = false
-      for (const [, song] of Object.entries(data)) {
+      const changed: string[] = []
+      for (const [key, song] of Object.entries(data)) {
         const derived = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres ?? [] })
         // Spectral features aren't stored, so an audio-detected vocalType can't be recomputed here —
         // keep the stored one unless the genre decides it
@@ -929,9 +929,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         if (JSON.stringify(tags) === JSON.stringify(song.semanticTags)) continue
         song.semanticTags = tags
         if (song.filePath) res.write(JSON.stringify({ filePath: song.filePath, semanticTags: tags }) + '\n')
-        dirty = true
+        changed.push(key)
       }
-      if (dirty) { try { saveResults(resultsPath, data, { defer: true }) } catch { /* ignore */ } }
+      if (changed.length > 0) { try { saveResults(resultsPath, data, { defer: true, keys: changed }) } catch { /* ignore */ } }
     }
 
     if (songsFolder) rederive(path.join(songsFolder, 'results.json'))
@@ -1834,7 +1834,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           if (typeof tags.year === 'number' && tags.year > 0) entry.year = tags.year
           if (typeof tags.year === 'string' && tags.year.trim()) entry.year = parseInt(tags.year, 10) || entry.year
           if (typeof tags.comment === 'string') entry.comment = tags.comment.trim() || undefined
-          saveResults(resultsPath, results, { defer: true })
+          saveResults(resultsPath, results, { defer: true, keys: [key] })
         } catch { /* ignore */ }
       }
       if (songsFolder) patchResults(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'))
@@ -1898,7 +1898,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           const results = loadResults<AppSong>(resultsPath)
           if (!results[key]) return
           Object.assign(results[key], patch)
-          saveResults(resultsPath, results, { defer: true })
+          saveResults(resultsPath, results, { defer: true, keys: [key] })
         } catch { /* ignore */ }
       }
 
@@ -2095,7 +2095,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         const results = loadResults<AppSong>(resultsPath)
         if (!results[key]) return
         Object.assign(results[key], safePatch)
-        saveResults(resultsPath, results, { defer: true })
+        saveResults(resultsPath, results, { defer: true, keys: [key] })
       } catch { /* ignore */ }
     }
     if (songsFolder) patchFile(path.join(songsFolder, 'results.json'), file)
@@ -2115,7 +2115,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       try {
         const results = loadResults<AppSong>(resultsPath)
         for (const f of files) delete results[f]
-        saveResults(resultsPath, results, { defer: true })
+        saveResults(resultsPath, results, { defer: true, keys: files })
       } catch { /* ignore */ }
     }
     if (songsFolder) removeFromFile(path.join(songsFolder, 'results.json'))

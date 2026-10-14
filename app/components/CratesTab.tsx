@@ -2,8 +2,8 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { DiscogsCollectionEntry, DiscogsRelease, Song, VinylTrackEntry, VinylReleaseData, ManualData, VinylStore } from '../types';
 import { SpotifyIcon, DiscogsIcon, BeatportIcon, TraxsourceIcon } from './Icons';
 import { saveManualData, saveRejected } from '../services/discogsManualData';
-import { loadVinylStore, saveVinylStore } from '../services/vinylStore';
-import { nextPosition } from '../lib/vinylTracks';
+import { nextPosition, mergeAiTracks, clearAiFields } from '../lib/vinylTracks';
+import { CAMELOT_TO_KEY } from '../lib/camelot';
 import { theme } from '../lib/theme';
 import { chatComplete } from '../services/openAiApi';
 import { getAccessToken } from '../services/openAiAuth';
@@ -131,7 +131,8 @@ interface Props {
   library:             Song[];
   manualData:          Map<number, ManualData>;
   onManualDataChange:  (m: Map<number, ManualData>) => void;
-  onVinylStoreChange?: (store: VinylStore) => void;
+  vinylStore:          VinylStore;
+  setVinylStore:       React.Dispatch<React.SetStateAction<VinylStore>>;
   rejectedMatches:     Set<number>;
   onRejectedChange:    (s: Set<number>) => void;
 }
@@ -393,7 +394,7 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
 
 export default function CratesTab({
   collection, onSync, syncPhase, syncMessage, hasOAuth, hasSpotify,
-  library, manualData, onManualDataChange, onVinylStoreChange, rejectedMatches, onRejectedChange,
+  library, manualData, onManualDataChange, vinylStore, setVinylStore, rejectedMatches, onRejectedChange,
 }: Props) {
   const [query,  setQuery]  = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -402,9 +403,9 @@ export default function CratesTab({
   const [editingComment,  setEditingComment]  = useState<number | null>(null);
   const [linking,         setLinking]         = useState<number | null>(null);
   const [expandedTracks,  setExpandedTracks]  = useState<number | null>(null);
-  const [vinylStore,      setVinylStore]      = useState<VinylStore>(() => loadVinylStore());
-  // Keep App in sync so AI-analysed vinyl tracks reach the set generator
-  useEffect(() => { onVinylStoreChange?.(vinylStore); }, [vinylStore, onVinylStoreChange]);
+  // Latest store for async work (AI pass, tracklist import) that outlives the render it started in
+  const vinylStoreRef = useRef(vinylStore);
+  useEffect(() => { vinylStoreRef.current = vinylStore; }, [vinylStore]);
   const [autoImportProgress, setAutoImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [infoOpen, setInfoOpen] = useState<number | null>(null);
   const [printPreview, setPrintPreview] = useState<{ html: string; isA4: boolean } | null>(null);
@@ -440,7 +441,7 @@ export default function CratesTab({
     if (autoImportRunning.current) return () => {};
     let infoCache: Record<string, object>;
     try { infoCache = JSON.parse(localStorage.getItem('djfriend-release-info') ?? '{}'); } catch { infoCache = {}; }
-    const currentStore = loadVinylStore();
+    const currentStore = vinylStoreRef.current;
     const toFetch = releases.filter(r =>
       !currentStore[r.releaseId]?.tracks.length || !infoCache[String(r.releaseId)]
     );
@@ -450,7 +451,7 @@ export default function CratesTab({
     (async () => {
       const total = toFetch.length;
       setAutoImportProgress({ done: 0, total });
-      const store = loadVinylStore();
+      const imported: VinylStore = {};
       let infoObj: Record<string, object>;
       try { infoObj = JSON.parse(localStorage.getItem('djfriend-release-info') ?? '{}'); } catch { infoObj = {}; }
 
@@ -473,14 +474,7 @@ export default function CratesTab({
                 position: t.position,
                 title: t.title || undefined,
               }));
-              const autoGenre = store[release.releaseId]?.genre
-                ?? payload.genres?.[0] ?? payload.styles?.[0];
-              store[release.releaseId] = {
-                genre: autoGenre,
-                tracks: store[release.releaseId]?.tracks.length
-                  ? store[release.releaseId].tracks
-                  : tracks,
-              };
+              imported[release.releaseId] = { genre: payload.genres?.[0] ?? payload.styles?.[0], tracks };
             }
             const { label, catno, country, notes, formats, year } = payload;
             infoObj[String(release.releaseId)] = { label, catno, country, notes, formats, year };
@@ -491,8 +485,18 @@ export default function CratesTab({
       }
 
       if (!cancelled) {
-        saveVinylStore(store);
-        setVinylStore({ ...store });
+        // Merge into the latest state — the user may have edited tracks during the (slow) import
+        setVinylStore(prev => {
+          const next = { ...prev };
+          for (const [id, data] of Object.entries(imported)) {
+            const existing = prev[Number(id)];
+            next[Number(id)] = {
+              genre: existing?.genre ?? data.genre,
+              tracks: existing?.tracks.length ? existing.tracks : data.tracks,
+            };
+          }
+          return next;
+        });
         try { localStorage.setItem('djfriend-release-info', JSON.stringify(infoObj)); } catch { /* quota */ }
         setReleaseInfoCache(new Map(Object.entries(infoObj).map(([k, v]) => [Number(k), v as never])));
         setAutoImportProgress(null);
@@ -500,7 +504,7 @@ export default function CratesTab({
       autoImportRunning.current = false;
     })();
     return () => { cancelled = true; autoImportRunning.current = false; };
-  }, []);
+  }, [setVinylStore]);
 
   // Trigger on mount (for existing collection) and after each Discogs sync
   useEffect(() => {
@@ -553,23 +557,16 @@ export default function CratesTab({
   }, [manualData, onManualDataChange]);
 
   const updateVinylData = useCallback((releaseId: number, data: VinylReleaseData) => {
-    const next = { ...vinylStore, [releaseId]: data };
-    setVinylStore(next);
-    saveVinylStore(next);
-  }, [vinylStore]);
+    setVinylStore(prev => ({ ...prev, [releaseId]: data }));
+  }, [setVinylStore]);
 
   // Functional update — always reads current store state, safe inside stale closures
   const patchVinylRelease = useCallback((
     releaseId: number,
     transform: (existing: VinylReleaseData) => VinylReleaseData,
   ) => {
-    setVinylStore(prev => {
-      const existing = prev[releaseId] ?? { tracks: [] };
-      const next = { ...prev, [releaseId]: transform(existing) };
-      saveVinylStore(next);
-      return next;
-    });
-  }, []);
+    setVinylStore(prev => ({ ...prev, [releaseId]: transform(prev[releaseId] ?? { tracks: [] }) }));
+  }, [setVinylStore]);
 
   const clearAiEstimates = useCallback((releaseIds: number[]) => {
     const next = new Map(manualData);
@@ -582,13 +579,15 @@ export default function CratesTab({
     }
     saveManualData(next);
     onManualDataChange(next);
-    for (const releaseId of releaseIds) {
-      patchVinylRelease(releaseId, existing => ({
-        ...existing,
-        tracks: existing.tracks.map(t => { const { bpm: _, camelot: __, genre: ___, ...r } = t; void _; void __; void ___; return r; }),
-      }));
-    }
-  }, [manualData, onManualDataChange, patchVinylRelease]);
+    setVinylStore(prev => {
+      const store = { ...prev };
+      for (const releaseId of releaseIds) {
+        const existing = store[releaseId];
+        if (existing) store[releaseId] = { ...existing, tracks: existing.tracks.map(clearAiFields) };
+      }
+      return store;
+    });
+  }, [manualData, onManualDataChange, setVinylStore]);
 
   const aiEstimateVinyl = useCallback(async (release: DiscogsRelease, currentManualData?: Map<number, ManualData>) => {
     setAiLoading(release.releaseId);
@@ -634,7 +633,7 @@ export default function CratesTab({
 
       // 2. Ask the AI per track (BPM, Camelot key, genre) plus a release-level genre.
       // Track list priority: Discogs tracklist → tracks already in the vinyl store → whole release.
-      const storedTracks = loadVinylStore()[release.releaseId]?.tracks ?? [];
+      const storedTracks = vinylStoreRef.current[release.releaseId]?.tracks ?? [];
       const aiInputTracks = discogsTracklist.length > 0
         ? discogsTracklist.map(t => ({ position: t.position ?? '', title: t.title }))
         : storedTracks.filter(t => t.title?.trim()).map(t => ({ position: t.position, title: t.title as string }));
@@ -668,7 +667,7 @@ export default function CratesTab({
       const validBpm = (v: unknown): number | undefined =>
         typeof v === 'number' && v >= 50 && v <= 220 ? Math.round(v) : undefined;
       const validKey = (v: unknown): string | undefined =>
-        typeof v === 'string' && /^(1[0-2]|[1-9])[AB]$/i.test(v.trim()) ? v.trim().toUpperCase() : undefined;
+        typeof v === 'string' && CAMELOT_TO_KEY[v.trim().toLowerCase()] ? v.trim().toUpperCase() : undefined;
       const aiByIndex = new Map<number, { bpm?: number; camelot?: string; genre?: string }>();
       for (const t of parsed.tracks ?? []) {
         if (typeof t.n !== 'number') continue;
@@ -685,6 +684,8 @@ export default function CratesTab({
         return { position: t.position, title: t.title, bpm: lookup?.bpm ?? ai?.bpm, camelot: ai?.camelot, genre: ai?.genre };
       });
 
+      const fromTracklist = aiInputTracks.length > 0;
+      const perTrackDone = fromTracklist && finalTracks.some(t => t.bpm || t.camelot || t.genre);
       const trackBpmList = finalTracks.map(t => t.bpm).filter((b): b is number => !!b).sort((a, b) => a - b);
       const effectiveBpm = overallBpm ?? (trackBpmList.length ? trackBpmList[Math.floor(trackBpmList.length / 2)] : undefined);
       const base = currentManualData ?? manualData;
@@ -696,46 +697,20 @@ export default function CratesTab({
         aiBpm:    effectiveBpm ?? undefined,
         aiBpmMin: undefined,
         aiBpmMax: undefined,
-        aiPerTrack: true,
+        // Mark the per-track pass done only if it produced per-track data — otherwise keep the button
+        ...(perTrackDone ? { aiPerTrack: true } : {}),
       });
       saveManualData(next);
       onManualDataChange(next);
 
       // Write per-track data via functional update so we read the latest vinyl store state.
-      patchVinylRelease(release.releaseId, existing => {
-        const sameTrack = (a: { position?: string; title?: string }, b: { position?: string; title?: string }) =>
-          (!!a.title && !!b.title && a.title.trim().toLowerCase() === b.title.trim().toLowerCase()) ||
-          (!!a.position && a.position === b.position);
-        const merged = existing.tracks.map(t => {
-          const hit = finalTracks.find(f => sameTrack(f, t));
-          if (!hit) return t;
-          return {
-            ...t,
-            ...(t.bpm == null && hit.bpm ? { bpm: hit.bpm } : {}),
-            ...(!t.camelot && hit.camelot ? { camelot: hit.camelot } : {}),
-            ...(!t.genre && hit.genre ? { genre: hit.genre } : {}),
-          };
-        });
-        // Add tracks the store didn't have yet (only real tracks, not the album-title fallback)
-        const fromTracklist = aiInputTracks.length > 0;
-        const added = fromTracklist
-          ? finalTracks
-              .filter(f => f.title && !merged.some(t => sameTrack(f, t)))
-              .map((f, i) => ({
-                id: `${release.releaseId}-${f.position || i}-auto`,
-                position: f.position || `A${i + 1}`,
-                title: f.title,
-                ...(f.bpm ? { bpm: f.bpm } : {}),
-                ...(f.camelot ? { camelot: f.camelot } : {}),
-                ...(f.genre ? { genre: f.genre } : {}),
-              }))
-          : [];
-        return {
-          ...existing,
-          ...(parsed.genre ? { genre: parsed.genre } : {}),
-          tracks: [...merged, ...added],
-        };
-      });
+      // Write per-track data via functional update so we read the latest vinyl store state.
+      // Only real tracks are added — never the album-title fallback.
+      patchVinylRelease(release.releaseId, existing => ({
+        ...existing,
+        ...(parsed.genre ? { genre: parsed.genre } : {}),
+        tracks: mergeAiTracks(existing.tracks, finalTracks, { releaseId: release.releaseId, addMissing: fromTracklist }),
+      }));
       return next;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

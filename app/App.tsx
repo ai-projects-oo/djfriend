@@ -38,7 +38,7 @@ import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
 import { useDiscogsCollection } from "./hooks/useDiscogsCollection";
 import { getDiscogsMatchedFiles } from "./lib/discogsCollection";
-import { loadVinylStore } from "./services/vinylStore";
+import { loadVinylStore, saveVinylStore } from "./services/vinylStore";
 import { buildVinylSongs } from "./lib/vinylSongs";
 import { apiFetch, setAppPassword, getAppPassword } from "./services/apiFetch";
 import { loadManualData, loadRejected } from "./services/discogsManualData";
@@ -439,12 +439,17 @@ function AppInner() {
   // Crates manual data + rejected — lifted here so vinylFiles can be derived reactively
   const [cratesManualData, setCratesManualData] = useState<Map<number, ManualData>>(loadManualData);
   const [cratesRejected, setCratesRejected]     = useState<Set<number>>(loadRejected);
-  // Per-track vinyl data (AI BPM/key/genre) — owned by CratesTab, mirrored here for the set generator
+  // Per-track vinyl data (AI BPM/key/genre) — shared by CratesTab (editing) and the set generator
   const [vinylStore, setVinylStore] = useState<VinylStore>(loadVinylStore);
+  const vinylStoreLoaded = useRef(false);
+  useEffect(() => {
+    if (!vinylStoreLoaded.current) { vinylStoreLoaded.current = true; return; }
+    try { saveVinylStore(vinylStore); } catch { /* quota */ }
+  }, [vinylStore]);
 
   // Vinyl records with no digital copy, usable by the generator in Mixed/Vinyl mode
   const vinylSongs = useMemo(
-    () => buildVinylSongs(discogsCollection, vinylStore, cratesManualData, cratesRejected, new Set(library.map(s => s.file))),
+    () => buildVinylSongs(discogsCollection, vinylStore, cratesManualData, cratesRejected, library),
     [discogsCollection, vinylStore, cratesManualData, cratesRejected, library],
   );
 
@@ -2910,7 +2915,8 @@ function AppInner() {
             library={library}
             manualData={cratesManualData}
             onManualDataChange={setCratesManualData}
-            onVinylStoreChange={setVinylStore}
+            vinylStore={vinylStore}
+            setVinylStore={setVinylStore}
             rejectedMatches={cratesRejected}
             onRejectedChange={setCratesRejected}
           />

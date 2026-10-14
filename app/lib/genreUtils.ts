@@ -46,6 +46,34 @@ export const BEATPORT_UMBRELLAS: BeatportUmbrella[] = [
   { label: 'Afrobeats',               phrases: ['afrobeats', 'afropop', 'afro pop'] },
 ];
 
+// ─── Genre families (Set Generator genre picker) ──────────────────────────────
+
+export const GENRE_FAMILIES: { family: string; labels: string[] }[] = [
+  { family: 'House',         labels: ['House', 'Tech House', 'Deep House', 'Afro House', 'Organic House', 'Melodic House & Techno', 'Progressive House', 'Funky House', 'Jackin House', 'Bass House', 'Amapiano'] },
+  { family: 'Techno',        labels: ['Techno', 'Hard Techno', 'Minimal / Deep Tech'] },
+  { family: 'Disco & Indie', labels: ['Nu Disco / Disco', 'Indie Dance', 'Electro'] },
+  { family: 'Breaks & Bass', labels: ['Breaks / Breakbeat', 'UK Garage / Bassline', 'Drum & Bass', 'Dubstep', 'Trap / Future Bass', 'Grime'] },
+  { family: 'Trance & Hard', labels: ['Trance', 'Psy-Trance', 'Hard Dance / Hardcore'] },
+  { family: 'Chill',         labels: ['Downtempo', 'Electronica', 'Ambient / Experimental'] },
+  { family: 'Other',         labels: ['Hip-Hop', 'R&B', 'Pop', 'Rock', 'Latin', 'Afrobeats', 'Country'] },
+];
+
+/**
+ * Groups the genres present in the library into families, biggest genres first.
+ * Genres not in any family go to "Other"; empty families are dropped.
+ */
+export function groupGenresByFamily(labels: string[], counts: Map<string, number>): { family: string; labels: string[]; total: number }[] {
+  const known = new Set(GENRE_FAMILIES.flatMap(f => f.labels));
+  const present = new Set(labels);
+  const byCount = (a: string, b: string) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || a.localeCompare(b);
+  return GENRE_FAMILIES
+    .map(f => {
+      const ls = [...f.labels.filter(l => present.has(l)), ...(f.family === 'Other' ? labels.filter(l => !known.has(l)) : [])].sort(byCount);
+      return { family: f.family, labels: ls, total: ls.reduce((n, l) => n + (counts.get(l) ?? 0), 0) };
+    })
+    .filter(f => f.labels.length > 0);
+}
+
 // All match phrases across all Beatport umbrellas (used for "most specific wins" logic)
 const ALL_BEATPORT_PHRASES = BEATPORT_UMBRELLAS.flatMap(u => u.phrases);
 

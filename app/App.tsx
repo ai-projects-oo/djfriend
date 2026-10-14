@@ -7,7 +7,8 @@ import SettingsModal from "./components/SettingsModal";
 import CalendarPicker from "./components/CalendarPicker";
 import HistoryTab from "./components/HistoryTab";
 import LibraryTab from "./components/LibraryTab";
-import { genreMatchesUmbrella, TAG_GROUPS } from "./lib/genreUtils";
+import { genreMatchesUmbrella, matchesGenrePrefs, TAG_GROUPS } from "./lib/genreUtils";
+import GenrePicker from "./components/GenrePicker";
 import { parseRekordboxXml } from "./lib/rekordboxImport";
 import { GENRE_BPM_RANGES } from "./lib/bpmRanges";
 import {
@@ -780,6 +781,16 @@ function AppInner() {
     discogsMode === 'crates-first' ? 0.12 : undefined,
     vinylFiles,
     turntables,
+  );
+
+  // Genre picker counts: tracks in the generator's current source matching the given genres
+  const genrePool = useMemo(
+    () => (effectiveFilterFiles ? generatorLibrary.filter(s => effectiveFilterFiles.has(s.file)) : generatorLibrary),
+    [generatorLibrary, effectiveFilterFiles],
+  );
+  const genreCountFor = useCallback(
+    (values: string[]) => genrePool.reduce((n, s) => n + (matchesGenrePrefs(s, values) ? 1 : 0), 0),
+    [genrePool],
   );
 
   // ⌘Z / Ctrl+Z undoes the last playlist edit in the Library (not while typing in a field)
@@ -2019,35 +2030,13 @@ function AppInner() {
               {/* Card 3: Genre */}
               {genreGroups.length > 0 && (
                 <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Genre</span>
-                    {prefs.genres.length > 0 && (
-                      <button type="button" onClick={() => selectGenre("Any")} className="text-[10px] text-[#8292a4] hover:text-[#adb6c0] transition-colors">
-                        clear
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {genreGroups.map((label) => {
-                      const value = `~${label}`;
-                      const active = prefs.genres.includes(value);
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => selectGenre(value)}
-                          className="px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border"
-                          style={{
-                            backgroundColor: active ? "#7c3aed" : "transparent",
-                            color: active ? "#fff" : "#a78bfa",
-                            borderColor: active ? "#7c3aed" : "#5a24a8",
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <GenrePicker
+                    labels={genreGroups}
+                    selected={prefs.genres}
+                    countFor={genreCountFor}
+                    onToggle={selectGenre}
+                    onClear={() => selectGenre("Any")}
+                  />
                 </div>
               )}
 

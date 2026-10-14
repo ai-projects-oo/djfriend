@@ -32,7 +32,7 @@ export function parsePlaylistLibrary(raw: unknown): PlaylistLibrary {
           ...(p.folderId && !folderIds.has(p.folderId) ? { folderId: undefined } : {}),
         }))
     : [];
-  return { schemaVersion: 1, playlists, folders };
+  return { schemaVersion: 1, playlists, folders, ...(typeof r.appleMusicRootId === 'string' ? { appleMusicRootId: r.appleMusicRootId } : {}) };
 }
 
 /** Picks "Name", or "Name 2", "Name 3"… so new playlists don't share a name. */
@@ -173,6 +173,11 @@ export function isInsideFolder(lib: PlaylistLibrary, folderId: string | undefine
     seen.add(cur);
   }
   return false;
+}
+
+/** Ids of every playlist inside a folder, including nested folders. */
+export function playlistsInFolder(lib: PlaylistLibrary, folderId: string): string[] {
+  return lib.playlists.filter(p => p.folderId && isInsideFolder(lib, p.folderId, folderId)).map(p => p.id);
 }
 
 /** Moves a folder under another (or to the top level). Refuses moves that would create a cycle. */

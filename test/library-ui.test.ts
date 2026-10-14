@@ -13,7 +13,21 @@ vi.mock('../app/services/playlistsApi', () => ({
   savePlaylistLibrary: async (lib: PlaylistLibrary) => { saved.push(lib) },
 }))
 
+// ── Music.app export stand-in ────────────────────────────────────────────────
+const exportCalls: unknown[] = []
+let exportBehaviour: 'ok' | 'fail' = 'ok'
+vi.mock('../app/services/appleMusicExport', () => ({
+  exportToAppleMusic: async (job: unknown, onProgress: (p: unknown) => void) => {
+    exportCalls.push(job)
+    onProgress({ phase: 'index' })
+    if (exportBehaviour === 'fail') throw new Error('DJFriend isn’t allowed to control Music.')
+    return { rootFolderId: 'R', folders: {}, playlists: { p1: { appleMusicId: 'M1', added: 1, skipped: [] } }, addedToLibrary: 1, tagged: 0, errors: [] }
+  },
+}))
+
 const { usePlaylists } = await import('../app/hooks/usePlaylists')
+const { default: AppleMusicExportDialog } = await import('../app/components/AppleMusicExportDialog')
+const { buildAppleMusicJob } = await import('../app/lib/appleMusicExport')
 const { default: LibrarySidebar } = await import('../app/components/LibrarySidebar')
 const { default: LibraryTab } = await import('../app/components/LibraryTab')
 
@@ -186,5 +200,84 @@ describe('LibraryTab playlist view', () => {
   it('explains an empty playlist', () => {
     renderTable({ viewKey: 'pl:p9', viewTitle: 'Empty', viewSongs: [], ordered: true, onReorder: () => {} })
     expect(container.textContent).toContain('This playlist is empty')
+  })
+})
+
+// ── Apple Music export ───────────────────────────────────────────────────────
+
+describe('Apple Music export', () => {
+  const lib: PlaylistLibrary = {
+    schemaVersion: 1, folders: [],
+    playlists: [{ id: 'p1', name: 'Warmup', tracks: ['/m/a.mp3', 'vinyl:1:x'], createdAt: 0, updatedAt: 0 }],
+  }
+  const byFile = new Map<string, Song>([
+    ['/m/a.mp3', { ...song('/m/a.mp3', 'Alpha'), filePath: '/m/a.mp3' }],
+    ['vinyl:1:x', { ...song('vinyl:1:x', 'Record'), vinylOnly: true }],
+  ])
+
+  function renderDialog(onDone = vi.fn(), onClose = vi.fn()) {
+    act(() => root.render(h(AppleMusicExportDialog, {
+      title: 'Push “Warmup” to Apple Music',
+      prepare: opts => buildAppleMusicJob(lib, ['p1'], byFile, opts),
+      playlistNames: new Map([['p1', 'Warmup']]),
+      onDone, onClose,
+    })))
+    return { onDone, onClose }
+  }
+  const button = (text: string) => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === text) as HTMLButtonElement
+
+  beforeEach(() => { exportCalls.length = 0; exportBehaviour = 'ok'; localStorage.clear() })
+
+  it('shows what will be exported and what can’t be', () => {
+    renderDialog()
+    expect(container.textContent).toContain('1 playlist · 1 tracks')
+    click(button('1 track can’t be exported ▾'))
+    expect(container.textContent).toContain('Warmup: Artist – Record (vinyl only)')
+  })
+
+  it('sends the chosen options and reports the result', async () => {
+    const { onDone } = renderDialog()
+    const writeBack = [...container.querySelectorAll('input[type="checkbox"]')][1] as HTMLInputElement
+    click(writeBack)
+    click([...container.querySelectorAll('input[type="radio"]')][1])
+    await act(async () => { button('Export to Music').click(); await new Promise(r => setTimeout(r, 0)) })
+    expect(exportCalls[0]).toMatchObject({ addMissing: true, writeBack: { keyField: 'comment' }, playlists: [{ id: 'p1', files: ['/m/a.mp3'] }] })
+    expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ rootFolderId: 'R' }))
+    expect(container.textContent).toContain('Exported 1 playlist with 1 tracks')
+    expect(container.textContent).toContain('1 file added to your Music library')
+  })
+
+  it('shows the error and lets you try again', async () => {
+    exportBehaviour = 'fail'
+    const { onDone } = renderDialog()
+    await act(async () => { button('Export to Music').click(); await new Promise(r => setTimeout(r, 0)) })
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('allowed to control Music')
+    expect(onDone).not.toHaveBeenCalled()
+    click(button('Try again'))
+    expect(button('Export to Music')).toBeTruthy()
+  })
+
+  it('sidebar offers Push / Export all only when export is available', async () => {
+    const onPush = vi.fn()
+    function Harness({ push }: { push: boolean }) {
+      const api = usePlaylists()
+      return h(LibrarySidebar, {
+        playlists: api, view: { kind: 'all' }, onSelectView: () => {}, libraryCount: 0, playlistCounts: new Map(),
+        appleSources: [], spotifySources: [], setSources: [], onDropTracks: () => {}, onSaveAsPlaylist: () => {},
+        onPushToAppleMusic: push ? onPush : undefined,
+      })
+    }
+    act(() => root.render(h(Harness, { push: false })))
+    await flush()
+    expect(byLabel('Export all playlists to Apple Music')).toBeNull()
+    rightClick(byLabel('Playlist Warmup')!)
+    expect(menuItem('Push to Apple Music')).toBeUndefined()
+
+    act(() => root.render(h(Harness, { push: true })))
+    click(byLabel('Export all playlists to Apple Music')!)
+    expect(onPush).toHaveBeenCalledWith('all', 'Export all 1 playlists to Apple Music')
+    rightClick(byLabel('Playlist Warmup')!)
+    click(menuItem('Push to Apple Music')!)
+    expect(onPush).toHaveBeenLastCalledWith(['p1'], 'Push “Warmup” to Apple Music')
   })
 })

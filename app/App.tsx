@@ -58,6 +58,8 @@ import LibrarySidebar from "./components/LibrarySidebar";
 import type { LibraryView, SourceItem } from "./lib/libraryView";
 import { usePlaylists } from "./hooks/usePlaylists";
 import { resolvePlaylist } from "./lib/playlists";
+import { buildAppleMusicJob, type AppleMusicExportOptions } from "./lib/appleMusicExport";
+import AppleMusicExportDialog from "./components/AppleMusicExportDialog";
 import {
   getStoredSession,
   clearSession as clearOpenAiSession,
@@ -380,6 +382,7 @@ function AppInner() {
   const playlistsApi = usePlaylists();
   const [libraryView, setLibraryView] = useState<LibraryView>({ kind: "all" });
   const [playlistToRename, setPlaylistToRename] = useState<string | undefined>(undefined);
+  const [musicExport, setMusicExport] = useState<{ ids: string[] | "all"; title: string } | null>(null);
   // Selection from Library tab — set when user taps "Use in Set Generator"
   const [librarySelection, setLibrarySelection] = useState<Set<string> | null>(null);
   // Controls visibility of the playlist picker select element in the Source card
@@ -601,6 +604,12 @@ function AppInner() {
     setLibraryView({ kind: "playlist", id });
     return id;
   }, [playlistsApi]);
+
+  const prepareMusicExport = useCallback(
+    (opts: AppleMusicExportOptions) => buildAppleMusicJob(playlistsApi.library, musicExport?.ids ?? [], songsByFile, opts),
+    [playlistsApi.library, musicExport, songsByFile],
+  );
+  const playlistNames = useMemo(() => new Map(playlistsApi.library.playlists.map(p => [p.id, p.name])), [playlistsApi.library]);
 
   const exportPlaylistFile = useCallback((name: string, songs: Song[], format: "M3U" | "XML") => {
     if (format === "M3U") downloadM3U(songs.map((s, i) => ({ ...s, slot: i, targetEnergy: s.energy, harmonicWarning: false })), name);
@@ -2996,7 +3005,19 @@ function AppInner() {
             onImportApple={() => void openPlaylistPicker()}
             onImportSpotify={() => setActiveTab("Imports")}
             onExportPlaylist={(p, format) => exportPlaylistFile(p.name, resolvePlaylist(p, songsByFile).songs, format)}
+            onPushToAppleMusic={navigator.userAgent.toLowerCase().includes("electron") && isMacOS
+              ? (ids, title) => setMusicExport({ ids, title })
+              : undefined}
           />
+          {musicExport && (
+            <AppleMusicExportDialog
+              title={musicExport.title}
+              prepare={prepareMusicExport}
+              playlistNames={playlistNames}
+              onDone={playlistsApi.applyAppleMusicResult}
+              onClose={() => setMusicExport(null)}
+            />
+          )}
           <div className="flex-1 min-w-0 min-h-0 flex flex-col">
           <LibraryTab
             isInitializing={isInitializing}

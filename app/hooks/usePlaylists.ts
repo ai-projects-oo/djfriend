@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Playlist, PlaylistLibrary } from "../types";
+import type { AppleMusicExportResult, Playlist, PlaylistLibrary } from "../types";
 import * as P from "../lib/playlists";
+import { applyAppleMusicResult } from "../lib/appleMusicExport";
 import { fetchPlaylistLibrary, savePlaylistLibrary } from "../services/playlistsApi";
 
 const SAVE_DELAY_MS = 400;
@@ -84,6 +85,7 @@ export function usePlaylists() {
     deleteFolder:     useCallback((id: string) => update(l => P.deleteFolder(l, id)), [update]),
     toggleFolder:     useCallback((id: string) => update(l => P.toggleFolder(l, id)), [update]),
     moveFolder:       useCallback((id: string, parentId: string | undefined) => update(l => P.moveFolder(l, id, parentId)), [update]),
+    applyAppleMusicResult: useCallback((result: AppleMusicExportResult) => update(l => applyAppleMusicResult(l, result)), [update]),
   };
 }
 

@@ -289,6 +289,7 @@ export interface PlaylistFolder {
   name: string;
   parentId?: string;           // undefined = top level
   collapsed?: boolean;
+  appleMusicId?: string;       // persistent ID of the linked Music.app folder playlist (set by export)
 }
 
 /** Everything persisted in playlists.json. */
@@ -296,6 +297,33 @@ export interface PlaylistLibrary {
   schemaVersion: 1;
   playlists: Playlist[];
   folders: PlaylistFolder[];
+  appleMusicRootId?: string;   // persistent ID of the "DJFriend" folder in Music.app
+}
+
+// ─── Apple Music export ───────────────────────────────────────────────────────
+
+export type AppleMusicKeyField = 'grouping' | 'comment';
+
+/** Sent to POST /api/apple-music/export. Everything the export script needs, in one job. */
+export interface AppleMusicExportJob {
+  rootFolderName: string;
+  rootFolderId?: string;
+  /** Folders to mirror, parents before children. */
+  folders: { id: string; name: string; parentId?: string; appleMusicId?: string }[];
+  playlists: { id: string; name: string; folderId?: string; appleMusicId?: string; files: string[] }[];
+  /** Add local files that aren't in the Music library yet (otherwise they're skipped). */
+  addMissing: boolean;
+  /** Write DJFriend's BPM and Camelot key onto the Music tracks. */
+  writeBack?: { keyField: AppleMusicKeyField; tracks: Record<string, { bpm?: number; camelot?: string }> };
+}
+
+export interface AppleMusicExportResult {
+  rootFolderId: string;
+  folders: Record<string, string>;                       // DJFriend folder id → Music persistent ID
+  playlists: Record<string, { appleMusicId: string; added: number; skipped: string[] }>;
+  addedToLibrary: number;
+  tagged: number;
+  errors: string[];
 }
 
 // ─── GigFinder ────────────────────────────────────────────────────────────────

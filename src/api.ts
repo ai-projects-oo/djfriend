@@ -22,6 +22,7 @@ import type { IncomingMessage, ServerResponse } from 'http'
 import { readProfile, writeProfile, readLeads, writeLeads, upsertLead, updateLead, deleteLead } from './gigfinder/store.js'
 import type { GigLead } from './gigfinder/types.js'
 import { loadResults, saveResults, flushResults, forgetResults } from './results-store.js'
+import { validateExportJob, runMusicExport } from './apple-music-export.js'
 
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
@@ -1789,6 +1790,32 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       res.setHeader('Accept-Ranges', 'bytes')
       fs.createReadStream(absolutePath).pipe(res)
     }
+  })
+
+  // Push DJFriend playlists into Music.app. Streams NDJSON: progress events, then done or error.
+  // Closing the request (client cancel) stops the export.
+  middlewares.use('/api/apple-music/export', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    const writeEvent = (event: Record<string, unknown>) => { if (!res.writableEnded) res.write(`${JSON.stringify(event)}\n`) }
+    if (process.platform !== 'darwin') { writeEvent({ type: 'error', message: 'Apple Music export is only available on macOS.' }); res.end(); return }
+    let job
+    try {
+      const body = await new Promise<string>((resolve, reject) => { let d = ''; req.on('data', c => { d += c }); req.on('end', () => resolve(d)); req.on('error', reject) })
+      job = validateExportJob(JSON.parse(body))
+    } catch (err) {
+      writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Invalid export job' }); res.end(); return
+    }
+    const controller = new AbortController()
+    res.on('close', () => { if (!res.writableFinished) controller.abort() })
+    try {
+      const result = await runMusicExport(job, { signal: controller.signal, onProgress: p => writeEvent({ type: 'progress', ...p }) })
+      writeEvent({ type: 'done', result })
+    } catch (err) {
+      writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Apple Music export failed' })
+    }
+    res.end()
   })
 
   middlewares.use('/api/apple-music-playlists', async (req, res, next) => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Playlist, PlaylistFolder } from "../types";
-import { buildPlaylistTree, isInsideFolder, type FolderNode } from "../lib/playlists";
+import { buildPlaylistTree, isInsideFolder, playlistsInFolder, type FolderNode } from "../lib/playlists";
 import type { PlaylistsApi } from "../hooks/usePlaylists";
 import { DRAG_FOLDER, DRAG_PLAYLIST, DRAG_TRACKS, sameView, type LibraryView, type SourceItem } from "../lib/libraryView";
 
@@ -21,6 +21,8 @@ interface Props {
   onExportPlaylist?: (playlist: Playlist, format: "M3U" | "XML") => void;
   /** Id of a playlist created elsewhere that should open straight into rename. */
   renameRequest?: string;
+  /** Set on macOS desktop only: push playlists (or all of them) into Music.app. */
+  onPushToAppleMusic?: (playlistIds: string[] | "all", title: string) => void;
 }
 
 type Renaming = { kind: "playlist" | "folder"; id: string } | null;
@@ -87,7 +89,7 @@ const MenuLabel = ({ text }: { text: string }) => <div className="px-3 pt-1 pb-0
 
 export default function LibrarySidebar({
   playlists, view, onSelectView, libraryCount, playlistCounts, appleSources, spotifySources, setSources,
-  onDropTracks, onSaveAsPlaylist, onImportApple, onImportSpotify, onExportPlaylist, renameRequest,
+  onDropTracks, onSaveAsPlaylist, onImportApple, onImportSpotify, onExportPlaylist, renameRequest, onPushToAppleMusic,
 }: Props) {
   const { library: lib } = playlists;
   const tree = useMemo(() => buildPlaylistTree(lib), [lib]);
@@ -170,6 +172,7 @@ export default function LibrarySidebar({
         ) : (
           <span className="flex-1 min-w-0 truncate">{p.name}</span>
         )}
+        {p.appleMusicId && <span className="text-[9px] text-[#58656e] flex-shrink-0" title="Linked to Apple Music — push again to update" aria-label="Linked to Apple Music"></span>}
         <span className="text-[10px] text-[#58656e] tabular-nums flex-shrink-0">{playlistCounts.get(p.id) ?? 0}</span>
       </div>
     );
@@ -300,7 +303,10 @@ export default function LibrarySidebar({
       )}
 
       {/* Sources (read-only) */}
-      {sectionHeader("apple", "Apple Music", onImportApple && iconBtn("Import from Apple Music", "⬇", onImportApple))}
+      {sectionHeader("apple", "Apple Music", <>
+        {onPushToAppleMusic && lib.playlists.length > 0 && iconBtn("Export all playlists to Apple Music", "⇪", () => onPushToAppleMusic("all", `Export all ${lib.playlists.length} playlists to Apple Music`))}
+        {onImportApple && iconBtn("Import from Apple Music", "⬇", onImportApple)}
+      </>)}
       {!collapsedSections.has("apple") && (
         appleSources.length > 0
           ? appleSources.map(renderSource)
@@ -339,6 +345,7 @@ export default function LibrarySidebar({
                 <>
                   <MenuItem label="Rename" onClick={close(() => setRenaming({ kind: "playlist", id: p.id }))} />
                   <MenuItem label="Duplicate" onClick={close(() => playlists.duplicatePlaylist(p.id))} />
+                  {onPushToAppleMusic && <MenuItem label={p.appleMusicId ? "Update in Apple Music" : "Push to Apple Music"} onClick={close(() => onPushToAppleMusic([p.id], `Push “${p.name}” to Apple Music`))} />}
                   {onExportPlaylist && <MenuItem label="Export as M3U" onClick={close(() => onExportPlaylist(p, "M3U"))} />}
                   {onExportPlaylist && <MenuItem label="Export as Rekordbox XML" onClick={close(() => onExportPlaylist(p, "XML"))} />}
                   <MenuSep />
@@ -363,6 +370,9 @@ export default function LibrarySidebar({
                   <MenuItem label="New playlist here" onClick={close(() => newPlaylist(f.id))} />
                   <MenuItem label="New folder here" onClick={close(() => newFolder(f.id))} />
                   <MenuItem label="Rename" onClick={close(() => setRenaming({ kind: "folder", id: f.id }))} />
+                  {onPushToAppleMusic && playlistsInFolder(lib, f.id).length > 0 && (
+                    <MenuItem label="Push folder to Apple Music" onClick={close(() => onPushToAppleMusic(playlistsInFolder(lib, f.id), `Push folder “${f.name}” to Apple Music`))} />
+                  )}
                   <MenuSep />
                   <MenuItem label="Delete folder (keeps playlists)" danger onClick={close(() => {
                     if (confirmDelete(`folder “${f.name}”`)) playlists.deleteFolder(f.id);

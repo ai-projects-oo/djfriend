@@ -670,6 +670,20 @@ function AppInner() {
     return [...apple.sort((a, b) => a.label.localeCompare(b.label)), ...sets];
   }, [applePlaylistFiles, history]);
 
+  // ── Generate a set from a playlist / imported source ──────────────────────
+  // Switches the generator's source, opens the Set Generator and generates once the source is applied.
+  const pendingGenerate = useRef(false);
+  const generateFrom = useCallback((filterId: string) => {
+    setPlaylistFilterIds([filterId]);
+    setActiveTab("Set Generator");
+    pendingGenerate.current = true;
+  }, []);
+  const generateFromView = useCallback((v: LibraryView) => {
+    if (v.kind === "playlist") generateFrom(`pl:${v.id}`);
+    else if (v.kind === "apple") generateFrom(`apple:${v.name}`);
+    else if (v.kind === "spotify") generateFrom(v.id);
+  }, [generateFrom]);
+
   const showIn = useCallback((view: LibraryView, file: string) => {
     setLibraryView(view);
     setReveal({ file, nonce: Date.now() });
@@ -766,6 +780,17 @@ function AppInner() {
     vinylFiles,
     turntables,
   );
+
+  // Run a generation requested by "Generate Set" once the new source has been applied
+  useEffect(() => {
+    if (!pendingGenerate.current || activeTab !== "Set Generator" || !playlistFilterFiles || library.length === 0) return;
+    pendingGenerate.current = false;
+    setTimeout(() => {
+      setIsGenerating(true);
+      setHasAttemptedGenerate(true);
+      setTimeout(() => { handleGenerate(); setIsGenerating(false); }, 0);
+    }, 0);
+  }, [activeTab, playlistFilterFiles, library.length, handleGenerate]);
 
   const energyIssues = useMemo(
     () => generatedSet.filter(t => Math.abs(t.energy - t.targetEnergy) > energyCheckThreshold),
@@ -2847,6 +2872,13 @@ function AppInner() {
                   onReorderTrack={handleReorderTrack}
                   onUpdateTrack={handleUpdateTrack}
                   onExport={handleExportM3U}
+                  onSaveAsPlaylist={generatedSet.length > 0 ? () => {
+                    const name = `Set ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`;
+                    // Vinyl-only records aren't library tracks, so they can't go in a playlist
+                    const id = newPlaylistFrom(name, generatedSet.map(t => t.file).filter(f => songsByFile.has(f)), { kind: "set", ref: "generator" });
+                    setActiveTab("Library");
+                    setPlaylistToRename(id);
+                  } : undefined}
                   onSendToRekordbox={hasRekordboxFolder ? async () => {
                     try {
                       const { generateRekordboxXml } = await import('./lib/rekordboxExport');
@@ -3080,6 +3112,7 @@ function AppInner() {
               ? (ids, title) => setMusicExport({ ids, title })
               : undefined}
             onEditSmart={(playlist, folderId) => setSmartEditor({ playlist, folderId })}
+            onGenerateSet={generateFromView}
             onFreezeSmart={(p) => playlistsApi.freezeSmartPlaylist(p.id, playlistLib.playlists.find(x => x.id === p.id)?.tracks ?? [])}
           />
           {smartEditor && (
@@ -3134,6 +3167,12 @@ function AppInner() {
             reveal={reveal}
             playlistNamesFor={playlistNamesFor}
             onSelectionChange={setSelectedLibraryFiles}
+            onGenerateSet={libraryView.kind === "playlist" || libraryView.kind === "apple" || libraryView.kind === "spotify"
+              ? () => generateFromView(libraryView) : undefined}
+            onEditRules={activeIsSmart ? () => {
+              const p = playlistLib.playlists.find(x => x.id === activePlaylistId);
+              if (p) setSmartEditor({ playlist: p });
+            } : undefined}
             onNewPlaylistFromSelection={(files) => {
               const id = newPlaylistFrom("Untitled Playlist", files);
               setPlaylistToRename(id);

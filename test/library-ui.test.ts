@@ -108,6 +108,26 @@ describe('LibrarySidebar', () => {
     expect(byLabel('Folder Gigs')?.querySelector('[aria-label="A playlist inside contains the selected track"]')).not.toBeNull()
   })
 
+  it('"Generate Set from Playlist" works for playlists and imported playlists', async () => {
+    const onGen = vi.fn()
+    function Gen() {
+      const api = usePlaylists()
+      return h(LibrarySidebar, {
+        playlists: api, view: { kind: 'all' }, onSelectView: () => {}, libraryCount: 0, playlistCounts: new Map(),
+        appleSources: [{ view: { kind: 'apple', name: 'Flying' }, label: 'Flying', count: 3 }], spotifySources: [], setSources: [],
+        onDropTracks: () => {}, onSaveAsPlaylist: () => {}, onGenerateSet: onGen,
+      })
+    }
+    act(() => root.render(h(Gen)))
+    await flush()
+    rightClick(byLabel('Playlist Warmup')!)
+    click(menuItem('Generate Set from Playlist')!)
+    expect(onGen).toHaveBeenLastCalledWith({ kind: 'playlist', id: 'p1' })
+    rightClick(byLabel('Flying')!)
+    click(menuItem('Generate Set from Playlist')!)
+    expect(onGen).toHaveBeenLastCalledWith({ kind: 'apple', name: 'Flying' })
+  })
+
   it('collapses a folder on click', async () => {
     act(() => root.render(h(SidebarHarness)))
     await flush()
@@ -263,6 +283,15 @@ describe('LibraryTab playlist view', () => {
     expect(rowFor('Alpha').getAttribute('aria-selected')).toBe('true')
     renderTable({ viewKey: 'pl:p2', viewSongs: songs, ordered: true })
     expect(rowFor('Alpha').getAttribute('aria-selected')).toBe('false')
+  })
+
+  it('view header offers Generate Set and Edit Rules when provided', () => {
+    const onGen = vi.fn(), onRules = vi.fn()
+    renderTable({ viewKey: 'pl:p1', viewTitle: 'Warmup', viewSongs: songs, ordered: true, onGenerateSet: onGen, onEditRules: onRules })
+    click([...container.querySelectorAll('button')].find(b => b.textContent === 'Generate Set')!)
+    click([...container.querySelectorAll('button')].find(b => b.textContent === '⚙ Edit Rules')!)
+    expect(onGen).toHaveBeenCalledOnce()
+    expect(onRules).toHaveBeenCalledOnce()
   })
 
   it('explains an empty playlist', () => {

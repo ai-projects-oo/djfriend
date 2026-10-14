@@ -128,6 +128,10 @@ interface Props {
   /** Names of the DJFriend playlists a track is in (for the Playlists column). */
   playlistNamesFor?: (file: string) => string[];
   onSelectionChange?: (files: string[]) => void;
+  /** Shown as "Generate Set" in the view header (playlist / imported playlist views). */
+  onGenerateSet?: () => void;
+  /** Shown as "Edit Rules" in the view header (smart playlists). */
+  onEditRules?: () => void;
   /** Select and scroll to this track (nonce changes each time it's requested). */
   reveal?: { file: string; nonce: number };
 }
@@ -339,7 +343,7 @@ export default function LibraryTab({
   library, isInitializing, onUpdateTrack, onReanalyzed, onRemoveTracks, onSendToGenerator,
   viewKey = "all", viewTitle, viewSongs, ordered = false, missingCount = 0,
   onReorder, onRemoveFromView, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylistFromSelection,
-  containingSources, onShowIn, reveal, playlistNamesFor, onSelectionChange,
+  containingSources, onShowIn, reveal, playlistNamesFor, onSelectionChange, onGenerateSet, onEditRules,
 }: Props) {
   const songs = viewSongs ?? library;
   const [sortKey, setSortKey]   = useState<SortKey>(ordered ? "order" : "artist");
@@ -840,12 +844,26 @@ export default function LibraryTab({
               {missingCount} missing
             </span>
           )}
-          {onReorder && !canReorder && songs.length > 1 && (
-            <button type="button" onClick={() => { setSortKey("order"); setSortAsc(true); setSearch(""); setFilters(DEFAULT_FILTERS); }}
-              className="ml-auto text-[10px] text-[#64748b] hover:text-[#a78bfa] cursor-pointer">
-              Sort by # to reorder
-            </button>
-          )}
+          <span className="ml-auto flex items-center gap-2">
+            {onReorder && !canReorder && songs.length > 1 && (
+              <button type="button" onClick={() => { setSortKey("order"); setSortAsc(true); setSearch(""); setFilters(DEFAULT_FILTERS); }}
+                className="text-[10px] text-[#64748b] hover:text-[#a78bfa] cursor-pointer">
+                Sort by # to reorder
+              </button>
+            )}
+            {onEditRules && (
+              <button type="button" onClick={onEditRules}
+                className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:text-[#e2e8f0] hover:border-[#7c3aed] cursor-pointer">
+                ⚙ Edit Rules
+              </button>
+            )}
+            {onGenerateSet && songs.length > 0 && (
+              <button type="button" onClick={onGenerateSet}
+                className="px-2.5 py-1 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] cursor-pointer">
+                Generate Set
+              </button>
+            )}
+          </span>
         </div>
       )}
 

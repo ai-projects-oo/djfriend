@@ -29,6 +29,8 @@ interface Props {
   onEditSmart?: (playlist: Playlist | null, folderId?: string) => void;
   /** Turn a smart playlist into a regular one with its current tracks. */
   onFreezeSmart?: (playlist: Playlist) => void;
+  /** Open the Set Generator using this playlist / import as the source, and generate. */
+  onGenerateSet?: (view: LibraryView) => void;
 }
 
 type Renaming = { kind: "playlist" | "folder"; id: string } | null;
@@ -96,7 +98,7 @@ const MenuLabel = ({ text }: { text: string }) => <div className="px-3 pt-1 pb-0
 export default function LibrarySidebar({
   playlists, view, onSelectView, libraryCount, playlistCounts, appleSources, spotifySources, setSources,
   onDropTracks, onSaveAsPlaylist, onImportApple, onImportSpotify, onExportPlaylist, renameRequest, onPushToAppleMusic, highlightIds,
-  onEditSmart, onFreezeSmart,
+  onEditSmart, onFreezeSmart, onGenerateSet,
 }: Props) {
   const hasHighlight = (node: FolderNode): boolean =>
     !!highlightIds && (node.playlists.some(p => highlightIds.has(p.id)) || node.folders.some(hasHighlight));
@@ -358,6 +360,8 @@ export default function LibrarySidebar({
               const p = t.playlist;
               return (
                 <>
+                  {onGenerateSet && <MenuItem label="Generate Set from Playlist" onClick={close(() => onGenerateSet({ kind: "playlist", id: p.id }))} />}
+                  {onGenerateSet && <MenuSep />}
                   {p.smart && onEditSmart && <MenuItem label="Edit Rules…" onClick={close(() => onEditSmart(p))} />}
                   <MenuItem label="Rename" onClick={close(() => setRenaming({ kind: "playlist", id: p.id }))} />
                   <MenuItem label="Duplicate" onClick={close(() => playlists.duplicatePlaylist(p.id))} />
@@ -398,7 +402,14 @@ export default function LibrarySidebar({
                 </>
               );
             }
-            return <MenuItem label="Save as playlist" onClick={close(() => onSaveAsPlaylist(t.source))} />;
+            return (
+              <>
+                {onGenerateSet && t.source.view.kind !== "set" && (
+                  <MenuItem label="Generate Set from Playlist" onClick={close(() => onGenerateSet(t.source.view))} />
+                )}
+                <MenuItem label="Save as playlist" onClick={close(() => onSaveAsPlaylist(t.source))} />
+              </>
+            );
           }}
         </SidebarMenu>
       )}

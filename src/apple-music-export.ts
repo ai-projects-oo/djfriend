@@ -58,9 +58,12 @@ function exportToMusic(job, Music, Path, log) {
   var lib = Music.libraryPlaylists[0];
 
   function first(arr) { return arr && arr.length ? arr[0] : null; }
-  function byPid(collection, pid) {
-    if (!pid) return null;
-    try { return first(collection.whose({ persistentID: pid })()); } catch (e) { return null; }
+  // Music only lets you query folders through the generic playlists collection, so filter by class
+  function playlistsWhere(query, cls) {
+    try { return Music.playlists.whose(query)().filter(function (p) { return p.class() === cls; }); } catch (e) { return []; }
+  }
+  function byPid(cls, pid) {
+    return pid ? first(playlistsWhere({ persistentID: pid }, cls)) : null;
   }
   function parentPid(pl) {
     try { var p = pl.parent(); return p ? p.persistentID() : null; } catch (e) { return null; }
@@ -83,9 +86,9 @@ function exportToMusic(job, Music, Path, log) {
   function track(id) { return lib.tracks.byId(id); }
 
   // 2. Root "DJFriend" folder: linked one, else a top-level folder with that name, else a new one
-  var root = byPid(Music.folderPlaylists, job.rootFolderId);
+  var root = byPid('folderPlaylist', job.rootFolderId);
   if (!root) {
-    root = first(Music.folderPlaylists.whose({ name: job.rootFolderName })().filter(function (f) { return !parentPid(f); }));
+    root = first(playlistsWhere({ name: job.rootFolderName }, 'folderPlaylist').filter(function (f) { return !parentPid(f); }));
   }
   if (!root) root = Music.make({ new: 'folderPlaylist', withProperties: { name: job.rootFolderName } });
   result.rootFolderId = root.persistentID();
@@ -94,7 +97,7 @@ function exportToMusic(job, Music, Path, log) {
   var folderRef = {};
   job.folders.forEach(function (f) {
     var parent = f.parentId && folderRef[f.parentId] ? folderRef[f.parentId] : root;
-    var mf = byPid(Music.folderPlaylists, f.appleMusicId);
+    var mf = byPid('folderPlaylist', f.appleMusicId);
     if (!mf) mf = Music.make({ new: 'folderPlaylist', withProperties: { name: f.name } });
     rename(mf, f.name);
     moveInto(mf, parent);
@@ -125,7 +128,7 @@ function exportToMusic(job, Music, Path, log) {
   job.playlists.forEach(function (p, pi) {
     log({ phase: 'playlist', name: p.name, index: pi, total: job.playlists.length });
     var folder = p.folderId && folderRef[p.folderId] ? folderRef[p.folderId] : root;
-    var mp = byPid(Music.userPlaylists, p.appleMusicId);
+    var mp = byPid('userPlaylist', p.appleMusicId);
     if (mp) {
       rename(mp, p.name);
       var existing = mp.tracks();

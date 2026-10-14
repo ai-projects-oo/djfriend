@@ -42,6 +42,7 @@ class FakeMusic {
   playlistProxy(pl: PlaylistState): Record<string, unknown> {
     return jxa(pl, {
       __state: pl,
+      class: () => (pl.kind === 'folder' ? 'folderPlaylist' : 'userPlaylist'),
       persistentID: () => pl.pid,
       parent: () => {
         const parent = this.playlists.find(p => p.pid === pl.parent)
@@ -51,10 +52,11 @@ class FakeMusic {
       tracks: () => pl.entries.map((id) => ({ delete: () => { pl.entries.splice(pl.entries.indexOf(id), 1) } })),
     })
   }
-  collection(kind: PlaylistState['kind']) {
+  // Like real Music: every playlist kind is queried through `playlists`
+  allPlaylists() {
     return {
       whose: (q: { persistentID?: string; name?: string }) => () => this.playlists
-        .filter(p => p.kind === kind && (q.persistentID === undefined || p.pid === q.persistentID) && (q.name === undefined || p.name === q.name))
+        .filter(p => (q.persistentID === undefined || p.pid === q.persistentID) && (q.name === undefined || p.name === q.name))
         .map(p => this.playlistProxy(p)),
     }
   }
@@ -69,8 +71,10 @@ class FakeMusic {
     }
     return {
       libraryPlaylists: [lib],
-      folderPlaylists: this.collection('folder'),
-      userPlaylists: this.collection('user'),
+      playlists: this.allPlaylists(),
+      // Real Music: these exist but can't be queried with whose() (folders never show up in userPlaylists)
+      folderPlaylists: {},
+      userPlaylists: { whose: () => () => [] },
       make: ({ new: cls, withProperties }: { new: string; withProperties: { name: string } }) =>
         this.playlistProxy(this.addPlaylist(cls === 'folderPlaylist' ? 'folder' : 'user', withProperties.name)),
       move: (pl: { __state: PlaylistState }, { to }: { to: { __state: PlaylistState } }) => { pl.__state.parent = to.__state.pid },

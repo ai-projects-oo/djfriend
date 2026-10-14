@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   EMPTY_PLAYLIST_LIBRARY, parsePlaylistLibrary, uniqueName, createPlaylist, renamePlaylist, deletePlaylist,
   duplicatePlaylist, addTracks, removeTracks, moveTracks, moveWithin, createFolder, renameFolder, toggleFolder,
-  deleteFolder, movePlaylistToFolder, moveFolder, isInsideFolder, buildPlaylistTree, resolvePlaylist,
+  deleteFolder, movePlaylistToFolder, moveFolder, isInsideFolder, buildPlaylistTree, resolvePlaylist, flattenPlaylistTree,
 } from '../app/lib/playlists'
 import type { PlaylistLibrary, Song } from '../app/types'
 
@@ -152,6 +152,29 @@ describe('folders', () => {
     const tree = buildPlaylistTree(lib)
     expect(tree.folders.map(n => n.folder.id)).toEqual(['f'])
     expect(tree.playlists.map(p => p.id)).toEqual(['p'])
+  })
+})
+
+describe('flattenPlaylistTree', () => {
+  const lib = () => {
+    let l = createFolder(EMPTY_PLAYLIST_LIBRARY, { id: 'f1', name: 'Places' })
+    l = createFolder(l, { id: 'f2', name: 'LouLou', parentId: 'f1' })
+    l = createFolder(l, { id: 'f3', name: 'Rest' })
+    l = createPlaylist(l, { id: 'p1', name: 'LouLou Night', now: T0, folderId: 'f2', tracks: ['x'] })
+    l = createPlaylist(l, { id: 'p2', name: 'Flying', now: T0, folderId: 'f3' })
+    l = createPlaylist(l, { id: 'p3', name: 'Loose', now: T0, tracks: ['x'] })
+    return l
+  }
+
+  it('lists folders as labels with playlists indented under them', () => {
+    expect(flattenPlaylistTree(lib()).map(e => `${'  '.repeat(e.depth)}${e.kind}:${e.name}`)).toEqual([
+      'folder:Places', '  folder:LouLou', '    playlist:LouLou Night', 'folder:Rest', '  playlist:Flying', 'playlist:Loose',
+    ])
+  })
+
+  it('keeps only matching playlists and the folders leading to them', () => {
+    expect(flattenPlaylistTree(lib(), p => p.tracks.includes('x')).map(e => e.name)).toEqual(['Places', 'LouLou', 'LouLou Night', 'Loose'])
+    expect(flattenPlaylistTree(lib(), () => false)).toEqual([])
   })
 })
 

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind, ManualData, VinylStore, Song } from "./types";
+import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind, ManualData, VinylStore, Song, Playlist } from "./types";
 import { DEFAULT_TIP_CONFIG, DEFAULT_DJ_SYSTEM, vinylDeckCount } from "./types";
 import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
@@ -55,7 +55,7 @@ import PlayerBar from "./components/PlayerBar";
 import GigFinderTab from "./components/GigFinderTab";
 import LoaderStatus from "./components/LoaderStatus";
 import LibrarySidebar from "./components/LibrarySidebar";
-import type { LibraryView, SourceItem } from "./lib/libraryView";
+import type { ContainingSource, LibraryView, SourceItem } from "./lib/libraryView";
 import { usePlaylists } from "./hooks/usePlaylists";
 import { resolvePlaylist } from "./lib/playlists";
 import { buildAppleMusicJob, type AppleMusicExportOptions } from "./lib/appleMusicExport";
@@ -599,11 +599,60 @@ function AppInner() {
     [history],
   );
 
+  // ── "Add to Last Playlist" / "Show in Playlist" ──────────────────────────
+  const [lastPlaylistId, setLastPlaylistId] = useState<string | null>(null);
+  const [reveal, setReveal] = useState<{ file: string; nonce: number } | undefined>(undefined);
+  const [selectedLibraryFiles, setSelectedLibraryFiles] = useState<string[]>([]);
+  const { createPlaylist: createPl, addTracks: addPlTracks } = playlistsApi;
+
   const newPlaylistFrom = useCallback((name: string, files: string[], source?: { kind: "apple-music" | "spotify" | "set"; ref: string }) => {
-    const id = playlistsApi.createPlaylist(name, { tracks: files, source });
+    const id = createPl(name, { tracks: files, source });
     setLibraryView({ kind: "playlist", id });
+    setLastPlaylistId(id);
     return id;
-  }, [playlistsApi]);
+  }, [createPl]);
+
+  const addToPlaylist = useCallback((id: string, files: string[]) => {
+    addPlTracks(id, files);
+    setLastPlaylistId(id);
+  }, [addPlTracks]);
+  const lastPlaylist = useMemo(() => {
+    const p = lastPlaylistId ? playlistsApi.library.playlists.find(x => x.id === lastPlaylistId) : undefined;
+    return p ? { id: p.id, name: p.name } : undefined;
+  }, [lastPlaylistId, playlistsApi.library]);
+
+  // file → DJFriend playlists containing it
+  const playlistsByFile = useMemo(() => {
+    const m = new Map<string, Playlist[]>();
+    for (const p of playlistsApi.library.playlists) for (const f of p.tracks) {
+      const list = m.get(f);
+      if (list) list.push(p); else m.set(f, [p]);
+    }
+    return m;
+  }, [playlistsApi.library]);
+  const playlistNamesFor = useCallback((file: string) => (playlistsByFile.get(file) ?? []).map(p => p.name), [playlistsByFile]);
+  const highlightPlaylistIds = useMemo(
+    () => new Set(selectedLibraryFiles.flatMap(f => (playlistsByFile.get(f) ?? []).map(p => p.id))),
+    [selectedLibraryFiles, playlistsByFile],
+  );
+
+  // Apple Music imports and saved sets that contain a track (DJFriend playlists come from playlistsByFile)
+  const containingSources = useCallback((song: Song): ContainingSource[] => {
+    const paths = new Set([song.file, song.filePath].filter((p): p is string => !!p));
+    const apple = Object.entries(applePlaylistFiles)
+      .filter(([, files]) => files.some(f => paths.has(f)))
+      .map(([name]) => ({ group: "Apple Music", label: name, view: { kind: "apple", name } as LibraryView }));
+    const sets = history
+      .filter(h => h.tracks.some(t => t.file === song.file))
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .map(h => ({ group: "Sets", label: h.name, view: { kind: "set", id: h.id } as LibraryView }));
+    return [...apple.sort((a, b) => a.label.localeCompare(b.label)), ...sets];
+  }, [applePlaylistFiles, history]);
+
+  const showIn = useCallback((view: LibraryView, file: string) => {
+    setLibraryView(view);
+    setReveal({ file, nonce: Date.now() });
+  }, []);
 
   const prepareMusicExport = useCallback(
     (opts: AppleMusicExportOptions) => buildAppleMusicJob(playlistsApi.library, musicExport?.ids ?? [], songsByFile, opts),
@@ -2992,7 +3041,8 @@ function AppInner() {
             spotifySources={spotifySources}
             setSources={setSources}
             renameRequest={playlistToRename}
-            onDropTracks={(id, files) => playlistsApi.addTracks(id, files)}
+            onDropTracks={addToPlaylist}
+            highlightIds={highlightPlaylistIds}
             onSaveAsPlaylist={(src) => {
               const resolved = resolveLibraryView(src.view);
               if (!resolved) return;
@@ -3033,8 +3083,14 @@ function AppInner() {
               playlistsApi.moveTracks(activePlaylistId, files, before ? pl.tracks.indexOf(before) : pl.tracks.length);
             } : undefined}
             onRemoveFromView={activePlaylistId ? (files) => playlistsApi.removeTracks(activePlaylistId, files) : undefined}
-            playlists={playlistsApi.library.playlists}
-            onAddToPlaylist={(id, files) => playlistsApi.addTracks(id, files)}
+            playlistLibrary={playlistsApi.library}
+            lastPlaylist={lastPlaylist}
+            onAddToPlaylist={addToPlaylist}
+            containingSources={containingSources}
+            onShowIn={showIn}
+            reveal={reveal}
+            playlistNamesFor={playlistNamesFor}
+            onSelectionChange={setSelectedLibraryFiles}
             onNewPlaylistFromSelection={(files) => {
               const id = newPlaylistFrom("Untitled Playlist", files);
               setPlaylistToRename(id);

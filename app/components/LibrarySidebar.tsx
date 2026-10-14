@@ -23,6 +23,8 @@ interface Props {
   renameRequest?: string;
   /** Set on macOS desktop only: push playlists (or all of them) into Music.app. */
   onPushToAppleMusic?: (playlistIds: string[] | "all", title: string) => void;
+  /** Playlists containing the tracks selected in the table — marked with a dot. */
+  highlightIds?: Set<string>;
 }
 
 type Renaming = { kind: "playlist" | "folder"; id: string } | null;
@@ -89,8 +91,13 @@ const MenuLabel = ({ text }: { text: string }) => <div className="px-3 pt-1 pb-0
 
 export default function LibrarySidebar({
   playlists, view, onSelectView, libraryCount, playlistCounts, appleSources, spotifySources, setSources,
-  onDropTracks, onSaveAsPlaylist, onImportApple, onImportSpotify, onExportPlaylist, renameRequest, onPushToAppleMusic,
+  onDropTracks, onSaveAsPlaylist, onImportApple, onImportSpotify, onExportPlaylist, renameRequest, onPushToAppleMusic, highlightIds,
 }: Props) {
+  const hasHighlight = (node: FolderNode): boolean =>
+    !!highlightIds && (node.playlists.some(p => highlightIds.has(p.id)) || node.folders.some(hasHighlight));
+  const dot = (label: string) => (
+    <span className="w-1.5 h-1.5 rounded-full bg-[#a78bfa] flex-shrink-0" title={label} aria-label={label} />
+  );
   const { library: lib } = playlists;
   const tree = useMemo(() => buildPlaylistTree(lib), [lib]);
   const [renaming, setRenaming] = useState<Renaming>(null);
@@ -172,6 +179,7 @@ export default function LibrarySidebar({
         ) : (
           <span className="flex-1 min-w-0 truncate">{p.name}</span>
         )}
+        {highlightIds?.has(p.id) && dot("Contains the selected track")}
         {p.appleMusicId && <span className="text-[9px] text-[#58656e] flex-shrink-0" title="Linked to Apple Music — push again to update" aria-label="Linked to Apple Music"></span>}
         <span className="text-[10px] text-[#58656e] tabular-nums flex-shrink-0">{playlistCounts.get(p.id) ?? 0}</span>
       </div>
@@ -205,6 +213,7 @@ export default function LibrarySidebar({
           ) : (
             <span className="flex-1 min-w-0 truncate font-medium">{f.name}</span>
           )}
+          {f.collapsed && hasHighlight(node) && dot("A playlist inside contains the selected track")}
         </div>
         {!f.collapsed && (
           <>

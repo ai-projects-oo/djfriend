@@ -219,6 +219,35 @@ export function buildPlaylistTree(lib: PlaylistLibrary): PlaylistTree {
   return build(undefined, new Set());
 }
 
+export type PlaylistMenuEntry =
+  | { kind: 'folder'; id: string; name: string; depth: number }
+  | { kind: 'playlist'; id: string; name: string; depth: number };
+
+/**
+ * The playlist tree flattened for a menu (folders as labels, playlists indented under them).
+ * With `include`, only matching playlists — and the folders leading to them — are listed.
+ */
+export function flattenPlaylistTree(lib: PlaylistLibrary, include?: (p: Playlist) => boolean): PlaylistMenuEntry[] {
+  const out: PlaylistMenuEntry[] = [];
+  const walk = (node: PlaylistTree, depth: number): boolean => {
+    let any = false;
+    for (const f of node.folders) {
+      const at = out.length;
+      out.push({ kind: 'folder', id: f.folder.id, name: f.folder.name, depth });
+      if (walk(f, depth + 1) || !include) any = true;
+      else out.splice(at, 1);   // nothing matched inside — drop the folder label
+    }
+    for (const p of node.playlists) {
+      if (include && !include(p)) continue;
+      out.push({ kind: 'playlist', id: p.id, name: p.name, depth });
+      any = true;
+    }
+    return any;
+  };
+  walk(buildPlaylistTree(lib), 0);
+  return out;
+}
+
 /** Resolves a playlist's track keys to songs, in playlist order. Tracks no longer in the library are counted, not returned. */
 export function resolvePlaylist(playlist: Playlist, songsByFile: Map<string, Song>): { songs: Song[]; missing: number } {
   const songs: Song[] = [];

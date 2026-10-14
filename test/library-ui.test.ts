@@ -90,6 +90,22 @@ describe('LibrarySidebar', () => {
     expect(byLabel('All tracks')?.getAttribute('aria-current')).toBe('true')
   })
 
+  it('marks playlists containing the selected track, and collapsed folders holding them', async () => {
+    function Highlight() {
+      const api = usePlaylists()
+      return h(LibrarySidebar, {
+        playlists: api, view: { kind: 'all' }, onSelectView: () => {}, libraryCount: 0, playlistCounts: new Map(),
+        appleSources: [], spotifySources: [], setSources: [], onDropTracks: () => {}, onSaveAsPlaylist: () => {},
+        highlightIds: new Set(['p1']),
+      })
+    }
+    act(() => root.render(h(Highlight)))
+    await flush()
+    expect(byLabel('Playlist Warmup')?.querySelector('[aria-label="Contains the selected track"]')).not.toBeNull()
+    click(byLabel('Folder Gigs')!)
+    expect(byLabel('Folder Gigs')?.querySelector('[aria-label="A playlist inside contains the selected track"]')).not.toBeNull()
+  })
+
   it('collapses a folder on click', async () => {
     act(() => root.render(h(SidebarHarness)))
     await flush()
@@ -171,12 +187,62 @@ describe('LibraryTab playlist view', () => {
     expect([...container.querySelectorAll('tbody tr[aria-selected="true"]')].length).toBe(3)
   })
 
-  it('adds tracks to a playlist from the context menu', () => {
+  it('adds tracks to a playlist from the Add to Playlist submenu (with folders)', () => {
     const onAdd = vi.fn()
-    renderTable({ playlists: stored.playlists, onAddToPlaylist: onAdd })
+    renderTable({ playlistLibrary: stored, onAddToPlaylist: onAdd })
     rightClick(rowFor('Bravo'))
+    click(menuItem('Add to Playlist')!)
+    expect(document.querySelector('[role="menu"][aria-label="Add to Playlist"]')?.textContent).toContain('Gigs')
     click(menuItem('Warmup')!)
     expect(onAdd).toHaveBeenCalledWith('p1', ['b.mp3'])
+  })
+
+  it('offers "Add to Last Playlist"', () => {
+    const onAdd = vi.fn()
+    renderTable({ playlistLibrary: stored, onAddToPlaylist: onAdd, lastPlaylist: { id: 'p1', name: 'Warmup' } })
+    rightClick(rowFor('Charlie'))
+    click(menuItem('Add to Last Playlist, Warmup')!)
+    expect(onAdd).toHaveBeenCalledWith('p1', ['c.mp3'])
+  })
+
+  it('Show in Playlist lists only playlists containing the track, plus other sources, and jumps there', () => {
+    const onShowIn = vi.fn()
+    const lib: PlaylistLibrary = { ...stored, playlists: [...stored.playlists, { id: 'p2', name: 'Other', tracks: ['c.mp3'], createdAt: 0, updatedAt: 0 }] }
+    renderTable({
+      playlistLibrary: lib, onShowIn,
+      containingSources: s => (s.file === 'a.mp3' ? [{ group: 'Apple Music', label: 'Flying', view: { kind: 'apple', name: 'Flying' } }] : []),
+    })
+    rightClick(rowFor('Alpha'))
+    click(menuItem('Show in Playlist')!)
+    const sub = document.querySelector('[role="menu"][aria-label="Show in Playlist"]')!
+    expect(sub.textContent).toContain('Gigs')
+    expect(sub.textContent).toContain('Warmup')
+    expect(sub.textContent).not.toContain('Other')
+    expect(sub.textContent).toContain('Flying')
+    click(menuItem('Warmup')!)
+    expect(onShowIn).toHaveBeenCalledWith({ kind: 'playlist', id: 'p1' }, 'a.mp3')
+  })
+
+  it('hides Show in Playlist when the track is in no playlist', () => {
+    renderTable({ playlistLibrary: stored, onShowIn: () => {} })
+    rightClick(rowFor('Bravo'))
+    expect(menuItem('Show in Playlist')).toBeUndefined()
+  })
+
+  it('reveal selects the track and reports the selection', () => {
+    const onSel = vi.fn()
+    renderTable({ viewSongs: songs, onSelectionChange: onSel })
+    renderTable({ viewSongs: songs, onSelectionChange: onSel, reveal: { file: 'c.mp3', nonce: 1 } })
+    expect(rowFor('Charlie').getAttribute('aria-selected')).toBe('true')
+    expect(onSel).toHaveBeenLastCalledWith(['c.mp3'])
+  })
+
+  it('Playlists column shows how many playlists a track is in', () => {
+    localStorage.setItem('djfriend:libraryColumns', JSON.stringify(['playlists']))
+    renderTable({ playlistNamesFor: f => (f === 'a.mp3' ? ['Warmup', 'Peak'] : []) })
+    const cell = [...rowFor('Alpha').querySelectorAll('span')].find(s => s.getAttribute('title') === 'Warmup\nPeak')
+    expect(cell?.textContent).toBe('2')
+    localStorage.removeItem('djfriend:libraryColumns')
   })
 
   it('creates a new playlist from the selection', () => {

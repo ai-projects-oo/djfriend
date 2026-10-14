@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import type { Playlist, Song } from "../types";
-import { DRAG_TRACKS } from "../lib/libraryView";
+import type { PlaylistLibrary, Song } from "../types";
+import { DRAG_TRACKS, type ContainingSource, type LibraryView } from "../lib/libraryView";
+import { flattenPlaylistTree, type PlaylistMenuEntry } from "../lib/playlists";
 import LibraryStatsBar from "./LibraryStatsBar";
 import LibraryPlayer from "./LibraryPlayer";
 import TrackInfoModal from "./TrackInfoModal";
@@ -68,7 +69,7 @@ function toSetTrack(s: Song): SetTrack { return { ...s, slot: 0, targetEnergy: s
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type SortKey = "order" | "title" | "artist" | "bpm" | "key" | "energy" | "duration" | "year" | "dateAdded" | "genres" | "comment";
-type OptionalCol = "duration" | "year" | "comment" | "dateAdded" | "vibeTags" | "moodTags" | "vocalType";
+type OptionalCol = "duration" | "year" | "comment" | "dateAdded" | "vibeTags" | "moodTags" | "vocalType" | "playlists";
 
 const OPTIONAL_COLS: { key: OptionalCol; label: string; ai?: boolean }[] = [
   { key: "duration",  label: "Duration" },
@@ -78,6 +79,7 @@ const OPTIONAL_COLS: { key: OptionalCol; label: string; ai?: boolean }[] = [
   { key: "vibeTags",  label: "Vibe Tags",  ai: true },
   { key: "moodTags",  label: "Mood Tags",  ai: true },
   { key: "vocalType", label: "Vocal Type", ai: true },
+  { key: "playlists", label: "Playlists" },
 ];
 
 const LS_KEY = "djfriend:libraryColumns";
@@ -115,9 +117,19 @@ interface Props {
   /** Set for editable playlists: move `files` before `beforeFile` (null = end). */
   onReorder?: (files: string[], beforeFile: string | null) => void;
   onRemoveFromView?: (files: string[]) => void;
-  playlists?: Playlist[];
+  playlistLibrary?: PlaylistLibrary;
+  /** The playlist tracks were last added to — offered as "Add to Last Playlist". */
+  lastPlaylist?: { id: string; name: string };
   onAddToPlaylist?: (playlistId: string, files: string[]) => void;
   onNewPlaylistFromSelection?: (files: string[]) => void;
+  /** Other playlists (e.g. Apple Music imports) containing a track, for "Show in Playlist". */
+  containingSources?: (song: Song) => ContainingSource[];
+  onShowIn?: (view: LibraryView, file: string) => void;
+  /** Names of the DJFriend playlists a track is in (for the Playlists column). */
+  playlistNamesFor?: (file: string) => string[];
+  onSelectionChange?: (files: string[]) => void;
+  /** Select and scroll to this track (nonce changes each time it's requested). */
+  reveal?: { file: string; nonce: number };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -185,7 +197,47 @@ function SortHeader({ col, label, sortKey, sortAsc, onSort }: { col: SortKey; la
 
 // ─── Context menu ─────────────────────────────────────────────────────────────
 
-function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSendToGenerator, onDelete, onExportM3U, onClose, playlists, onAddToPlaylist, onNewPlaylist, onRemoveFromView }: {
+const menuItemClass = "w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded text-[#a6b5c8] hover:bg-[#2c2c42] hover:text-[#e2e8f0]";
+
+/** Menu item that opens a flyout to the side (hover, click or →). */
+function Submenu({ label, openLeft, children }: { label: string; openLeft: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button type="button" role="menuitem" aria-haspopup="menu" aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => { if (e.key === "ArrowRight" || e.key === "Enter") setOpen(true); if (e.key === "ArrowLeft") setOpen(false); }}
+        className={`${menuItemClass} flex items-center justify-between gap-4 ${open ? "bg-[#2c2c42] text-[#e2e8f0]" : ""}`}>
+        <span className="truncate">{label}</span><span aria-hidden className="text-[#64748b]">›</span>
+      </button>
+      {open && (
+        <div role="menu" aria-label={label}
+          className={`absolute -top-1 ${openLeft ? "right-full" : "left-full"} z-[101] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[220px] max-w-[320px] max-h-[60vh] overflow-y-auto`}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TreeEntries({ entries, onPick }: { entries: PlaylistMenuEntry[]; onPick: (id: string) => void }) {
+  return (
+    <>
+      {entries.map(e => e.kind === "folder" ? (
+        <div key={`f-${e.id}`} className="px-3 py-1 text-xs text-[#8394a8] truncate select-none" style={{ paddingLeft: 12 + e.depth * 14 }}>
+          <span aria-hidden>📁 </span>{e.name}
+        </div>
+      ) : (
+        <button key={`p-${e.id}`} type="button" role="menuitem" onClick={() => onPick(e.id)}
+          className={`${menuItemClass} truncate`} style={{ paddingLeft: 12 + e.depth * 14 }}>
+          <span aria-hidden className="text-[#7c3aed]">♫ </span>{e.name}
+        </button>
+      ))}
+    </>
+  );
+}
+
+function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSendToGenerator, onDelete, onExportM3U, onClose, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylist, onRemoveFromView, containingSources, onShowIn }: {
   menu: ContextMenu;
   selection: Set<string>;
   onGetInfo: (s: Song) => void;
@@ -195,15 +247,19 @@ function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSen
   onDelete: (s: Song) => void;
   onExportM3U: (s: Song) => void;
   onClose: () => void;
-  playlists?: Playlist[];
+  playlistLibrary?: PlaylistLibrary;
+  lastPlaylist?: { id: string; name: string };
   onAddToPlaylist?: (playlistId: string, files: string[]) => void;
   onNewPlaylist?: (files: string[]) => void;
   onRemoveFromView?: (files: string[]) => void;
+  containingSources?: (song: Song) => ContainingSource[];
+  onShowIn?: (view: LibraryView, file: string) => void;
 }) {
   // Actions apply to the whole selection when the clicked row is part of it
   const targets = selection.has(menu.song.file) && selection.size > 1 ? [...selection] : [menu.song.file];
   const n = targets.length > 1 ? ` ${targets.length} tracks` : "";
   const ref = useRef<HTMLDivElement>(null);
+  const openLeft = menu.x > window.innerWidth - 440;
 
   useEffect(() => {
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
@@ -214,29 +270,57 @@ function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSen
   }, [onClose]);
 
   const item = (label: string, onClick: () => void, danger = false) => (
-    <button type="button" className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded ${danger ? "text-[#ef4444]/80 hover:bg-[#ef4444]/10 hover:text-[#ef4444]" : "text-[#a6b5c8] hover:bg-[#2c2c42] hover:text-[#e2e8f0]"}`} onClick={() => { onClick(); onClose(); }}>{label}</button>
+    <button type="button" role="menuitem" className={danger ? "w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded text-[#ef4444]/80 hover:bg-[#ef4444]/10 hover:text-[#ef4444]" : menuItemClass} onClick={() => { onClick(); onClose(); }}>{label}</button>
   );
   const sep = () => <div className="my-1 border-t border-[#2c2c42]" />;
 
+  const addEntries = useMemo(() => (playlistLibrary ? flattenPlaylistTree(playlistLibrary) : []), [playlistLibrary]);
+  const inEntries = useMemo(
+    () => (playlistLibrary ? flattenPlaylistTree(playlistLibrary, p => p.tracks.includes(menu.song.file)) : []),
+    [playlistLibrary, menu.song.file],
+  );
+  const others = useMemo(() => containingSources?.(menu.song) ?? [], [containingSources, menu.song]);
+  const otherGroups = [...new Set(others.map(o => o.group))];
+  const pick = (fn: () => void) => () => { fn(); onClose(); };
+
   return (
-    <div ref={ref} role="menu" className="fixed z-[100] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[180px] max-h-[80vh] overflow-y-auto" style={{ top: menu.y, left: menu.x }}>
-      {item("Play", () => onPlay(menu.song))}
-      {item("Get Info", () => onGetInfo(menu.song))}
-      {sep()}
-      {onNewPlaylist && item(`New Playlist from${n || " Track"}`, () => onNewPlaylist(targets))}
-      {onAddToPlaylist && playlists && playlists.length > 0 && (
-        <>
-          <div className="px-3 pt-1 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-[#58656e]">Add{n} to playlist</div>
-          {[...playlists].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
-            <button key={p.id} type="button" role="menuitem" className="w-full text-left pl-5 pr-3 py-1 text-xs text-[#a6b5c8] hover:bg-[#2c2c42] hover:text-[#e2e8f0] cursor-pointer truncate"
-              onClick={() => { onAddToPlaylist(p.id, targets); onClose(); }}>
-              ♫ {p.name}
-            </button>
-          ))}
-        </>
+    <div ref={ref} role="menu" className="fixed z-[100] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[200px]" style={{ top: menu.y, left: menu.x }}>
+      {onAddToPlaylist && lastPlaylist && item(`Add${n} to Last Playlist, ${lastPlaylist.name}`, () => onAddToPlaylist(lastPlaylist.id, targets))}
+      {(onAddToPlaylist || onNewPlaylist) && (
+        <Submenu label={`Add${n} to Playlist`} openLeft={openLeft}>
+          {onNewPlaylist && (
+            <button type="button" role="menuitem" className={menuItemClass} onClick={pick(() => onNewPlaylist(targets))}>New Playlist</button>
+          )}
+          {onAddToPlaylist && addEntries.length > 0 && (
+            <>
+              {onNewPlaylist && sep()}
+              <TreeEntries entries={addEntries} onPick={id => { onAddToPlaylist(id, targets); onClose(); }} />
+            </>
+          )}
+        </Submenu>
       )}
       {onRemoveFromView && item(`Remove${n} from Playlist`, () => onRemoveFromView(targets))}
-      {(onNewPlaylist || onAddToPlaylist || onRemoveFromView) && sep()}
+      {(onAddToPlaylist || onNewPlaylist || onRemoveFromView) && sep()}
+      {item("Play", () => onPlay(menu.song))}
+      {item("Get Info", () => onGetInfo(menu.song))}
+      {onShowIn && (inEntries.length > 0 || others.length > 0) && (
+        <Submenu label="Show in Playlist" openLeft={openLeft}>
+          <TreeEntries entries={inEntries} onPick={id => { onShowIn({ kind: "playlist", id }, menu.song.file); onClose(); }} />
+          {otherGroups.map(group => (
+            <div key={group}>
+              {inEntries.length > 0 && sep()}
+              <div className="px-3 pt-1 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-[#58656e]">{group}</div>
+              {others.filter(o => o.group === group).map(o => (
+                <button key={`${group}-${o.label}`} type="button" role="menuitem" className={`${menuItemClass} truncate`}
+                  onClick={pick(() => onShowIn(o.view, menu.song.file))}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </Submenu>
+      )}
+      {sep()}
       {item("Re-analyze Audio", () => onReanalyze(menu.song))}
       {item("Export as M3U", () => onExportM3U(menu.song))}
       {onSendToGenerator && selection.has(menu.song.file) && selection.size > 1
@@ -253,7 +337,8 @@ function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSen
 export default function LibraryTab({
   library, isInitializing, onUpdateTrack, onReanalyzed, onRemoveTracks, onSendToGenerator,
   viewKey = "all", viewTitle, viewSongs, ordered = false, missingCount = 0,
-  onReorder, onRemoveFromView, playlists, onAddToPlaylist, onNewPlaylistFromSelection,
+  onReorder, onRemoveFromView, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylistFromSelection,
+  containingSources, onShowIn, reveal, playlistNamesFor, onSelectionChange,
 }: Props) {
   const songs = viewSongs ?? library;
   const [sortKey, setSortKey]   = useState<SortKey>(ordered ? "order" : "artist");
@@ -279,6 +364,13 @@ export default function LibraryTab({
   const [colMenuOpen, setColMenuOpen]   = useState(false);
   const [filtersOpen, setFiltersOpen]   = useState(false);
   const [filters, setFilters]           = useState<ColFilters>(loadFilters);
+  const [handledReveal, setHandledReveal] = useState(reveal?.nonce);
+  if (reveal && reveal.nonce !== handledReveal) {
+    setHandledReveal(reveal.nonce);
+    setSelected(new Set([reveal.file]));
+    setSearch("");
+    setFilters(DEFAULT_FILTERS);
+  }
   const [dupsOpen, setDupsOpen]         = useState(false);
   const [reanalyzing, setReanalyzing]   = useState<Set<string>>(new Set());
   const [deleting, setDeleting]         = useState(false);
@@ -450,6 +542,17 @@ export default function LibraryTab({
   };
 
   useEffect(() => { tableScrollRef.current?.scrollTo({ top: 0 }); }, [viewKey]);
+  useEffect(() => { onSelectionChange?.([...selected]); }, [selected, onSelectionChange]);
+
+  // Scroll a revealed track into view (once per reveal request)
+  const scrolledReveal = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!reveal || scrolledReveal.current === reveal.nonce) return;
+    const idx = rows.findIndex(r => r.file === reveal.file);
+    if (idx < 0) return;
+    scrolledReveal.current = reveal.nonce;
+    tableScrollRef.current?.scrollTo({ top: Math.max(0, idx * ROW_H - tableViewH / 2), behavior: "smooth" });
+  }, [reveal, rows, tableViewH]);
 
   const handleSave = useCallback(async (file: string, patch: { artist?: string; title?: string; genres?: string[]; year?: number; comment?: string }) => {
     await patchTrackMeta(file, patch);
@@ -847,6 +950,7 @@ export default function LibraryTab({
               {visibleCols.has("vibeTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Vibe <AiBadge /></span></th>}
               {visibleCols.has("moodTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Mood <AiBadge /></span></th>}
               {visibleCols.has("vocalType") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Vocal <AiBadge /></span></th>}
+              {visibleCols.has("playlists") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Playlists</th>}
               <th className="px-3 py-2 w-8" />
             </tr>
           </thead>
@@ -956,6 +1060,16 @@ export default function LibraryTab({
                   {visibleCols.has("vibeTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#8394a8] block truncate">{song.semanticTags?.vibeTags.join(", ") || "—"}</span></td>}
                   {visibleCols.has("moodTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#8394a8] block truncate">{song.semanticTags?.moodTags.join(", ") || "—"}</span></td>}
                   {visibleCols.has("vocalType") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-[10px] text-[#8394a8]">{song.semanticTags?.vocalType ?? "—"}</span></td>}
+                  {visibleCols.has("playlists") && (() => {
+                    const names = playlistNamesFor?.(song.file) ?? [];
+                    return (
+                      <td className="px-3 py-1.5 whitespace-nowrap">
+                        <span className={`text-xs tabular-nums ${names.length ? "text-[#a78bfa]" : "text-[#424f63]"}`} title={names.length ? names.join("\n") : "Not in any playlist"}>
+                          {names.length || "—"}
+                        </span>
+                      </td>
+                    );
+                  })()}
                   {/* Re-analyze */}
                   <td className="px-2 py-1.5">
                     <button
@@ -1003,7 +1117,10 @@ export default function LibraryTab({
           onDelete={handleDeleteSingle}
           onExportM3U={handleExportM3U}
           onClose={() => setContextMenu(null)}
-          playlists={playlists}
+          playlistLibrary={playlistLibrary}
+          lastPlaylist={lastPlaylist}
+          containingSources={containingSources}
+          onShowIn={onShowIn}
           onAddToPlaylist={onAddToPlaylist}
           onNewPlaylist={onNewPlaylistFromSelection}
           onRemoveFromView={onRemoveFromView ? (files => { onRemoveFromView(files); setSelected(new Set()); }) : undefined}

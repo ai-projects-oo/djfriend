@@ -15,6 +15,9 @@ export type LibraryView =
 
 export interface SourceItem { view: LibraryView; label: string; count: number }
 
+/** A playlist a track is in, outside DJFriend's own playlists (e.g. an Apple Music import). */
+export interface ContainingSource { group: string; label: string; view: LibraryView }
+
 export function sameView(a: LibraryView, b: LibraryView): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {

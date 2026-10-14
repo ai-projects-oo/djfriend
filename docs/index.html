@@ -506,6 +506,7 @@
       <ul class="nav-links">
         <li><a href="#install">Download</a></li>
         <li><a href="#features">Features</a></li>
+        <li><a href="#playlists">Playlists</a></li>
         <li><a href="#crates">Discogs</a></li>
         <li><a href="#platforms">Platforms</a></li>
         <li><a href="guide.html">Guide</a></li>
@@ -566,6 +567,21 @@
             </svg>
             AI Selection
           </li>
+          <li>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Smart Playlists
+          </li>
         </ul>
 
         <div class="hero-preview" style="background:#111118;">
@@ -605,7 +621,7 @@
               <polyline points="7 10 12 15 17 10"></polyline>
               <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
-            Export to M3U or Spotify
+            Export to M3U, Rekordbox XML, Spotify (private playlists) or Apple Music
           </li>
           <li>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -626,7 +642,7 @@
               <rect x="3" y="3" width="18" height="18" rx="2"></rect>
               <path d="M9 9h6M9 12h6M9 15h4"></path>
             </svg>
-            Genre &amp; tag filters with Spotify genre data
+            Genre families with live track counts, genre search &amp; tag filters
           </li>
           <li>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -640,7 +656,7 @@
               <rect x="2" y="3" width="20" height="14" rx="2"></rect>
               <path d="M8 21h8M12 17v4"></path>
             </svg>
-            Generate from playlist — restrict set to any imported playlist
+            Generate a set from any playlist — your own, smart, Apple Music or Spotify
           </li>
           <li>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -686,7 +702,88 @@
             </svg>
             Discogs Crates — browse your vinyl collection with album art, BPM &amp; key
           </li>
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h13M3 12h13M3 18h9"></path><circle cx="18" cy="17" r="3"></circle><path d="M21 17V5h-3"></path>
+            </svg>
+            Playlists &amp; folders — drag and drop, undo, and “Show in Playlist” for any track
+          </li>
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            Smart playlists — rules for BPM, key compatibility, energy, genre, tags &amp; set history
+          </li>
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Built-in player with queue, shuffle, repeat &amp; Mac media keys
+          </li>
         </ul>
+      </section>
+
+      <hr />
+
+      <section id="playlists">
+        <h2>Library &amp; Playlists</h2>
+        <p class="section-intro">Manage your music like in Apple Music — with DJ superpowers. Playlists live in DJFriend, feed the set generator, and push back to Apple Music when you want them there.</p>
+        <div class="crates-grid">
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M3 6h13M3 12h13M3 18h9"/><circle cx="18" cy="17" r="3"/><path d="M21 17V5h-3"/>
+              </svg>
+            </div>
+            <h3>Playlists &amp; folders</h3>
+            <p>A Library sidebar in the spirit of Apple Music. Create playlists and nested folders, drag tracks onto them, reorder by dragging, and undo any change with <em>⌘Z</em>.</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>
+              </svg>
+            </div>
+            <h3>Smart playlists</h3>
+            <p>Rules like “BPM between 122 and 128, key mixes with 8A, not played in the last 30 days”. Match all or any, limit by energy or freshness — they update as your library grows.</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M8 11h6"/>
+              </svg>
+            </div>
+            <h3>Show in Playlist</h3>
+            <p>Right-click any track to see every playlist it’s in — including Apple Music imports and saved sets. Select a track and its playlists light up in the sidebar.</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <h3>Sets from playlists</h3>
+            <p>Click <strong>Generate Set</strong> on any playlist — yours, smart, Apple Music or Spotify — and get a harmonically mixed set from just those tracks. Save the result back as a playlist.</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+              </svg>
+            </div>
+            <h3>Push to Apple Music</h3>
+            <p>macOS: export a playlist, a folder or everything into a <em>DJFriend</em> folder in Music. Re-pushing updates it in place. Optionally write BPM and key into Music for Rekordbox &amp; Serato.</p>
+          </div>
+          <div class="crate-card">
+            <div class="crate-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+            </div>
+            <h3>Player &amp; queue</h3>
+            <p>Listen while you prep: a player on every tab with waveform seeking, queue, shuffle, repeat, Play Next / Play Later and Mac media keys.</p>
+          </div>
+        </div>
       </section>
 
       <hr />

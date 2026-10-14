@@ -341,7 +341,9 @@
         <ol>
           <li><a href="#getting-started">Getting started</a></li>
           <li><a href="#load-library">Load your library</a></li>
-          <li><a href="#import-playlist">Import a playlist</a></li>
+          <li><a href="#playlists">Playlists &amp; folders</a></li>
+          <li><a href="#smart-playlists">Smart playlists</a></li>
+          <li><a href="#import-playlist">Import a Spotify playlist</a></li>
           <li><a href="#energy-curve">Energy curve</a></li>
           <li><a href="#preferences">Preferences</a></li>
           <li><a href="#source-mode">Generate from playlist</a></li>
@@ -350,6 +352,8 @@
           <li><a href="#swap-tracks">Swapping tracks</a></li>
           <li><a href="#edit-metadata">Editing metadata</a></li>
           <li><a href="#export">Export</a></li>
+          <li><a href="#apple-music">Apple Music export</a></li>
+          <li><a href="#player">Player &amp; queue</a></li>
           <li><a href="#settings">Settings</a></li>
         </ol>
       </aside>
@@ -368,7 +372,7 @@
           <span class="section-label">01</span>
           <h2>Getting started</h2>
           <p>DJFriend is a desktop app for Mac and Windows (and a web version at <a href="https://djfriend.onrender.com">djfriend.onrender.com</a>). Download the right build for your machine from the <a href="index.html#install">Downloads</a> page and install it.</p>
-          <p>On first launch the app opens to the <strong>Library</strong> tab. All analysis happens locally — your music never leaves your computer.</p>
+          <p>The main tabs are <strong>Set Generator</strong>, <strong>Library</strong> (your tracks and playlists), <strong>Crates</strong> (Discogs vinyl), <strong>History</strong> and <strong>Gig Finder</strong>. All analysis happens locally — your music never leaves your computer.</p>
           <div class="tip">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
             <span><strong>First time?</strong> Head to Settings (gear icon, top right) and add your Spotify Client ID and Secret. This enables genre data for every track. Without it the app still works — you'll just have fewer genre signals.</span>
@@ -420,11 +424,68 @@
 
         <hr />
 
+        <!-- Playlists -->
+        <section class="guide-section" id="playlists">
+          <span class="section-label">03</span>
+          <h2>Playlists &amp; folders</h2>
+          <p>The <strong>Library</strong> tab has a sidebar, like Apple Music: <em>All Tracks</em>, your <em>Playlists</em> (with folders), and your sources — Apple Music imports, Spotify imports and saved sets.</p>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <strong>Create</strong>
+                <p>Click <em>+</em> next to Playlists (or 📁 for a folder) and type a name. Double-click any playlist or folder to rename it. Drag playlists onto folders to organise them.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <strong>Add tracks</strong>
+                <p>Select tracks (click, ⌘-click, ⇧-click) and drag them onto a playlist in the sidebar. Or right-click → <em>Add to Playlist ›</em>, or <em>Add to Last Playlist</em> for the one you used last. Tracks already in the playlist are skipped — the notice tells you.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <strong>Order &amp; tidy</strong>
+                <p>Inside a playlist, drag rows to reorder (sorted by <em>#</em>). Sort by BPM, key or energy and click <em>Save this order</em> to keep it. Press <em>Delete</em> to remove selected tracks from the playlist (they stay in your library).</p>
+              </div>
+            </div>
+          </div>
+          <h3>Show in Playlist</h3>
+          <p>Right-click a track → <em>Show in Playlist ›</em> lists every playlist it’s in (in their folders), plus Apple Music imports and saved sets. Pick one to jump there with the track selected. Selecting a track also marks its playlists in the sidebar with a dot, and the optional <em>Playlists</em> column shows how many playlists each track is in.</p>
+          <div class="tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span><strong>Made a mistake?</strong> Every playlist change can be undone — click <em>Undo</em> on the notice at the bottom, or press <em>⌘Z</em>. Deleting a playlist or folder doesn’t ask first for this reason.</span>
+          </div>
+        </section>
+
+        <hr />
+
+        <!-- Smart playlists -->
+        <section class="guide-section" id="smart-playlists">
+          <span class="section-label">04</span>
+          <h2>Smart playlists</h2>
+          <p>Smart playlists fill themselves from rules and update as your library changes. Click <em>⚙</em> next to Playlists (or right-click a folder → <em>New smart playlist here</em>).</p>
+          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.3rem;">
+            <li><strong style="color:var(--text)">Rules</strong> — BPM, key (<em>is</em> or <em>mixes with</em> — harmonically compatible), energy, genre, vibe and mood tags, vocals, artist, title, comment, year, length, date added, playlist membership, times used in sets, and last time used in a set.</li>
+            <li><strong style="color:var(--text)">Match all / any</strong> — combine rules like Apple Music.</li>
+            <li><strong style="color:var(--text)">Limit</strong> — keep e.g. 50 tracks, chosen at random, by highest energy, newest, or least/most used in your sets.</li>
+          </ul>
+          <p>The editor shows how many tracks match while you type. Use <em>Edit Rules</em> in the playlist header to change them, or right-click → <em>Convert to Regular Playlist</em> to freeze the current tracks.</p>
+          <div class="tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span><strong>Example:</strong> “Genre contains house” + “Key mixes with 8A” + “Last in a set not in the last 30 days” gives you fresh, compatible tracks for your next set.</span>
+          </div>
+        </section>
+
+        <hr />
+
         <!-- 3. Import a Spotify playlist -->
         <section class="guide-section" id="import-playlist">
-          <span class="section-label">03</span>
+          <span class="section-label">05</span>
           <h2>Import a Spotify playlist</h2>
-          <p>Go to the <strong>Import</strong> tab. Paste a Spotify playlist URL (or the raw playlist ID) and click <em>Import</em>. DJFriend finds the matching tracks in your local library and shows you what was found.</p>
+          <p>In the <strong>Library</strong> sidebar, under <em>Spotify</em>, click <em>Import &amp; match…</em>. Paste a Spotify playlist URL (or the raw playlist ID) and click <em>Import</em>, or <em>Browse my playlists</em>. DJFriend finds the matching tracks in your local library and shows you what was found.</p>
           <div class="steps">
             <div class="step">
               <div class="step-num">1</div>
@@ -444,9 +505,13 @@
               <div class="step-num">3</div>
               <div class="step-body">
                 <strong>Use it in the generator</strong>
-                <p>Once imported, the playlist is available in the <em>Source</em> card in the Generator sidebar. Select it to restrict set generation to only those tracks (see <a href="#source-mode">Generate from playlist</a>).</p>
+                <p>The playlist appears in the sidebar under Spotify. Open it and click <em>Generate Set</em>, or pick it in the generator’s <em>Source</em> card (see <a href="#source-mode">Generate from playlist</a>). Right-click it → <em>Save as playlist</em> to make it a DJFriend playlist you can edit.</p>
               </div>
             </div>
+          </div>
+          <div class="tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span><strong>Tracks you don’t have?</strong> Click <em>Create non-have</em> on an import to get a <strong>private</strong> Spotify playlist of the missing tracks — a shopping list for your next record-store or Beatport session.</span>
           </div>
         </section>
 
@@ -454,7 +519,7 @@
 
         <!-- 4. Energy curve -->
         <section class="guide-section" id="energy-curve">
-          <span class="section-label">04</span>
+          <span class="section-label">06</span>
           <h2>Energy curve</h2>
           <p>The energy curve defines the vibe arc of your set — how it rises, peaks, and falls. Draw it before generating.</p>
           <h3>Presets</h3>
@@ -478,7 +543,7 @@
 
         <!-- 5. Preferences -->
         <section class="guide-section" id="preferences">
-          <span class="section-label">05</span>
+          <span class="section-label">07</span>
           <h2>Preferences</h2>
           <p>The generator sidebar contains several controls that shape which tracks are eligible:</p>
           <h3>Venue &amp; Set Phase</h3>
@@ -486,7 +551,7 @@
           <h3>BPM Range</h3>
           <p>Set a minimum and maximum BPM. Only tracks within this range will be used.</p>
           <h3>Genre Filter</h3>
-          <p>Pick a genre to restrict the set to matching tracks. Leave it on <em>Any</em> to use your full library. Genres shown with ~ are fuzzy matches.</p>
+          <p>Genres are grouped into families (House, Techno, Disco &amp; Indie, Breaks &amp; Bass, Trance &amp; Hard, Chill, Other), each with the number of tracks in your current source. Click a genre to add it, or a family name to add the whole family. Type in <em>Find genre…</em> to search. Your picks stay pinned at the top with their combined track count; genres too small to fill a set are dimmed. Leave it empty to use your full library.</p>
           <h3>Added Time Filter</h3>
           <p>Limit the set to recently added tracks: <em>Last 30 days, 90 days, 120 days, This year,</em> or <em>All</em>.</p>
           <h3>Set Duration</h3>
@@ -501,15 +566,16 @@
 
         <!-- 6. Source mode -->
         <section class="guide-section" id="source-mode">
-          <span class="section-label">06</span>
+          <span class="section-label">08</span>
           <h2>Generate from playlist</h2>
-          <p>By default, DJFriend draws from your <strong>Full Library</strong>. If you have imported playlists, a <strong>Source</strong> card appears above the Duration pills in the sidebar.</p>
+          <p>By default, DJFriend draws from your <strong>Full Library</strong>. The quickest way to build from a playlist is the <strong>Generate Set</strong> button in any playlist’s header in the Library (or right-click → <em>Generate Set from Playlist</em>) — it opens the generator with that playlist as the source and generates straight away. It works for your playlists, smart playlists, Apple Music and Spotify imports.</p>
+          <p>You can also choose the source yourself in the <strong>Source</strong> card in the generator sidebar:</p>
           <div class="steps">
             <div class="step">
               <div class="step-num">1</div>
               <div class="step-body">
                 <strong>Toggle to "From Playlist"</strong>
-                <p>Click the <em>From Playlist</em> button in the Source card. A dropdown appears listing all your imported playlists.</p>
+                <p>Click the <em>From Playlist</em> button in the Source card. A dropdown lists your playlists (♫), smart playlists, and Apple Music and Spotify imports. You can tick several.</p>
               </div>
             </div>
             <div class="step">
@@ -537,7 +603,7 @@
 
         <!-- 7. Generate -->
         <section class="guide-section" id="generate">
-          <span class="section-label">07</span>
+          <span class="section-label">09</span>
           <h2>Generate the set</h2>
           <p>Press the <strong>▶ Generate</strong> button. DJFriend builds the full set automatically based on your curve, preferences, and library.</p>
           <h3>Get a different result</h3>
@@ -548,7 +614,7 @@
 
         <!-- 8. Fit indicators -->
         <section class="guide-section" id="fit-indicator">
-          <span class="section-label">08</span>
+          <span class="section-label">10</span>
           <h2>Fit indicators</h2>
           <p>Every track in the generated set shows a small coloured dot in the <strong>#</strong> column. Hover over it to see exactly why a track might not fit.</p>
           <div class="fit-legend">
@@ -572,7 +638,7 @@
 
         <!-- 9. Swap tracks -->
         <section class="guide-section" id="swap-tracks">
-          <span class="section-label">09</span>
+          <span class="section-label">11</span>
           <h2>Swapping tracks</h2>
           <p>Every track row has a <strong>⟳ Swap</strong> button. Click it to open the smart swap panel.</p>
           <p>DJFriend looks through your full library and shows up to 5 replacement tracks, sorted best to worst fit. If nothing suitable is found it says so. Click any suggestion to swap it in.</p>
@@ -586,7 +652,7 @@
 
         <!-- 10. Edit metadata -->
         <section class="guide-section" id="edit-metadata">
-          <span class="section-label">10</span>
+          <span class="section-label">12</span>
           <h2>Editing track metadata</h2>
           <p>Click the <strong>✎ Edit</strong> button on any row to open the inline editor. You can update:</p>
           <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.3rem;">
@@ -602,13 +668,17 @@
 
         <!-- 11. Export -->
         <section class="guide-section" id="export">
-          <span class="section-label">11</span>
+          <span class="section-label">13</span>
           <h2>Export</h2>
           <p>Click the <strong>↓ Export</strong> button at the top right of the set list to open the export menu.</p>
           <h3>M3U playlist</h3>
           <p>Exports an M3U file with absolute file paths. Open it directly in <strong>Rekordbox, Serato, VirtualDJ, Traktor,</strong> or any other DJ software that reads M3U. The file preserves track order and includes the runtime of each track.</p>
+          <h3>Save as Playlist</h3>
+          <p>Saves the set as a DJFriend playlist in the Library, so you can edit it, generate from it again, or push it to Apple Music.</p>
+          <h3>Rekordbox XML</h3>
+          <p>Downloads a Rekordbox XML file (or <em>Send to Rekordbox</em> when a Rekordbox folder is set). Vinyl-only records are left out; the M3U export lists them as <code># VINYL:</code> lines so you know where to drop the record.</p>
           <h3>Spotify playlist</h3>
-          <p>Sends the set to your Spotify account as a new playlist. Requires Spotify credentials in Settings. Tracks that can't be found on Spotify are skipped.</p>
+          <p>Sends the set to your Spotify account as a new <strong>private</strong> playlist. Requires Spotify credentials in Settings. Tracks that can't be found on Spotify are skipped.</p>
           <div class="tip">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
             <span><strong>Pro tip:</strong> use the Spotify export after a gig to save the actual set you played — import the playlist, generate from it in source mode, and you have a reproducible template for future bookings.</span>
@@ -617,15 +687,53 @@
 
         <hr />
 
+        <!-- Apple Music export -->
+        <section class="guide-section" id="apple-music">
+          <span class="section-label">14</span>
+          <h2>Apple Music export</h2>
+          <p>Mac only. Your playlists live in DJFriend; push them to Apple Music when you want them there (and on your iPhone).</p>
+          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.3rem;">
+            <li><strong style="color:var(--text)">Push one playlist</strong> — right-click it → <em>Push to Apple Music</em>.</li>
+            <li><strong style="color:var(--text)">Push a folder</strong> — right-click a folder → <em>Push folder to Apple Music</em>.</li>
+            <li><strong style="color:var(--text)">Export everything</strong> — click <em>⇪</em> on the sidebar’s Apple Music header.</li>
+          </ul>
+          <p>Everything goes into a <strong>DJFriend</strong> folder in Music, keeping your folders. Pushing again updates the same playlists (renamed, re-ordered, tracks added or removed) — it never duplicates them, and never touches your other Music playlists. Linked playlists show a small  in the sidebar.</p>
+          <h3>Options</h3>
+          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.3rem;">
+            <li><strong style="color:var(--text)">Add tracks that aren’t in Music yet</strong> — imports the local file into your Music library first (on by default).</li>
+            <li><strong style="color:var(--text)">Write BPM and key</strong> — writes DJFriend’s BPM and Camelot key onto the Music tracks — key in the <em>Grouping</em> field, or in front of the <em>Comment</em> — so Rekordbox and Serato see them.</li>
+          </ul>
+          <div class="tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span>The first export asks you to let DJFriend control Music — click <strong>OK</strong>. If you declined, enable it in <em>System Settings → Privacy &amp; Security → Automation</em>.</span>
+          </div>
+        </section>
+
+        <hr />
+
+        <!-- Player -->
+        <section class="guide-section" id="player">
+          <span class="section-label">15</span>
+          <h2>Player &amp; queue</h2>
+          <p>Double-click any track to play it — playback continues through the rest of the list. Use <em>▶ Play</em> or <em>⤮ Shuffle</em> in a playlist header to play the whole playlist.</p>
+          <p>The player bar stays at the bottom of every tab: previous / play / next, waveform seeking, shuffle, repeat (all or one), and volume. Open the queue (♫ icon) to see what’s next, drag to reorder or remove tracks.</p>
+          <ul style="color:var(--muted);padding-left:1.5rem;margin-bottom:0.75rem;font-size:0.875rem;display:flex;flex-direction:column;gap:0.3rem;">
+            <li><strong style="color:var(--text)">Play Next / Play Later</strong> — right-click tracks to queue them right after the current track or at the end.</li>
+            <li><strong style="color:var(--text)">Keyboard</strong> — <em>Space</em> plays/pauses; your Mac’s media keys work too.</li>
+          </ul>
+        </section>
+
+        <hr />
+
         <!-- 12. Settings -->
         <section class="guide-section" id="settings">
-          <span class="section-label">12</span>
+          <span class="section-label">16</span>
           <h2>Settings</h2>
-          <p>Open Settings via the gear icon in the top-right corner. There are three sections:</p>
+          <p>Open Settings via the gear icon in the top-right corner. The main sections:</p>
           <h3>Spotify credentials</h3>
           <p>Enter your Spotify <strong>Client ID</strong> and <strong>Client Secret</strong> to enable genre data and Spotify export. Get them free at <a href="https://developer.spotify.com/dashboard">developer.spotify.com/dashboard</a> — create an app and copy the credentials.</p>
-          <h3>AI (Groq)</h3>
-          <p>Enter your <strong>Groq API key</strong> to enable AI tagging (vibe, mood, venue fit). Groq is free at <a href="https://console.groq.com">console.groq.com</a>. Without it the app works fine — you just won't have AI tags.</p>
+          <h3>OpenAI (optional)</h3>
+          <p>Paste an <strong>OpenAI API key</strong> (create one at <a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a>) to turn on the optional AI features, such as BPM and key estimates for vinyl records. The key is stored only on your device; OpenAI bills per request. Vibe, mood and venue tags are computed locally and work without a key.</p>
           <h3>Library path</h3>
           <p>Shows the currently loaded folder. Change it here to switch between libraries.</p>
         </section>

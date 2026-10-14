@@ -11,7 +11,8 @@ export type LibraryView =
   | { kind: "playlist"; id: string }
   | { kind: "apple"; name: string }
   | { kind: "spotify"; id: string }
-  | { kind: "set"; id: string };
+  | { kind: "set"; id: string }
+  | { kind: "imports" };          // Spotify import page (paste a link / browse, match details)
 
 export interface SourceItem { view: LibraryView; label: string; count: number }
 
@@ -21,7 +22,8 @@ export interface ContainingSource { group: string; label: string; view: LibraryV
 export function sameView(a: LibraryView, b: LibraryView): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
-    case "all":   return true;
+    case "all":
+    case "imports": return true;
     case "apple": return a.name === (b as typeof a).name;
     default:      return a.id === (b as { id: string }).id;
   }

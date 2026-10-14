@@ -179,6 +179,23 @@ describe('LibrarySidebar', () => {
     expect(byLabel('Playlist List 1')).toBeNull()
   })
 
+  it('Spotify section opens the import page from the sidebar', async () => {
+    const onImport = vi.fn()
+    function Imports() {
+      const api = usePlaylists()
+      return h(LibrarySidebar, {
+        playlists: api, view: { kind: 'imports' }, onSelectView: () => {}, libraryCount: 0, playlistCounts: new Map(),
+        appleSources: [], spotifySources: [], setSources: [], onDropTracks: () => {}, onSaveAsPlaylist: () => {}, onImportSpotify: onImport,
+      })
+    }
+    act(() => root.render(h(Imports)))
+    await flush()
+    const entry = byLabel('Spotify imports')!
+    expect(entry.getAttribute('aria-current')).toBe('true')
+    click(entry)
+    expect(onImport).toHaveBeenCalledOnce()
+  })
+
   it('collapses a folder on click', async () => {
     act(() => root.render(h(SidebarHarness)))
     await flush()

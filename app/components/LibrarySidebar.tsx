@@ -350,9 +350,23 @@ export default function LibrarySidebar({
 
       {sectionHeader("spotify", "Spotify", onImportSpotify && iconBtn("Import from Spotify", "⬇", onImportSpotify))}
       {!collapsedSections.has("spotify") && (
-        spotifySources.length > 0
-          ? spotifySources.map(renderSource)
-          : <p className="px-2 text-[10px] text-[#424f63]">No playlists imported</p>
+        <>
+          {onImportSpotify && (
+            <div
+              onClick={onImportSpotify}
+              role="button"
+              aria-label="Spotify imports"
+              aria-current={view.kind === "imports" ? "true" : undefined}
+              className={`${itemBase} ${view.kind === "imports" ? "bg-[#7c3aed]/15 text-white" : "text-[#8394a8] hover:bg-[#20202e]"}`}
+            >
+              <span className="text-[#1db954]" aria-hidden>＋</span>
+              <span className="flex-1">Import &amp; match…</span>
+            </div>
+          )}
+          {spotifySources.length > 0
+            ? spotifySources.map(renderSource)
+            : !onImportSpotify && <p className="px-2 text-[10px] text-[#424f63]">No playlists imported</p>}
+        </>
       )}
 
       {sectionHeader("sets", "Sets")}

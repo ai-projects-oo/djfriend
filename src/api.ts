@@ -23,6 +23,7 @@ import { readProfile, writeProfile, readLeads, writeLeads, upsertLead, updateLea
 import type { GigLead } from './gigfinder/types.js'
 import { loadResults, saveResults, flushResults, forgetResults } from './results-store.js'
 import { validateExportJob, runMusicExport } from './apple-music-export.js'
+import { readMusicLibrary } from './apple-music-library.js'
 
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
@@ -623,6 +624,25 @@ async function analyzeLibrary(rootPath: string, rootLabel: string, writeEvent: (
 
 async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Record<string, unknown>) => void, bpmHint?: { min: number; max: number }) {
   const amTracks = await listAppleMusicTracks(playlistName)
+  return analyzeAppleMusicTracks(amTracks, `playlist "${playlistName}"`, writeEvent, bpmHint)
+}
+
+// Whole Music library: every local track is analysed (cached ones are skipped) and every regular
+// playlist comes back as a list of files, so the app can show them all as Apple Music sources.
+async function analyzeEntireAppleMusic(writeEvent: (e: Record<string, unknown>) => void) {
+  writeEvent({ type: 'reading-library' })
+  const { tracks: amTracks, playlists } = await readMusicLibrary(AUDIO_EXTENSIONS)
+  const analysis = await analyzeAppleMusicTracks(amTracks, 'Apple Music library', writeEvent)
+  const allPlaylists: Record<string, string[]> = {}
+  const allPlaylistFolders: Record<string, string> = {}
+  for (const p of playlists) {
+    allPlaylists[p.name] = p.files
+    if (p.folder) allPlaylistFolders[p.name] = p.folder
+  }
+  return { ...analysis, allPlaylists, allPlaylistFolders }
+}
+
+async function analyzeAppleMusicTracks(amTracks: AppleMusicTrack[], label: string, writeEvent: (e: Record<string, unknown>) => void, bpmHint?: { min: number; max: number }) {
   if (amTracks.length === 0) throw new Error('No Apple Music local file tracks were found.')
   writeEvent({ type: 'start', total: amTracks.length })
   const tracks: PipelineTrack[] = amTracks.map(t => ({
@@ -640,7 +660,7 @@ async function analyzeAppleMusicLibrary(playlistName: string, writeEvent: (e: Re
     tracks,
     existing,
     resultsPath: APPLE_RESULTS_PATH,
-    label: `playlist "${playlistName}"`,
+    label,
     bpmHint,
   }, writeEvent)
   // Apple Music legacy: `file` field stored the absolute filePath, overwrite for consistency
@@ -1834,6 +1854,12 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (process.platform !== 'darwin') { writeEvent({ type: 'error', message: 'Apple Music is only available on macOS.' }); res.end(); return }
     try {
       const body = await readJsonBody(req) as Record<string, unknown>
+      if (body?.all === true) {
+        const analysis = await analyzeEntireAppleMusic(writeEvent)
+        writeEvent({ type: 'done', total: analysis.total, analyzed: analysis.analyzed, libraryName: 'Apple Music library', songs: analysis.songs, resultsJson: analysis.resultsJson, allPlaylists: analysis.allPlaylists, allPlaylistFolders: analysis.allPlaylistFolders })
+        res.end()
+        return
+      }
       const playlistName = typeof body?.playlistName === 'string' ? (body.playlistName as string).trim() : ''
       if (!playlistName) { writeEvent({ type: 'error', message: 'Missing playlistName.' }); res.end(); return }
       const rawHint = body?.bpmHint as { min?: unknown; max?: unknown } | undefined

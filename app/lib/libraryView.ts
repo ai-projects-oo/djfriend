@@ -14,7 +14,7 @@ export type LibraryView =
   | { kind: "set"; id: string }
   | { kind: "imports" };          // Spotify import page (paste a link / browse, match details)
 
-export interface SourceItem { view: LibraryView; label: string; count: number }
+export interface SourceItem { view: LibraryView; label: string; count: number; group?: string }
 
 /** A playlist a track is in, outside DJFriend's own playlists (e.g. an Apple Music import). */
 export interface ContainingSource { group: string; label: string; view: LibraryView }

@@ -324,6 +324,14 @@ async function makePlaylistPrivate(playlistId: string, token: string): Promise<v
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(`Spotify: couldn't make the playlist private — ${err.error?.message ?? res.statusText}`);
   }
+  // Read it back: never report success for a playlist Spotify still lists as public
+  const check = await spotifyFetch<{ public?: boolean | null }>(
+    `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}?fields=public`,
+    token,
+  );
+  if (check.public === true) {
+    throw new Error('Spotify created the playlist but kept it public. Open it in Spotify and choose “Make private”.');
+  }
 }
 
 async function addTracksToPlaylist(playlistId: string, uris: string[], token: string): Promise<void> {

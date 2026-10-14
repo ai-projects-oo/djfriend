@@ -3428,11 +3428,17 @@ function AppInner() {
                         <button
                           onClick={() => void handleExportMissingToSpotify(entry)}
                           disabled={missingExportId === entry.id}
-                          aria-label={`Create Spotify playlist of ${missingCount} missing track${missingCount !== 1 ? 's' : ''}`}
-                          title={missingExportId === entry.id ? 'Creating playlist…' : `Create Spotify playlist of ${missingCount} missing track${missingCount !== 1 ? 's' : ''}`}
-                          className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-[#8394a8] hover:text-[#1db954]"
+                          aria-label={`Create a private Spotify playlist of the ${missingCount} track${missingCount !== 1 ? 's' : ''} you don't have`}
+                          title={missingExportId === entry.id ? 'Creating playlist…' : `Create a private Spotify playlist of the ${missingCount} track${missingCount !== 1 ? 's' : ''} you don't have`}
+                          className="shrink-0 px-3 py-4 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-[#8394a8] hover:text-[#1db954] flex items-center gap-1.5"
                         >
-                          {missingExportId === entry.id ? '…' : `↑ ${missingCount} missing`}
+                          {missingExportId === entry.id ? '…' : (
+                            <>
+                              <SpotifyIcon size={13} className="text-[#1db954]" />
+                              Create non-have
+                              <span className="text-[10px] text-[#64748b] tabular-nums">{missingCount}</span>
+                            </>
+                          )}
                         </button>
                       )}
                       <a

@@ -2,8 +2,8 @@ import { useState } from "react";
 import type { HistoryEntry, SetTrack, CurvePoint } from "../types";
 import { camelotColor } from "../lib/camelotColors";
 import { buildSvgPath } from "../lib/curveInterpolation";
-import { downloadM3U } from "../lib/m3uExport";
-import { downloadRekordboxXml } from "../lib/rekordboxExport";
+import { downloadM3U } from "../services/downloads";
+import { downloadRekordboxXml } from "../services/downloads";
 import { computeSetScore, SCORE_THRESHOLDS } from "../lib/setScore";
 
 import { SpotifyIcon, RekordboxIcon, M3UIcon } from "./Icons";

@@ -59,6 +59,7 @@ export interface Song {
   discogsReleaseId?: number;
   discogsFromAPI?:   boolean;
   spotifyOnly?:      boolean; // true = no local file; sourced entirely from Spotify audio features
+  vinylOnly?:        boolean; // true = vinyl record with no digital copy; BPM/key from AI or manual Discogs data, energy estimated
 }
 
 export interface SetTrack extends Song {
@@ -186,11 +187,28 @@ export interface VinylTrackEntry {
   camelot?: string;
   genre?:   string;
   comment?: string;
+  aiFields?: Array<'bpm' | 'camelot' | 'genre'>;  // fields filled by the AI pass (cleared by "Clear AI estimations"; hand-entered values are kept)
 }
 
 export interface VinylReleaseData {
   genre?:  string;   // release-level genre override
   tracks:  VinylTrackEntry[];
+}
+
+export type VinylStore = Record<number, VinylReleaseData>;
+
+/** Per-release Crates data entered by hand or filled by the AI pass (keyed by Discogs releaseId). */
+export interface ManualData {
+  bpm?:            number;
+  camelot?:        string;
+  comment?:        string;
+  matchedFile?:    string;
+  aiGenre?:        string;
+  aiBpm?:          number;   // precise BPM when AI is confident
+  aiBpmMin?:       number;   // range low when uncertain
+  aiBpmMax?:       number;   // range high when uncertain
+  aiPerTrack?:     boolean;  // per-track AI pass (BPM/key/genre per track) has run
+  aiTags?:         string[];
 }
 
 export interface DiscogsCollectionEntry {

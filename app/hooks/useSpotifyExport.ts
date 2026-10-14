@@ -1,14 +1,14 @@
 import { useState, useCallback } from "react";
 import type { SetTrack, HistoryEntry, DJPreferences, CurvePoint } from "../types";
-import { downloadM3U } from "../lib/m3uExport";
+import { downloadM3U } from "../services/downloads";
 import {
   getStoredToken,
   storePendingExport,
   redirectToSpotifyLogin,
   searchTracksOnSpotify,
   createPlaylistFromMatches,
-} from "../lib/spotifyExport";
-import type { SpotifyMatchResult } from "../lib/spotifyExport";
+} from "../services/spotifyExport";
+import type { SpotifyMatchResult } from "../services/spotifyExport";
 
 type SpotifyExportStatus =
   | { phase: "searching"; completed: number; total: number }

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as mm from 'music-metadata';
-import type { ScannedTrack } from './types';
+import type { ScannedTrack } from './types.js';
 import { parseFilename } from './parse-filename.js';
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus']);

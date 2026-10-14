@@ -19,6 +19,8 @@ export function generateM3U(tracks: SetTrack[]): string {
   const songsFolder = __SONGS_FOLDER__;
 
   for (const track of tracks) {
+    // Vinyl-only records have no file — leave a comment so the DJ sees where to drop the record
+    if (track.vinylOnly) { lines.push(`# VINYL: ${track.artist} - ${track.title}`); continue; }
     const duration = track.duration != null ? Math.max(0, Math.round(track.duration)) : 0;
     lines.push(`#EXTINF:${duration},${track.title} - ${track.artist}`);
 
@@ -27,18 +29,4 @@ export function generateM3U(tracks: SetTrack[]): string {
   }
 
   return lines.join('\r\n');
-}
-
-export function downloadM3U(tracks: SetTrack[], filename = 'djfriend-set.m3u'): void {
-  const content = generateM3U(tracks);
-  const blob = new Blob([content], { type: 'audio/x-mpegurl' });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }

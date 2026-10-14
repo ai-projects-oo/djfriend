@@ -5,10 +5,10 @@ import LibraryPlayer from "./LibraryPlayer";
 import TrackInfoModal from "./TrackInfoModal";
 import { camelotColor } from "../lib/camelotColors";
 import WaveformBar from "./WaveformBar";
-import { apiFetch } from "../lib/apiFetch";
-import { downloadM3U } from "../lib/m3uExport";
-import { downloadRekordboxXml } from "../lib/rekordboxExport";
-import { patchTrackMeta } from "../lib/trackMeta";
+import { apiFetch } from "../services/apiFetch";
+import { downloadM3U } from "../services/downloads";
+import { downloadRekordboxXml } from "../services/downloads";
+import { patchTrackMeta } from "../services/trackMeta";
 import type { SetTrack } from "../types";
 import { BEATPORT_UMBRELLAS } from "../lib/genreUtils";
 

@@ -3,14 +3,9 @@ import type { Song, ImportEntry, ImportTrack } from "../types";
 import {
   getStoredToken,
   redirectToSpotifyLogin,
-} from "../lib/spotifyExport";
-import {
-  storePendingImport,
-  parsePlaylistId,
-  fetchPlaylistTracks,
-  fetchUserPlaylists,
-  matchInLibrary,
-} from "../lib/spotifyImport";
+} from "../services/spotifyExport";
+import { storePendingImport, fetchPlaylistTracks, fetchUserPlaylists } from "../services/spotifyImport";
+import { parsePlaylistId, matchInLibrary } from "../lib/spotifyImport";
 import type { SpotifyUserPlaylist } from "../lib/spotifyImport";
 
 type ImportStatus =

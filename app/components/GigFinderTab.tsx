@@ -9,9 +9,9 @@ import type {
   GigLocationClass,
   GigEvidenceFreshness,
 } from '../types'
-import { apiFetch } from '../lib/apiFetch'
-import { chatComplete } from '../lib/openAiApi'
-import { getAccessToken } from '../lib/openAiAuth'
+import { apiFetch } from '../services/apiFetch'
+import { chatComplete } from '../services/openAiApi'
+import { getAccessToken } from '../services/openAiAuth'
 
 // ─── Utility helpers ──────────────────────────────────────────────────────────
 

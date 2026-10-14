@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind } from "./types";
+import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind, ManualData, VinylStore } from "./types";
 import { DEFAULT_TIP_CONFIG, DEFAULT_DJ_SYSTEM, vinylDeckCount } from "./types";
 import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
@@ -18,17 +18,19 @@ import {
   searchTracksOnSpotify,
   getStoredToken,
   createPlaylistFromSpotifyIds,
-} from "./lib/spotifyExport";
+} from "./services/spotifyExport";
 import {
   getPendingImport,
   clearPendingImport,
   fetchUserPlaylists,
-  findSongsForImport,
   fetchAudioFeatures,
+} from "./services/spotifyImport";
+import {
+  findSongsForImport,
   spotifyTrackToSong,
   findPartialMatchSong,
 } from "./lib/spotifyImport";
-import { downloadM3U } from "./lib/m3uExport";
+import { downloadM3U } from "./services/downloads";
 import { SpotifyIcon, M3UIcon } from "./components/Icons";
 import { useLibrary } from "./hooks/useLibrary";
 import { useSetGenerator } from "./hooks/useSetGenerator";
@@ -36,8 +38,10 @@ import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
 import { useDiscogsCollection } from "./hooks/useDiscogsCollection";
 import { getDiscogsMatchedFiles } from "./lib/discogsCollection";
-import { apiFetch, setAppPassword, getAppPassword } from "./lib/apiFetch";
-import { loadManualData, loadRejected, type ManualData } from "./lib/discogsManualData";
+import { loadVinylStore, saveVinylStore } from "./services/vinylStore";
+import { buildVinylSongs } from "./lib/vinylSongs";
+import { apiFetch, setAppPassword, getAppPassword } from "./services/apiFetch";
+import { loadManualData, loadRejected } from "./services/discogsManualData";
 import { camelotColor } from "./lib/camelotColors";
 import { transitionFeatures } from "./lib/mlFeatures";
 import { blendModels, isValidModelWeights } from "./lib/mlModel";
@@ -49,12 +53,13 @@ import CratesTab from "./components/CratesTab";
 import OnboardingModal from "./components/OnboardingModal";
 import PlayerBar from "./components/PlayerBar";
 import GigFinderTab from "./components/GigFinderTab";
+import LoaderStatus from "./components/LoaderStatus";
 import {
   getStoredSession,
   clearSession as clearOpenAiSession,
   type OpenAiSession,
-} from "./lib/openAiAuth";
-import { chatComplete } from "./lib/openAiApi";
+} from "./services/openAiAuth";
+import { chatComplete } from "./services/openAiApi";
 
 const SET_DURATIONS = [30, 45, 60, 90, 120, 180] as const;
 const MIX_OVERLAP_SEC = 120; // 2-minute crossfade overlap per transition
@@ -332,6 +337,7 @@ function AppInner() {
     setLibrary,
     libraryName,
     isInitializing,
+    initStatus,
     enrichmentStatus,
     analysisQueue,
     cancelQueueItem,
@@ -433,6 +439,19 @@ function AppInner() {
   // Crates manual data + rejected — lifted here so vinylFiles can be derived reactively
   const [cratesManualData, setCratesManualData] = useState<Map<number, ManualData>>(loadManualData);
   const [cratesRejected, setCratesRejected]     = useState<Set<number>>(loadRejected);
+  // Per-track vinyl data (AI BPM/key/genre) — shared by CratesTab (editing) and the set generator
+  const [vinylStore, setVinylStore] = useState<VinylStore>(loadVinylStore);
+  const vinylStoreLoaded = useRef(false);
+  useEffect(() => {
+    if (!vinylStoreLoaded.current) { vinylStoreLoaded.current = true; return; }
+    try { saveVinylStore(vinylStore); } catch { /* quota */ }
+  }, [vinylStore]);
+
+  // Vinyl records with no digital copy, usable by the generator in Mixed/Vinyl mode
+  const vinylSongs = useMemo(
+    () => buildVinylSongs(discogsCollection, vinylStore, cratesManualData, cratesRejected, library),
+    [discogsCollection, vinylStore, cratesManualData, cratesRejected, library],
+  );
 
   // DJ System config — channel count and type per channel
   const [djSystem, setDjSystem] = useState<DJSystem>(() => {
@@ -467,8 +486,9 @@ function AppInner() {
         if (linked && linked.bpm > 0 && linked.camelot && linked.energy != null) files.add(manual.matchedFile);
       }
     }
+    for (const s of vinylSongs) files.add(s.file);
     return files.size > 0 ? files : undefined;
-  }, [djVinylDecks, discogsCollection, cratesRejected, cratesManualData, library]);
+  }, [djVinylDecks, discogsCollection, cratesRejected, cratesManualData, library, vinylSongs]);
 
   // Derive the file set for the active playlist filter (union across all selected IDs)
   // IDs can be a Spotify import entry ID, "apple:<playlistName>", or "__selection__"
@@ -512,8 +532,16 @@ function AppInner() {
   // Discogs pool intersection — "crates" mode hard-filters the pool
   const discogsCrateFiles = useMemo<Set<string> | undefined>(() => {
     if (discogsMode === 'library' || !discogsCollection) return undefined;
-    return getDiscogsMatchedFiles(discogsCollection, library);
-  }, [discogsMode, discogsCollection, library]);
+    const files = getDiscogsMatchedFiles(discogsCollection, library);
+    for (const s of vinylSongs) files.add(s.file);
+    return files;
+  }, [discogsMode, discogsCollection, library, vinylSongs]);
+
+  // Pool the generator draws from — vinyl-only records join in Mixed/Vinyl mode
+  const generatorLibrary = useMemo(
+    () => (discogsMode !== 'library' && vinylSongs.length > 0 ? [...library, ...vinylSongs] : library),
+    [discogsMode, library, vinylSongs],
+  );
 
   // Effective playlist filter files — intersects playlist + discogs when both are active
   const effectiveFilterFiles = useMemo<Set<string> | undefined>(() => {
@@ -557,7 +585,7 @@ function AppInner() {
     setSuggestions,
     insertSuggestion,
   } = useSetGenerator(
-    library,
+    generatorLibrary,
     setLibrary,
     effectiveFilterFiles,
     history,
@@ -1070,9 +1098,7 @@ function AppInner() {
             <p className="text-sm font-medium text-[#e2e8f0]">
               Initializing library…
             </p>
-            <p className="text-xs text-[#8394a8]">
-              Loading tracks and matching imported playlists
-            </p>
+            <LoaderStatus label={initStatus.label} detail={initStatus.detail} />
           </div>
           <div className="w-48 h-0.5 bg-[#2c2c42] rounded-full overflow-hidden">
             <div className="h-full bg-[#7c3aed] rounded-full animate-pulse w-full" />
@@ -2652,7 +2678,7 @@ function AppInner() {
                     let failCount = 0;
                     for (let n = 0; n < indices.length; n++) {
                       const t = generatedSet[indices[n]];
-                      if (!t) continue;
+                      if (!t || t.vinylOnly) continue;
                       try {
                         const body: Record<string, unknown> = { filePath: t.file };
                         if (bpmHint) { body.bpmMin = bpmHint.min; body.bpmMax = bpmHint.max; }
@@ -2889,6 +2915,8 @@ function AppInner() {
             library={library}
             manualData={cratesManualData}
             onManualDataChange={setCratesManualData}
+            vinylStore={vinylStore}
+            setVinylStore={setVinylStore}
             rejectedMatches={cratesRejected}
             onRejectedChange={setCratesRejected}
           />
@@ -3768,14 +3796,14 @@ function AppInner() {
                       const imported = analyzedApplePlaylists.has(playlist.name);
                       const selected = selectedPlaylists.includes(playlist.name);
                       const atLimit = selectedPlaylists.length >= MAX_APPLE_PLAYLISTS;
-                      const disabled = imported || (!selected && atLimit);
+                      const disabled = !selected && atLimit;
                       const hint = playlistBpmHints.get(playlist.name);
                       return (
                         <div key={playlist.name} className="flex flex-col gap-1.5">
+                          <div className="flex items-stretch gap-1.5">
                           <button
                             disabled={disabled}
                             onClick={() => {
-                              if (imported) return;
                               setSelectedPlaylists((prev) =>
                                 prev.includes(playlist.name)
                                   ? prev.filter((n) => n !== playlist.name)
@@ -3786,8 +3814,8 @@ function AppInner() {
                             }}
                             className="w-full text-left rounded-md border px-3 py-2.5 transition-colors disabled:cursor-not-allowed"
                             style={{
-                              cursor: imported ? "default" : "pointer",
-                              opacity: !imported && !selected && atLimit ? 0.4 : 1,
+                              cursor: "pointer",
+                              opacity: !selected && atLimit ? 0.4 : 1,
                               borderColor: selected ? "#7c3aed" : "#363650",
                               backgroundColor: selected ? "#1a0d2e" : "#1c1c2e",
                             }}
@@ -3797,14 +3825,14 @@ function AppInner() {
                               <span
                                 className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0"
                                 style={{
-                                  borderColor: imported ? "#424f63" : selected ? "#7c3aed" : "#363650",
-                                  backgroundColor: imported ? "#262f3e" : selected ? "#7c3aed" : "transparent",
+                                  borderColor: selected ? "#7c3aed" : imported ? "#424f63" : "#363650",
+                                  backgroundColor: selected ? "#7c3aed" : imported ? "#262f3e" : "transparent",
                                 }}
                               >
                                 {(selected || imported) && (
                                   <svg
                                     className="w-2.5 h-2.5"
-                                    style={{ color: imported ? "#8292a4" : "#fff" }}
+                                    style={{ color: selected ? "#fff" : "#8292a4" }}
                                     fill="none"
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
@@ -3818,10 +3846,26 @@ function AppInner() {
                                 {playlist.name}
                               </span>
                               <span className="text-[11px] flex-shrink-0" style={{ color: imported ? "#58656e" : "#8394a8" }}>
-                                {imported ? "in library" : `${playlist.count} track${playlist.count === 1 ? "" : "s"}`}
+                                {`${playlist.count} track${playlist.count === 1 ? "" : "s"}`}{imported ? (selected ? " · re-sync" : " · in library") : ""}
                               </span>
                             </div>
                           </button>
+                          {imported && (() => {
+                            const syncing = analysisQueue.some((item) => item.playlistName === playlist.name);
+                            return (
+                              <button
+                                type="button"
+                                title={`Re-sync "${playlist.name}"`}
+                                aria-label={`Re-sync ${playlist.name}`}
+                                disabled={syncing}
+                                onClick={() => runAppleMusicAnalysis(playlist.name, undefined, { keepPickerOpen: true })}
+                                className="flex-shrink-0 w-9 rounded-md border border-[#363650] bg-[#1c1c2e] text-sm text-[#8394a8] hover:text-[#a78bfa] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                              >
+                                {syncing ? "…" : "↺"}
+                              </button>
+                            );
+                          })()}
+                          </div>
 
                           {/* BPM hint dropdown — only for non-imported, selected playlists */}
                           {selected && !imported && (
@@ -3878,7 +3922,7 @@ function AppInner() {
                   }}
                   className="text-xs font-medium px-3 py-1.5 rounded-md bg-[#7c3aed] text-white hover:bg-[#9333ea] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Analyze{" "}
+                  {selectedPlaylists.length > 0 && selectedPlaylists.every((n) => analyzedApplePlaylists.has(n)) ? "Re-sync" : "Analyze"}{" "}
                   {selectedPlaylists.length > 0
                     ? `${selectedPlaylists.length} playlist${selectedPlaylists.length === 1 ? "" : "s"}`
                     : ""}

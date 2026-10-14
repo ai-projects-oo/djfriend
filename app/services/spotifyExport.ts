@@ -39,6 +39,11 @@ export function getStoredToken(): string | null {
   return token;
 }
 
+export function clearStoredToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_EXPIRY_KEY);
+}
+
 export function storeToken(accessToken: string, expiresIn: number): void {
   localStorage.setItem(TOKEN_KEY, accessToken);
   // Subtract 60s to avoid using a token right as it expires

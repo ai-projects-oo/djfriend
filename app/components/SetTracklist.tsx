@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import type { SetTrack, DJPreferences, CurvePoint } from '../types';
 import TrackRow from './TrackRow';
-import { downloadM3U } from '../lib/m3uExport';
-import { downloadRekordboxXml } from '../lib/rekordboxExport';
+import { downloadM3U } from '../services/downloads';
+import { downloadRekordboxXml } from '../services/downloads';
 import { SpotifyIcon, RekordboxIcon, M3UIcon, CopyIcon } from './Icons';
 import { parseCamelot, CAMELOT_TO_KEY } from '../lib/camelot';
-import { chatComplete } from '../lib/openAiApi';
+import { chatComplete } from '../services/openAiApi';
 
 export type FitLevel = 'good' | 'warn' | 'bad';
 

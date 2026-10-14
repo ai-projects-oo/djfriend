@@ -1,14 +1,4 @@
-export interface ManualData {
-  bpm?:            number;
-  camelot?:        string;
-  comment?:        string;
-  matchedFile?:    string;
-  aiGenre?:        string;
-  aiBpm?:          number;   // precise BPM when AI is confident
-  aiBpmMin?:       number;   // range low when uncertain
-  aiBpmMax?:       number;   // range high when uncertain
-  aiTags?:         string[];
-}
+import type { ManualData } from '../types';
 
 export const MANUAL_STORAGE_KEY   = 'djfriend-crates-manual';
 export const REJECTED_STORAGE_KEY = 'djfriend-crates-rejected';

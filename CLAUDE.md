@@ -10,7 +10,7 @@ DJFriend is an Electron desktop app (+ Render web service) for generating DJ set
 | Directory | Owner agent | What it contains |
 |---|---|---|
 | `src/` | developer-core | Audio analysis, Spotify API, scanner, settings, AI enrichment, standalone web server |
-| `app/` | developer-ui | React frontend — components, hooks, lib (pure logic), types |
+| `app/` | developer-ui | React frontend — components, hooks, lib (pure logic), services (storage/network/DOM side effects), types |
 | `electron/` | developer-infra | Electron main process + IPC handlers |
 | `test/` | qa-engineer | Vitest unit + integration tests |
 | `docs/` | — | GitHub Pages marketing site |
@@ -42,7 +42,7 @@ npm run lint               # ESLint
 2. All Spotify API calls go through the 200ms rate-limiter in `src/api.ts`
 3. `results.json` keys are additive only — never rename or remove existing keys
 4. Energy neighbourhood pre-filter preserved in `app/lib/setGenerator.ts`: `top K = max(5, ceil(15% of pool))`
-5. All functions in `app/lib/` must be pure — no side effects, no IPC, no localStorage
+5. All functions in `app/lib/` must be pure — no side effects, no IPC, no localStorage, no fetch, no DOM. Side-effecting code goes in `app/services/`
 6. `app/types/index.ts` updated before any file depends on new fields
 
 ---

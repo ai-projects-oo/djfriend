@@ -64,7 +64,9 @@ export function generateRekordboxXml(tracks: Song[], playlistName = 'DJFriend Se
   const songsFolder = __SONGS_FOLDER__;
   const today = new Date().toISOString().slice(0, 10);
 
-  const trackNodes = tracks.map((t, i) => {
+  // Vinyl-only records have no file Rekordbox could load
+  const fileTracks = tracks.filter(t => !t.vinylOnly);
+  const trackNodes = fileTracks.map((t, i) => {
     const id       = i + 1;
     const path     = resolveTrackPath(t, songsFolder);
     const location = path.startsWith('spotify:') ? path : toLocation(path);
@@ -102,47 +104,22 @@ export function generateRekordboxXml(tracks: Song[], playlistName = 'DJFriend Se
     ].join('\n');
   });
 
-  const trackKeys = tracks.map((_, i) => `        <TRACK Key="${i + 1}"/>`).join('\n');
+  const trackKeys = fileTracks.map((_, i) => `        <TRACK Key="${i + 1}"/>`).join('\n');
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<DJ_PLAYLISTS Version="1.0.0">`,
     `  <PRODUCT Name="rekordbox" Version="6.0.0" Company="AlphaTheta"/>`,
-    `  <COLLECTION Entries="${tracks.length}">`,
+    `  <COLLECTION Entries="${fileTracks.length}">`,
     ...trackNodes,
     `  </COLLECTION>`,
     `  <PLAYLISTS>`,
     `    <NODE Type="0" Name="ROOT" Count="1">`,
-    `      <NODE Name="${escapeXml(playlistName)}" Type="1" KeyType="0" Entries="${tracks.length}">`,
+    `      <NODE Name="${escapeXml(playlistName)}" Type="1" KeyType="0" Entries="${fileTracks.length}">`,
     trackKeys,
     `      </NODE>`,
     `    </NODE>`,
     `  </PLAYLISTS>`,
     `</DJ_PLAYLISTS>`,
   ].join('\n');
-}
-
-function triggerDownload(content: string, filename: string): void {
-  const blob = new Blob([content], { type: 'application/xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-export function downloadRekordboxXml(
-  tracks: Song[],
-  playlistName = 'DJFriend Set',
-  filename = 'djfriend-set.xml',
-): void {
-  triggerDownload(generateRekordboxXml(tracks, playlistName), filename);
-}
-
-export function downloadLibraryRekordboxXml(library: Song[]): void {
-  const today = new Date().toISOString().slice(0, 10);
-  triggerDownload(generateRekordboxXml(library, 'DJFriend Library'), `djfriend-library-${today}.xml`);
 }

@@ -12,7 +12,7 @@ import { analyzeAudio } from './analyzer.js'
 import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
 import { readSettings, writeSettings, getSettingsDir } from './settings.js'
-import { deriveSemanticTags } from './ai.js'
+import { deriveSemanticTags, genreVocalType } from './ai.js'
 import { trainOnVectors, isValidModelWeights } from './mlTrain.js'
 import type { ModelWeights } from './mlTrain.js'
 import { upstashEnabled, redisGet, redisSet } from './upstash.js'
@@ -21,6 +21,7 @@ import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { readProfile, writeProfile, readLeads, writeLeads, upsertLead, updateLead, deleteLead } from './gigfinder/store.js'
 import type { GigLead } from './gigfinder/types.js'
+import { loadResults, saveResults, flushResults, forgetResults } from './results-store.js'
 
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.aac', '.m4a', '.wav', '.ogg', '.opus'])
@@ -313,7 +314,7 @@ function normalizePathKey(p: string): string {
 function readExistingResultsFile(filePath: string): Record<string, AppSong> {
   if (!fs.existsSync(filePath)) return {}
   try {
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as unknown
+    const raw = loadResults<unknown>(filePath) as unknown
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
     const out: Record<string, AppSong> = {}
     for (const [rawKey, value] of Object.entries(raw as Record<string, unknown>)) {
@@ -572,7 +573,7 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
 
   normalizeLibraryEnergy(resultsJson)
   fs.mkdirSync(path.dirname(resultsPath), { recursive: true })
-  fs.writeFileSync(resultsPath, JSON.stringify(resultsJson, null, 2), 'utf-8')
+  saveResults(resultsPath, resultsJson)
   const songs = Object.values(resultsJson)
   const enrichedCount = songs.filter(s => s.semanticTags).length
   const failureSummary = failures.decode + failures.key + failures.exception > 0
@@ -680,6 +681,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const filePath = path.join(songsFolder, 'results.json')
       if (!fs.existsSync(filePath)) { next(); return }
       res.setHeader('Content-Type', 'application/json')
+      flushResults(filePath)
+      res.setHeader('Content-Length', fs.statSync(filePath).size)
       fs.createReadStream(filePath).pipe(res)
     })
   }
@@ -801,6 +804,8 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       return
     }
     res.setHeader('Content-Type', 'application/json')
+    flushResults(APPLE_RESULTS_PATH)
+    res.setHeader('Content-Length', fs.statSync(APPLE_RESULTS_PATH).size)
     fs.createReadStream(APPLE_RESULTS_PATH).pipe(res)
   })
 
@@ -818,7 +823,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const collect = (resultsPath: string) => {
       if (!fs.existsSync(resultsPath)) return
       try {
-        const data = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+        const data = loadResults<AppSong>(resultsPath)
         const MIN_TS = 946684800
         for (const [key, song] of Object.entries(data)) {
           if (!song.comment || song.year == null || song.duration == null || song.dateAdded == null || song.dateAdded < MIN_TS) entries.push({ resultsPath, key, song })
@@ -886,7 +891,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     // Write back to results files
     for (const resultsPath of dirty) {
       try {
-        const data = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+        const data = loadResults<AppSong>(resultsPath)
         for (const { key, song } of entries.filter(e => e.resultsPath === resultsPath)) {
           if (data[key]) Object.assign(data[key], {
             ...(song.comment ? { comment: song.comment } : {}),
@@ -895,7 +900,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
             ...(song.dateAdded != null ? { dateAdded: song.dateAdded } : {}),
           })
         }
-        fs.writeFileSync(resultsPath, JSON.stringify(data, null, 2), 'utf-8')
+        saveResults(resultsPath, data, { defer: true, keys: entries.filter(e => e.resultsPath === resultsPath).map(e => e.key) })
       } catch { /* ignore */ }
     }
 
@@ -912,15 +917,21 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const rederive = (resultsPath: string) => {
       if (!fs.existsSync(resultsPath)) return
       let data: Record<string, AppSong>
-      try { data = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong> } catch { return }
-      let dirty = false
-      for (const [, song] of Object.entries(data)) {
-        const tags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres ?? [] })
+      try { data = loadResults<AppSong>(resultsPath) } catch { return }
+      const changed: string[] = []
+      for (const [key, song] of Object.entries(data)) {
+        const derived = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres ?? [] })
+        // Spectral features aren't stored, so an audio-detected vocalType can't be recomputed here —
+        // keep the stored one unless the genre decides it
+        const keptVocal = genreVocalType(song.genres) ?? song.semanticTags?.vocalType
+        const tags = keptVocal ? { ...derived, vocalType: keptVocal } : derived
+        // Only send/save tracks whose tags actually changed — avoids re-rendering the whole library every launch
+        if (JSON.stringify(tags) === JSON.stringify(song.semanticTags)) continue
         song.semanticTags = tags
         if (song.filePath) res.write(JSON.stringify({ filePath: song.filePath, semanticTags: tags }) + '\n')
-        dirty = true
+        changed.push(key)
       }
-      if (dirty) { try { fs.writeFileSync(resultsPath, JSON.stringify(data, null, 2), 'utf-8') } catch { /* ignore */ } }
+      if (changed.length > 0) { try { saveResults(resultsPath, data, { defer: true, keys: changed }) } catch { /* ignore */ } }
     }
 
     if (songsFolder) rederive(path.join(songsFolder, 'results.json'))
@@ -1330,6 +1341,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const deleted: string[] = []
     // Clear Apple Music results
     if (fs.existsSync(APPLE_RESULTS_PATH)) {
+      forgetResults(APPLE_RESULTS_PATH)
       fs.unlinkSync(APPLE_RESULTS_PATH)
       deleted.push(APPLE_RESULTS_PATH)
     }
@@ -1338,6 +1350,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (musicFolder) {
       const folderResults = path.join(musicFolder, 'results.json')
       if (fs.existsSync(folderResults)) {
+        forgetResults(folderResults)
         fs.unlinkSync(folderResults)
         deleted.push(folderResults)
       }
@@ -1447,7 +1460,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         if (!song.semanticTags) song.semanticTags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres })
       }
       fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
-      fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
+      saveResults(APPLE_RESULTS_PATH, resultsJson)
       const songs = Object.values(resultsJson)
       writeEvent({ type: 'done', total: rbTracks.length, analyzed: songs.length, libraryName: 'Rekordbox', songs, resultsJson })
       res.end()
@@ -1539,7 +1552,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       }
 
       fs.mkdirSync(path.dirname(APPLE_RESULTS_PATH), { recursive: true })
-      fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
+      saveResults(APPLE_RESULTS_PATH, resultsJson)
       const songs = Object.values(resultsJson)
       writeEvent({ type: 'done', total: tracks.length, analyzed: songs.length, libraryName: label, songs, resultsJson })
       res.end()
@@ -1626,7 +1639,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       for (const song of Object.values(resultsJson)) {
         if (!song.semanticTags) song.semanticTags = deriveSemanticTags({ bpm: song.bpm, camelot: song.camelot, energy: song.energy, genres: song.genres })
       }
-      fs.writeFileSync(APPLE_RESULTS_PATH, JSON.stringify(resultsJson, null, 2), 'utf-8')
+      saveResults(APPLE_RESULTS_PATH, resultsJson)
       const songs = Object.values(resultsJson)
       writeEvent({ type: 'done', total: validPaths.length, analyzed: songs.length, libraryName: label, songs, resultsJson })
       res.end()
@@ -1812,7 +1825,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const patchResults = (resultsPath: string, key: string): void => {
         if (!fs.existsSync(resultsPath)) return
         try {
-          const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+          const results = loadResults<AppSong>(resultsPath)
           const entry = results[key]; if (!entry) return
           if (typeof tags.title === 'string' && tags.title.trim()) entry.title = tags.title.trim()
           if (typeof tags.artist === 'string' && tags.artist.trim()) entry.artist = tags.artist.trim()
@@ -1821,7 +1834,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           if (typeof tags.year === 'number' && tags.year > 0) entry.year = tags.year
           if (typeof tags.year === 'string' && tags.year.trim()) entry.year = parseInt(tags.year, 10) || entry.year
           if (typeof tags.comment === 'string') entry.comment = tags.comment.trim() || undefined
-          fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+          saveResults(resultsPath, results, { defer: true, keys: [key] })
         } catch { /* ignore */ }
       }
       if (songsFolder) patchResults(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'))
@@ -1882,23 +1895,23 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const patchResultsFile = (resultsPath: string, key: string, patch: Partial<AppSong>): void => {
         if (!fs.existsSync(resultsPath)) return
         try {
-          const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+          const results = loadResults<AppSong>(resultsPath)
           if (!results[key]) return
           Object.assign(results[key], patch)
-          fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+          saveResults(resultsPath, results, { defer: true, keys: [key] })
         } catch { /* ignore */ }
       }
 
       const cachedGenres: string[] = (() => {
         try {
           if (songsFolder) {
-            const r = JSON.parse(fs.readFileSync(path.join(songsFolder, 'results.json'), 'utf-8')) as Record<string, AppSong>
+            const r = loadResults<AppSong>(path.join(songsFolder, 'results.json'))
             const key = path.relative(songsFolder, absolutePath).replace(/\\/g, '/')
             return r[key]?.genres ?? []
           }
         } catch { /* ignore */ }
         try {
-          const r = JSON.parse(fs.readFileSync(APPLE_RESULTS_PATH, 'utf-8')) as Record<string, AppSong>
+          const r = loadResults<AppSong>(APPLE_RESULTS_PATH)
           return r[absolutePath]?.genres ?? []
         } catch { return [] }
       })()
@@ -1930,7 +1943,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         : songsFolder ? path.join(songsFolder, 'results.json') : null
       if (!targetPath) { writeEvent({ type: 'error', message: 'No results.json found' }); res.end(); return }
 
-      const results = JSON.parse(fs.readFileSync(targetPath, 'utf-8')) as Record<string, AppSong>
+      const results = loadResults<AppSong>(targetPath)
       const keys = Object.keys(results).filter(k => {
         const fp = results[k].filePath
         return fp && fs.existsSync(fp) && AUDIO_EXTENSIONS.has(path.extname(fp).toLowerCase())
@@ -1969,7 +1982,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
 
       // Percentile-normalize energy across the library
       normalizeLibraryEnergy(results)
-      fs.writeFileSync(targetPath, JSON.stringify(results, null, 2), 'utf-8')
+      saveResults(targetPath, results)
 
       writeEvent({ type: 'done', updated, total: keys.length })
       res.end()
@@ -2079,10 +2092,10 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const patchFile = (resultsPath: string, key: string): void => {
       if (!fs.existsSync(resultsPath)) return
       try {
-        const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+        const results = loadResults<AppSong>(resultsPath)
         if (!results[key]) return
         Object.assign(results[key], safePatch)
-        fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+        saveResults(resultsPath, results, { defer: true, keys: [key] })
       } catch { /* ignore */ }
     }
     if (songsFolder) patchFile(path.join(songsFolder, 'results.json'), file)
@@ -2100,9 +2113,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const removeFromFile = (resultsPath: string): void => {
       if (!fs.existsSync(resultsPath)) return
       try {
-        const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as Record<string, AppSong>
+        const results = loadResults<AppSong>(resultsPath)
         for (const f of files) delete results[f]
-        fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8')
+        saveResults(resultsPath, results, { defer: true, keys: files })
       } catch { /* ignore */ }
     }
     if (songsFolder) removeFromFile(path.join(songsFolder, 'results.json'))
@@ -2240,7 +2253,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     })
   })
 
-  // BPM lookup: searches Spotify (then MusicBrainz) for each track individually.
+  // BPM lookup: searches MusicBrainz for each track individually.
   // Returns per-track BPMs so the UI can populate VinylTrackEntry.bpm for every track.
   middlewares.use('/api/discogs/bpm-lookup', async (req, res, next) => {
     if (req.method !== 'POST') { next(); return }
@@ -2260,28 +2273,10 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         type TrackResult = { position: string; title: string; bpm: number | null; source: string | null }
         const results: TrackResult[] = tracks.map(t => ({ position: t.position, title: t.title, bpm: null, source: null }))
 
-        // --- Spotify ---
-        const { spotifyClientId, spotifyClientSecret } = readSettings()
-        if (spotifyClientId && spotifyClientSecret) {
-          try {
-            const token = await authenticate(spotifyClientId, spotifyClientSecret)
-            for (let i = 0; i < Math.min(tracks.length, 10); i++) {
-              const t = tracks[i]
-              if (!t.title?.trim()) continue
-              const match = await searchTrack(artist, t.title, token).catch(() => null)
-              if (!match?.spotifyId) continue
-              const feats = await getAudioFeatures(match.spotifyId, token).catch(() => null)
-              if (feats?.bpm && feats.bpm > 50) {
-                results[i].bpm = Math.round(feats.bpm)
-                results[i].source = 'spotify'
-              }
-            }
-          } catch (e) {
-            console.warn('[bpm-lookup] Spotify failed:', e)
-          }
-        }
+        // Spotify audio-features API (GET /v1/audio-features) was deprecated Nov 2023
+        // and is no longer available — skip straight to MusicBrainz.
 
-        // --- MusicBrainz fallback for tracks still missing ---
+        // --- MusicBrainz ---
         const MB_UA = 'DJFriend/1.0 (https://djfriend.app)'
         const stillMissing = results.filter(r => r.bpm === null && r.title?.trim())
         for (const entry of stillMissing.slice(0, 5)) {

@@ -1,33 +1,10 @@
 import type { Song } from '../types';
 
-const PENDING_IMPORT_KEY = 'djfriend-spotify-pending-import';
-
-export function storePendingImport(url: string): void {
-  sessionStorage.setItem(PENDING_IMPORT_KEY, url);
-}
-
-export function getPendingImport(): string | null {
-  return sessionStorage.getItem(PENDING_IMPORT_KEY);
-}
-
-export function clearPendingImport(): void {
-  sessionStorage.removeItem(PENDING_IMPORT_KEY);
-}
-
 export function parsePlaylistId(input: string): string | null {
   const urlMatch = input.match(/playlist\/([A-Za-z0-9]+)/);
   if (urlMatch) return urlMatch[1];
   if (/^[A-Za-z0-9]{22}$/.test(input.trim())) return input.trim();
   return null;
-}
-
-async function spotifyGet<T>(url: string, token: string): Promise<T> {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(err.error?.message ?? `Spotify error: ${res.status}`);
-  }
-  return res.json() as Promise<T>;
 }
 
 export interface SpotifyUserPlaylist {
@@ -37,33 +14,6 @@ export interface SpotifyUserPlaylist {
   imageUrl: string | null;
 }
 
-type PlaylistPage = {
-  items: Array<{ id: string; name: string; tracks: { total: number }; images: Array<{ url: string }> | null }>;
-  next: string | null;
-};
-
-export async function fetchUserPlaylists(token: string): Promise<SpotifyUserPlaylist[]> {
-  const playlists: SpotifyUserPlaylist[] = [];
-  let url: string | null = 'https://api.spotify.com/v1/me/playlists?limit=50';
-
-  while (url) {
-    const data: PlaylistPage = await spotifyGet<PlaylistPage>(url, token);
-
-    for (const item of data.items) {
-      playlists.push({
-        id: item.id,
-        name: item.name,
-        trackCount: item.tracks.total,
-        imageUrl: item.images?.[0]?.url ?? null,
-      });
-    }
-
-    url = data.next;
-  }
-
-  return playlists;
-}
-
 export interface SpotifyImportTrack {
   spotifyId: string;
   title: string;
@@ -71,51 +21,29 @@ export interface SpotifyImportTrack {
   unavailable?: boolean;
 }
 
-export async function fetchPlaylistTracks(
-  playlistId: string,
-  token: string,
-  onProgress?: (loaded: number, total: number) => void,
-): Promise<{ playlistName: string; tracks: SpotifyImportTrack[] }> {
-  const meta = await spotifyGet<{ name: string; tracks: { total: number } }>(
-    `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}`,
-    token,
-  );
-
-  const total = meta.tracks.total;
-  const playlistName = meta.name;
-  const tracks: SpotifyImportTrack[] = [];
-  let offset = 0;
-  const limit = 100;
-
-  while (offset < total) {
-    const data = await spotifyGet<{
-      items: Array<{ track: { id: string; name: string; artists: Array<{ name: string }> } | null } | null>;
-    }>(
-      `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${limit}&offset=${offset}`,
-      token,
-    );
-
-    for (const item of data.items) {
-      if (!item || !item.track) {
-        tracks.push({ spotifyId: '', title: 'Unavailable track', artist: '', unavailable: true });
-        continue;
-      }
-      tracks.push({
-        spotifyId: item.track.id,
-        title: item.track.name,
-        artist: item.track.artists.map((a) => a.name).join(', '),
-      });
-    }
-
-    offset += limit;
-    onProgress?.(Math.min(offset, total), total);
-  }
-
-  return { playlistName, tracks };
-}
-
 function norm(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Library tracks can carry a wrong Spotify match or a "4A - 5 - " key/energy filename prefix,
+// so compare against every plausible (title, artist) pair rather than just spotifyTitle.
+function songCandidates(s: Song): Array<{ title: string; artist: string }> {
+  const stripPrefix = (t: string) => t.replace(/^\s*\d{1,2}[ab]\s*-\s*\d{1,2}\s*-\s*/i, '');
+  const raw = [
+    { title: s.spotifyTitle ?? s.title, artist: s.spotifyArtist ?? s.artist },
+    { title: s.title, artist: s.artist },
+    { title: stripPrefix(s.title), artist: s.artist },
+  ];
+  const seen = new Set<string>();
+  const out: Array<{ title: string; artist: string }> = [];
+  for (const c of raw) {
+    const t = norm(c.title), a = norm(c.artist);
+    const key = `${t}|${a}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ title: t, artist: a });
+  }
+  return out;
 }
 
 export function findSongsForImport(tracks: import('../types').ImportTrack[], library: Song[]): Song[] {
@@ -127,13 +55,12 @@ export function findSongsForImport(tracks: import('../types').ImportTrack[], lib
       const nArtist = norm(t.artist);
       const found = library.find(s => {
         if (s.spotifyId === t.spotifyId) return true;
-        const sTitle = norm(s.spotifyTitle ?? s.title);
-        const sArtist = norm(s.spotifyArtist ?? s.artist);
-        const artistOk = sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist);
-        if (!artistOk) return false;
-        // Non-Latin titles norm to ""; only use strict equality in that case
-        if (!nTitle || !sTitle) return sTitle === nTitle;
-        return titlesMatch(sTitle, nTitle) !== false;
+        return songCandidates(s).some(c => {
+          if (!artistOk(c.artist, nArtist)) return false;
+          // Non-Latin titles norm to ""; only use strict equality in that case
+          if (!nTitle || !c.title) return c.title === nTitle;
+          return titlesMatch(c.title, nTitle) !== false;
+        });
       });
       if (found && !seen.has(found.file)) {
         seen.add(found.file);
@@ -157,10 +84,18 @@ function titlesMatch(a: string, b: string): 'exact' | 'stripped' | false {
   return false;
 }
 
+const ARTIST_JOINERS = new Set(['vs', 'v', 'x', 'and', 'feat', 'ft', 'featuring', 'with', 'pres', 'presents']);
+
 // Guard against empty normalized artist matching everything via includes("")
 function artistOk(sArtist: string, nArtist: string): boolean {
   if (!sArtist || !nArtist) return sArtist === nArtist;
-  return sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist);
+  if (sArtist === nArtist || sArtist.includes(nArtist) || nArtist.includes(sArtist)) return true;
+  // "Tiga, Audion" vs "Tiga VS Audion": compare name tokens, ignoring joiners
+  const toks = (a: string) => a.split(' ').filter(t => t && !ARTIST_JOINERS.has(t));
+  const st = toks(sArtist), nt = toks(nArtist);
+  if (st.length === 0 || nt.length === 0) return false;
+  const [small, big] = st.length <= nt.length ? [st, nt] : [nt, st];
+  return small.every(t => big.includes(t));
 }
 
 export function findPartialMatchSong(spotifyId: string, title: string, artist: string, library: Song[]): Song | null {
@@ -169,10 +104,7 @@ export function findPartialMatchSong(spotifyId: string, title: string, artist: s
   const nArtist = norm(artist);
   if (!nTitle || !nArtist) return null; // non-Latin search term — skip fuzzy matching
   for (const s of library) {
-    const sTitle = norm(s.spotifyTitle ?? s.title);
-    const sArtist = norm(s.spotifyArtist ?? s.artist);
-    if (!artistOk(sArtist, nArtist)) continue;
-    if (titlesMatch(sTitle, nTitle) === 'stripped') return s;
+    if (songCandidates(s).some(c => artistOk(c.artist, nArtist) && titlesMatch(c.title, nTitle) === 'stripped')) return s;
   }
   return null;
 }
@@ -184,12 +116,12 @@ export function matchInLibrary(spotifyId: string, title: string, artist: string,
   if (!nTitle || !nArtist) return false; // non-Latin search term — skip fuzzy matching
   let best: 'fuzzy' | 'partial' | false = false;
   for (const s of library) {
-    const sTitle = norm(s.spotifyTitle ?? s.title);
-    const sArtist = norm(s.spotifyArtist ?? s.artist);
-    if (!artistOk(sArtist, nArtist)) continue;
-    const tm = titlesMatch(sTitle, nTitle);
-    if (tm === 'exact') return 'fuzzy';     // clean title/artist match → green
-    if (tm === 'stripped') best = 'partial'; // needed stripping → yellow
+    for (const c of songCandidates(s)) {
+      if (!artistOk(c.artist, nArtist)) continue;
+      const tm = titlesMatch(c.title, nTitle);
+      if (tm === 'exact') return 'fuzzy';     // clean title/artist match → green
+      if (tm === 'stripped') best = 'partial'; // needed stripping → yellow
+    }
   }
   return best;
 }
@@ -207,25 +139,6 @@ export interface SpotifyAudioFeatures {
   key: number;    // 0–11 pitch class; -1 = unknown
   mode: number;   // 1=major, 0=minor
   duration_ms: number;
-}
-
-export async function fetchAudioFeatures(
-  spotifyIds: string[],
-  token: string,
-): Promise<Map<string, SpotifyAudioFeatures>> {
-  const result = new Map<string, SpotifyAudioFeatures>();
-  const BATCH = 100;
-  for (let i = 0; i < spotifyIds.length; i += BATCH) {
-    const ids = spotifyIds.slice(i, i + BATCH).join(',');
-    const data = await spotifyGet<{ audio_features: (SpotifyAudioFeatures | null)[] }>(
-      `https://api.spotify.com/v1/audio-features?ids=${encodeURIComponent(ids)}`,
-      token,
-    );
-    for (const f of data.audio_features) {
-      if (f) result.set(f.id, f);
-    }
-  }
-  return result;
 }
 
 export function spotifyTrackToSong(

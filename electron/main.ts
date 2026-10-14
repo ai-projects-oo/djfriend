@@ -19,7 +19,7 @@ async function startServer() {
 
   // Serve the built React frontend
   const distPath = path.join(__dirname, '..', 'dist')
-  app.use(serveStatic(distPath) as Parameters<typeof app.use>[0])
+  app.use(serveStatic(distPath) as unknown as Parameters<typeof app.use>[1])
 
   // All API routes
   setupMiddlewares(app)

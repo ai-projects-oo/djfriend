@@ -62,6 +62,8 @@ import { resolvePlaylist } from "./lib/playlists";
 import { materializeSmartPlaylists, evaluateSmart, playStatsByFile } from "./lib/smartPlaylists";
 import SmartPlaylistEditor from "./components/SmartPlaylistEditor";
 import UndoToast from "./components/UndoToast";
+import NowPlayingBar from "./components/NowPlayingBar";
+import { usePlayer } from "./hooks/usePlayer";
 import { buildAppleMusicJob, type AppleMusicExportOptions } from "./lib/appleMusicExport";
 import AppleMusicExportDialog from "./components/AppleMusicExportDialog";
 import {
@@ -547,6 +549,7 @@ function AppInner() {
 
   // ── Library sidebar: resolve the selected view to songs ──────────────────
   const songsByFile = useMemo(() => new Map(library.map(s => [s.file, s])), [library]);
+  const player = usePlayer(songsByFile);
   const songsByPath = useMemo(() => {
     const m = new Map<string, Song>();
     for (const s of library) { m.set(s.file, s); if (s.filePath) m.set(s.filePath, s); }
@@ -1181,6 +1184,12 @@ function AppInner() {
   }, [generatedSet, shareTelemetry]);
 
   // Space bar toggles audio preview play/pause
+  const hasPlayerTrack = !!player.currentSong;
+  const togglePlayer = player.toggle;
+  // Starting the player stops a Set Generator preview
+  useEffect(() => {
+    if (player.playing) audioRef.current?.pause();
+  }, [player.playing]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.code !== 'Space') return;
@@ -1188,13 +1197,16 @@ function AppInner() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       e.preventDefault();
       const audio = audioRef.current;
-      if (!audio || !previewFile) return;
-      if (audio.paused) { void audio.play(); setPreviewPlaying(true); }
-      else { audio.pause(); setPreviewPlaying(false); }
+      if (audio && previewFile) {
+        if (audio.paused) { void audio.play(); setPreviewPlaying(true); }
+        else { audio.pause(); setPreviewPlaying(false); }
+        return;
+      }
+      if (hasPlayerTrack) togglePlayer();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [previewFile]);
+  }, [previewFile, hasPlayerTrack, togglePlayer]);
 
   // Check for app updates once on mount
   useEffect(() => {
@@ -1278,7 +1290,7 @@ function AppInner() {
         ref={audioRef}
         onEnded={() => { setPreviewPlaying(false); setPreviewFile(null); }}
         onPause={() => setPreviewPlaying(false)}
-        onPlay={() => setPreviewPlaying(true)}
+        onPlay={() => { setPreviewPlaying(true); player.pause(); }}
       />
       {/* Update available banner */}
       {updateInfo && (
@@ -3182,6 +3194,10 @@ function AppInner() {
             reveal={reveal}
             playlistNamesFor={playlistNamesFor}
             onSelectionChange={setSelectedLibraryFiles}
+            onPlay={player.playTracks}
+            onPlayNext={player.playNext}
+            onPlayLater={player.playLater}
+            nowPlayingFile={player.currentSong?.file ?? null}
             onGenerateSet={libraryView.kind === "playlist" || libraryView.kind === "apple" || libraryView.kind === "spotify"
               ? () => generateFromView(libraryView) : undefined}
             onEditRules={activeIsSmart ? () => {
@@ -4645,6 +4661,8 @@ function AppInner() {
           }}
         />
       )}
+
+      {!previewTrack && <NowPlayingBar player={player} songsByFile={songsByFile} />}
 
       {previewTrack && (
         <PlayerBar

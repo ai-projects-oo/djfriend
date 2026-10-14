@@ -3,7 +3,6 @@ import type { PlaylistLibrary, Song } from "../types";
 import { DRAG_TRACKS, type ContainingSource, type LibraryView } from "../lib/libraryView";
 import { flattenPlaylistTree, type PlaylistMenuEntry } from "../lib/playlists";
 import LibraryStatsBar from "./LibraryStatsBar";
-import LibraryPlayer from "./LibraryPlayer";
 import TrackInfoModal from "./TrackInfoModal";
 import { camelotColor } from "../lib/camelotColors";
 import WaveformBar from "./WaveformBar";
@@ -62,6 +61,12 @@ function detectGenrePreset(selectedSongs: Song[]): { min: number; max: number } 
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
   if (!top) return null;
   return GENRE_BPM_PRESETS[top[0]] ?? null;
+}
+
+function shuffleOrder(files: string[]): string[] {
+  const out = [...files];
+  for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+  return out;
 }
 
 function toSetTrack(s: Song): SetTrack { return { ...s, slot: 0, targetEnergy: s.energy, harmonicWarning: false }; }
@@ -134,6 +139,12 @@ interface Props {
   onGenerateSet?: () => void;
   /** Shown as "Edit Rules" in the view header (smart playlists). */
   onEditRules?: () => void;
+  /** App-wide player: play these tracks starting at `start` (double-click / Play). */
+  onPlay?: (files: string[], start: number) => void;
+  onPlayNext?: (files: string[]) => void;
+  onPlayLater?: (files: string[]) => void;
+  /** Track currently loaded in the player (highlighted). */
+  nowPlayingFile?: string | null;
   /** Select and scroll to this track (nonce changes each time it's requested). */
   reveal?: { file: string; nonce: number };
 }
@@ -243,11 +254,13 @@ function TreeEntries({ entries, onPick }: { entries: PlaylistMenuEntry[]; onPick
   );
 }
 
-function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSendToGenerator, onDelete, onExportM3U, onClose, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylist, onRemoveFromView, containingSources, onShowIn }: {
+function RowContextMenu({ menu, selection, onGetInfo, onPlay, onPlayNext, onPlayLater, onReanalyze, onSendToGenerator, onDelete, onExportM3U, onClose, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylist, onRemoveFromView, containingSources, onShowIn }: {
   menu: ContextMenu;
   selection: Set<string>;
   onGetInfo: (s: Song) => void;
   onPlay: (s: Song) => void;
+  onPlayNext?: (files: string[]) => void;
+  onPlayLater?: (files: string[]) => void;
   onReanalyze: (s: Song) => void;
   onSendToGenerator?: (files: string[]) => void;
   onDelete: (s: Song) => void;
@@ -309,6 +322,8 @@ function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSen
       {onRemoveFromView && item(`Remove${n} from Playlist`, () => onRemoveFromView(targets))}
       {(onAddToPlaylist || onNewPlaylist || onRemoveFromView) && sep()}
       {item("Play", () => onPlay(menu.song))}
+      {onPlayNext && item(`Play${n} Next`, () => onPlayNext(targets))}
+      {onPlayLater && item(`Play${n} Later`, () => onPlayLater(targets))}
       {item("Get Info", () => onGetInfo(menu.song))}
       {onShowIn && (inEntries.length > 0 || others.length > 0) && (
         <Submenu label="Show in Playlist" openLeft={openLeft}>
@@ -346,6 +361,7 @@ export default function LibraryTab({
   viewKey = "all", viewTitle, viewSongs, ordered = false, missingCount = 0,
   onReorder, onRemoveFromView, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylistFromSelection,
   containingSources, onShowIn, reveal, playlistNamesFor, onSelectionChange, onGenerateSet, onEditRules, onSaveOrder,
+  onPlay, onPlayNext, onPlayLater, nowPlayingFile,
 }: Props) {
   const songs = viewSongs ?? library;
   const [sortKey, setSortKey]   = useState<SortKey>(ordered ? "order" : "artist");
@@ -390,7 +406,6 @@ export default function LibraryTab({
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [infoSong, setInfoSong]         = useState<Song | null>(null);
   const [contextMenu, setContextMenu]   = useState<ContextMenu | null>(null);
-  const [nowPlaying, setNowPlaying]     = useState<Song | null>(null);
   const lastClickedIdx = useRef<number>(-1);
 
   const colMenuRef      = useRef<HTMLDivElement>(null);
@@ -604,7 +619,8 @@ export default function LibraryTab({
     setContextMenu({ x, y, song });
   };
 
-  const nowPlayingIdx = nowPlaying ? rows.findIndex(s => s.file === nowPlaying.file) : -1;
+  // Play from this row through the rest of the view (vinyl/streaming-only tracks are skipped by the player)
+  const playFrom = (song: Song) => onPlay?.(rows.map(r => r.file), rows.findIndex(r => r.file === song.file));
   const sh = { sortKey, sortAsc, onSort: handleSort };
   const activeFilters = hasActiveFilters(filters);
 
@@ -643,12 +659,6 @@ export default function LibraryTab({
         }} />
       </div>
 
-      {/* Player */}
-      <LibraryPlayer
-        song={nowPlaying}
-        onPrev={nowPlayingIdx > 0 ? () => setNowPlaying(rows[nowPlayingIdx - 1]) : undefined}
-        onNext={nowPlayingIdx >= 0 && nowPlayingIdx < rows.length - 1 ? () => setNowPlaying(rows[nowPlayingIdx + 1]) : undefined}
-      />
 
       {/* Duplicates banner */}
       {dupGroups.length > 0 && (
@@ -866,6 +876,14 @@ export default function LibraryTab({
                 ⚙ Edit Rules
               </button>
             )}
+            {onPlay && songs.length > 0 && (
+              <>
+                <button type="button" onClick={() => onPlay(rows.map(r => r.file), 0)} aria-label={`Play ${viewTitle ?? "all"}`}
+                  className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#e2e8f0] hover:border-[#7c3aed] cursor-pointer">▶ Play</button>
+                <button type="button" onClick={() => onPlay(shuffleOrder(rows.map(r => r.file)), 0)} aria-label={`Shuffle ${viewTitle ?? "all"}`}
+                  className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:border-[#7c3aed] cursor-pointer">⤮ Shuffle</button>
+              </>
+            )}
             {onGenerateSet && songs.length > 0 && (
               <button type="button" onClick={onGenerateSet}
                 className="px-2.5 py-1 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] cursor-pointer">
@@ -991,7 +1009,7 @@ export default function LibraryTab({
               const isFirst     = idx === firstMissingIdx;
               const analyzing   = reanalyzing.has(song.file);
               const isSelected  = selected.has(song.file);
-              const isPlaying   = nowPlaying?.file === song.file;
+              const isPlaying   = nowPlayingFile === song.file;
               const cc = camelotColor(song.camelot);
               return (
                 <tr
@@ -1006,7 +1024,7 @@ export default function LibraryTab({
                   onDragEnd={handleDragEnd}
                   aria-selected={isSelected}
                   onClick={e => { setInlineEdit(null); handleRowClick(e, song, idx); }}
-                  onDoubleClick={() => { setNowPlaying(song); }}
+                  onDoubleClick={() => playFrom(song)}
                   onContextMenu={e => handleRowContextMenu(e, song)}
                 >
                   {ordered && (
@@ -1139,7 +1157,9 @@ export default function LibraryTab({
           menu={contextMenu}
           selection={selected}
           onGetInfo={s => setInfoSong(s)}
-          onPlay={s => setNowPlaying(s)}
+          onPlay={playFrom}
+          onPlayNext={onPlayNext}
+          onPlayLater={onPlayLater}
           onReanalyze={handleReanalyze}
           onSendToGenerator={onSendToGenerator}
           onDelete={handleDeleteSingle}

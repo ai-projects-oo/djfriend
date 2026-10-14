@@ -129,6 +129,32 @@ export function moveTracks(lib: PlaylistLibrary, id: string, files: string[], to
   return updatePlaylist(lib, id, now, p => (p.smart ? p : { ...p, tracks: moveWithin(p.tracks, files, toIndex) }));
 }
 
+/**
+ * Sets a playlist's order to `ordered` (e.g. the table sorted by BPM). Tracks not listed —
+ * such as ones missing from the library — keep their relative order at the end.
+ */
+export function setPlaylistOrder(lib: PlaylistLibrary, id: string, ordered: string[], now: number): PlaylistLibrary {
+  return updatePlaylist(lib, id, now, p => {
+    if (p.smart) return p;
+    const inPlaylist = new Set(p.tracks);
+    const head = dedupe(ordered.filter(f => inPlaylist.has(f)));
+    const listed = new Set(head);
+    return { ...p, tracks: [...head, ...p.tracks.filter(f => !listed.has(f))] };
+  });
+}
+
+/** One-line description of what an edit did, for the undo notice. Null = nothing worth announcing. */
+export function describeAdd(before: PlaylistLibrary, after: PlaylistLibrary, id: string, requested: number): { text: string; changed: boolean } | null {
+  const a = before.playlists.find(p => p.id === id);
+  const b = after.playlists.find(p => p.id === id);
+  if (!a || !b) return null;
+  const added = b.tracks.length - a.tracks.length;
+  const already = requested - added;
+  const plural = (n: number) => `${n} track${n === 1 ? '' : 's'}`;
+  if (added === 0) return { text: `${requested === 1 ? 'Already' : 'All already'} in “${b.name}”`, changed: false };
+  return { text: `Added ${plural(added)} to “${b.name}”${already > 0 ? ` · ${already} already there` : ''}`, changed: true };
+}
+
 export function moveWithin(tracks: string[], files: string[], toIndex: number): string[] {
   const moving = new Set(files);
   const block = tracks.filter(f => moving.has(f));

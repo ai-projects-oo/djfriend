@@ -5,22 +5,31 @@ import { applyAppleMusicResult } from "../lib/appleMusicExport";
 import { fetchPlaylistLibrary, savePlaylistLibrary } from "../services/playlistsApi";
 
 const SAVE_DELAY_MS = 400;
+const UNDO_LIMIT = 30;
 
 const newId = () => crypto.randomUUID();
 
-/** DJFriend-owned playlists: loaded from the server once, saved shortly after each change. */
+/** Shown after an edit, with Undo when the edit can be undone. */
+export interface PlaylistNotice { text: string; canUndo: boolean; nonce: number }
+
+type Describe = string | ((before: PlaylistLibrary, after: PlaylistLibrary) => { text: string; changed: boolean } | null);
+
+/** DJFriend-owned playlists: loaded from the server once, saved shortly after each change, with undo. */
 export function usePlaylists() {
   const [lib, setLib] = useState<PlaylistLibrary>(P.EMPTY_PLAYLIST_LIBRARY);
   const [loaded, setLoaded] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<PlaylistNotice | null>(null);
+  const [undoDepth, setUndoDepth] = useState(0);
   const latest = useRef(lib);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoStack = useRef<PlaylistLibrary[]>([]);
 
   useEffect(() => {
     let alive = true;
     fetchPlaylistLibrary()
-      .then(l => { if (alive) setLib(l); })
+      .then(l => { if (alive) { setLib(l); latest.current = l; } })
       .catch(() => { /* start empty — first save creates the file */ })
       .finally(() => { if (alive) setLoaded(true); });
     return () => { alive = false; };
@@ -37,7 +46,6 @@ export function usePlaylists() {
 
   // Save after edits settle, and before the window closes
   useEffect(() => {
-    latest.current = lib;
     if (!loaded || !dirty.current) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_DELAY_MS);
@@ -47,24 +55,49 @@ export function usePlaylists() {
     return () => { window.removeEventListener("beforeunload", flush); flush(); };
   }, [flush]);
 
-  const update = useCallback((fn: (l: PlaylistLibrary) => PlaylistLibrary) => {
-    setLib(prev => {
-      const next = fn(prev);
-      if (next !== prev) dirty.current = true;
-      return next;
-    });
+  /**
+   * Applies an edit. Undoable edits push the previous library on the undo stack; `describe`
+   * produces the notice shown afterwards (a fixed text, or one computed from before/after).
+   */
+  const update = useCallback((fn: (l: PlaylistLibrary) => PlaylistLibrary, opts: { undoable?: boolean; describe?: Describe } = {}) => {
+    const before = latest.current;
+    const after = fn(before);
+    if (after === before) return;
+    latest.current = after;
+    dirty.current = true;
+    setLib(after);
+    const d = typeof opts.describe === "function" ? opts.describe(before, after) : opts.describe ? { text: opts.describe, changed: true } : null;
+    if (opts.undoable && d?.changed !== false) {
+      undoStack.current = [...undoStack.current.slice(-(UNDO_LIMIT - 1)), before];
+      setUndoDepth(undoStack.current.length);
+    }
+    if (d) setNotice({ text: d.text, canUndo: !!opts.undoable && d.changed, nonce: Date.now() });
   }, []);
 
+  const undo = useCallback(() => {
+    const prev = undoStack.current.at(-1);
+    if (!prev) return;
+    undoStack.current = undoStack.current.slice(0, -1);
+    setUndoDepth(undoStack.current.length);
+    latest.current = prev;
+    dirty.current = true;
+    setLib(prev);
+    setNotice({ text: "Undone", canUndo: false, nonce: Date.now() });
+  }, []);
+
+  const name = (l: PlaylistLibrary, id: string) => l.playlists.find(p => p.id === id)?.name ?? "playlist";
+  const plural = (n: number) => `${n} track${n === 1 ? "" : "s"}`;
+
   /** Creates a playlist (smart when `opts.smart` is set) and returns its id. */
-  const createPlaylist = useCallback((name: string, opts: { folderId?: string; tracks?: string[]; source?: Playlist["source"]; smart?: SmartCriteria } = {}): string => {
+  const createPlaylist = useCallback((playlistName: string, opts: { folderId?: string; tracks?: string[]; source?: Playlist["source"]; smart?: SmartCriteria } = {}): string => {
     const id = newId();
-    update(l => P.createPlaylist(l, { id, name, now: Date.now(), ...opts }));
+    update(l => P.createPlaylist(l, { id, name: playlistName, now: Date.now(), ...opts }), { undoable: true });
     return id;
   }, [update]);
 
-  const createFolder = useCallback((name: string, parentId?: string): string => {
+  const createFolder = useCallback((folderName: string, parentId?: string): string => {
     const id = newId();
-    update(l => P.createFolder(l, { id, name, parentId }));
+    update(l => P.createFolder(l, { id, name: folderName, parentId }), { undoable: true });
     return id;
   }, [update]);
 
@@ -72,22 +105,36 @@ export function usePlaylists() {
     library: lib,
     loaded,
     saveError,
+    notice,
+    dismissNotice: useCallback(() => setNotice(null), []),
+    undo,
+    canUndo: undoDepth > 0,
     createPlaylist,
     createFolder,
-    renamePlaylist:   useCallback((id: string, name: string) => update(l => P.renamePlaylist(l, id, name, Date.now())), [update]),
-    deletePlaylist:   useCallback((id: string) => update(l => P.deletePlaylist(l, id)), [update]),
-    duplicatePlaylist: useCallback((id: string) => update(l => P.duplicatePlaylist(l, id, newId(), Date.now())), [update]),
-    addTracks:        useCallback((id: string, files: string[], index?: number) => update(l => P.addTracks(l, id, files, Date.now(), index)), [update]),
-    removeTracks:     useCallback((id: string, files: string[]) => update(l => P.removeTracks(l, id, files, Date.now())), [update]),
-    moveTracks:       useCallback((id: string, files: string[], toIndex: number) => update(l => P.moveTracks(l, id, files, toIndex, Date.now())), [update]),
-    movePlaylistToFolder: useCallback((id: string, folderId: string | undefined) => update(l => P.movePlaylistToFolder(l, id, folderId, Date.now())), [update]),
-    renameFolder:     useCallback((id: string, name: string) => update(l => P.renameFolder(l, id, name)), [update]),
-    deleteFolder:     useCallback((id: string) => update(l => P.deleteFolder(l, id)), [update]),
-    toggleFolder:     useCallback((id: string) => update(l => P.toggleFolder(l, id)), [update]),
-    moveFolder:       useCallback((id: string, parentId: string | undefined) => update(l => P.moveFolder(l, id, parentId)), [update]),
+    renamePlaylist: useCallback((id: string, n: string) => update(l => P.renamePlaylist(l, id, n, Date.now()), { undoable: true }), [update]),
+    deletePlaylist: useCallback((id: string) => update(l => P.deletePlaylist(l, id), { undoable: true, describe: b => ({ text: `Deleted “${name(b, id)}”`, changed: true }) }), [update]),
+    duplicatePlaylist: useCallback((id: string) => update(l => P.duplicatePlaylist(l, id, newId(), Date.now()), { undoable: true, describe: b => ({ text: `Duplicated “${name(b, id)}”`, changed: true }) }), [update]),
+    addTracks: useCallback((id: string, files: string[], index?: number) =>
+      update(l => P.addTracks(l, id, files, Date.now(), index), { undoable: true, describe: (b, a) => P.describeAdd(b, a, id, new Set(files).size) }), [update]),
+    removeTracks: useCallback((id: string, files: string[]) =>
+      update(l => P.removeTracks(l, id, files, Date.now()), { undoable: true, describe: (b, a) => {
+        const n = (b.playlists.find(p => p.id === id)?.tracks.length ?? 0) - (a.playlists.find(p => p.id === id)?.tracks.length ?? 0);
+        return { text: `Removed ${plural(n)} from “${name(a, id)}”`, changed: n > 0 };
+      } }), [update]),
+    moveTracks: useCallback((id: string, files: string[], toIndex: number) => update(l => P.moveTracks(l, id, files, toIndex, Date.now()), { undoable: true }), [update]),
+    setPlaylistOrder: useCallback((id: string, files: string[]) =>
+      update(l => P.setPlaylistOrder(l, id, files, Date.now()), { undoable: true, describe: a => ({ text: `Saved the new order of “${name(a, id)}”`, changed: true }) }), [update]),
+    movePlaylistToFolder: useCallback((id: string, folderId: string | undefined) => update(l => P.movePlaylistToFolder(l, id, folderId, Date.now()), { undoable: true }), [update]),
+    renameFolder: useCallback((id: string, n: string) => update(l => P.renameFolder(l, id, n), { undoable: true }), [update]),
+    deleteFolder: useCallback((id: string) => update(l => P.deleteFolder(l, id), { undoable: true, describe: b => ({
+      text: `Deleted folder “${b.folders.find(f => f.id === id)?.name ?? "folder"}” — its playlists were kept`, changed: true,
+    }) }), [update]),
+    toggleFolder: useCallback((id: string) => update(l => P.toggleFolder(l, id)), [update]),
+    moveFolder: useCallback((id: string, parentId: string | undefined) => update(l => P.moveFolder(l, id, parentId), { undoable: true }), [update]),
     applyAppleMusicResult: useCallback((result: AppleMusicExportResult) => update(l => applyAppleMusicResult(l, result)), [update]),
-    setSmartCriteria: useCallback((id: string, smart: SmartCriteria) => update(l => P.setSmartCriteria(l, id, smart, Date.now())), [update]),
-    freezeSmartPlaylist: useCallback((id: string, files: string[]) => update(l => P.freezeSmartPlaylist(l, id, files, Date.now())), [update]),
+    setSmartCriteria: useCallback((id: string, smart: SmartCriteria) => update(l => P.setSmartCriteria(l, id, smart, Date.now()), { undoable: true }), [update]),
+    freezeSmartPlaylist: useCallback((id: string, files: string[]) =>
+      update(l => P.freezeSmartPlaylist(l, id, files, Date.now()), { undoable: true, describe: a => ({ text: `“${name(a, id)}” is now a regular playlist`, changed: true }) }), [update]),
   };
 }
 

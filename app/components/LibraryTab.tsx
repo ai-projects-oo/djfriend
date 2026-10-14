@@ -128,6 +128,8 @@ interface Props {
   /** Names of the DJFriend playlists a track is in (for the Playlists column). */
   playlistNamesFor?: (file: string) => string[];
   onSelectionChange?: (files: string[]) => void;
+  /** Editable playlists: make the current sorted order the playlist's order. */
+  onSaveOrder?: (files: string[]) => void;
   /** Shown as "Generate Set" in the view header (playlist / imported playlist views). */
   onGenerateSet?: () => void;
   /** Shown as "Edit Rules" in the view header (smart playlists). */
@@ -343,7 +345,7 @@ export default function LibraryTab({
   library, isInitializing, onUpdateTrack, onReanalyzed, onRemoveTracks, onSendToGenerator,
   viewKey = "all", viewTitle, viewSongs, ordered = false, missingCount = 0,
   onReorder, onRemoveFromView, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylistFromSelection,
-  containingSources, onShowIn, reveal, playlistNamesFor, onSelectionChange, onGenerateSet, onEditRules,
+  containingSources, onShowIn, reveal, playlistNamesFor, onSelectionChange, onGenerateSet, onEditRules, onSaveOrder,
 }: Props) {
   const songs = viewSongs ?? library;
   const [sortKey, setSortKey]   = useState<SortKey>(ordered ? "order" : "artist");
@@ -845,6 +847,13 @@ export default function LibraryTab({
             </span>
           )}
           <span className="ml-auto flex items-center gap-2">
+            {onSaveOrder && sortKey !== "order" && !search && !activeFilters && songs.length > 1 && (
+              <button type="button" onClick={() => { onSaveOrder(rows.map(r => r.file)); setSortKey("order"); setSortAsc(true); }}
+                title="Make this sorted order the playlist's order"
+                className="px-2.5 py-1 text-xs rounded-md border border-[#7c3aed]/50 text-[#a78bfa] hover:bg-[#7c3aed]/10 cursor-pointer">
+                Save this order
+              </button>
+            )}
             {onReorder && !canReorder && songs.length > 1 && (
               <button type="button" onClick={() => { setSortKey("order"); setSortAsc(true); setSearch(""); setFilters(DEFAULT_FILTERS); }}
                 className="text-[10px] text-[#64748b] hover:text-[#a78bfa] cursor-pointer">

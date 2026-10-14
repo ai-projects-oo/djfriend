@@ -60,6 +60,7 @@ import { usePlaylists } from "./hooks/usePlaylists";
 import { resolvePlaylist } from "./lib/playlists";
 import { materializeSmartPlaylists, evaluateSmart, playStatsByFile } from "./lib/smartPlaylists";
 import SmartPlaylistEditor from "./components/SmartPlaylistEditor";
+import UndoToast from "./components/UndoToast";
 import { buildAppleMusicJob, type AppleMusicExportOptions } from "./lib/appleMusicExport";
 import AppleMusicExportDialog from "./components/AppleMusicExportDialog";
 import {
@@ -780,6 +781,22 @@ function AppInner() {
     vinylFiles,
     turntables,
   );
+
+  // ⌘Z / Ctrl+Z undoes the last playlist edit in the Library (not while typing in a field)
+  const { undo: undoPlaylists, canUndo: canUndoPlaylists } = playlistsApi;
+  useEffect(() => {
+    if (activeTab !== "Library") return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z" && canUndoPlaylists) {
+        e.preventDefault();
+        undoPlaylists();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeTab, undoPlaylists, canUndoPlaylists]);
 
   // Run a generation requested by "Generate Set" once the new source has been applied
   useEffect(() => {
@@ -3115,6 +3132,14 @@ function AppInner() {
             onGenerateSet={generateFromView}
             onFreezeSmart={(p) => playlistsApi.freezeSmartPlaylist(p.id, playlistLib.playlists.find(x => x.id === p.id)?.tracks ?? [])}
           />
+          {playlistsApi.notice && (
+            <UndoToast
+              key={playlistsApi.notice.nonce}
+              notice={playlistsApi.notice}
+              onUndo={playlistsApi.undo}
+              onDismiss={playlistsApi.dismissNotice}
+            />
+          )}
           {smartEditor && (
             <SmartPlaylistEditor
               initial={smartEditor.playlist?.smart ? { name: smartEditor.playlist.name, smart: smartEditor.playlist.smart } : undefined}
@@ -3159,6 +3184,7 @@ function AppInner() {
               playlistsApi.moveTracks(activePlaylistId, files, before ? pl.tracks.indexOf(before) : pl.tracks.length);
             } : undefined}
             onRemoveFromView={activePlaylistId && !activeIsSmart ? (files) => playlistsApi.removeTracks(activePlaylistId, files) : undefined}
+            onSaveOrder={activePlaylistId && !activeIsSmart ? (files) => playlistsApi.setPlaylistOrder(activePlaylistId, files) : undefined}
             playlistLibrary={playlistLib}
             lastPlaylist={lastPlaylist}
             onAddToPlaylist={addToPlaylist}

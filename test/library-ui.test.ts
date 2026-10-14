@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
-import { createElement as h, useState, act } from 'react'
+import { createElement as h, useState, useEffect, act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { PlaylistLibrary, Song } from '../app/types'
 import type { LibraryView } from '../app/lib/libraryView'
@@ -126,6 +126,57 @@ describe('LibrarySidebar', () => {
     rightClick(byLabel('Flying')!)
     click(menuItem('Generate Set from Playlist')!)
     expect(onGen).toHaveBeenLastCalledWith({ kind: 'apple', name: 'Flying' })
+  })
+
+  it('undo restores a deleted playlist, with a notice', async () => {
+    let api!: ReturnType<typeof usePlaylists>
+    function Undoable({ expose }: { expose: (a: ReturnType<typeof usePlaylists>) => void }) {
+      const api = usePlaylists()
+      useEffect(() => expose(api))
+      return h('div', null,
+        h(SidebarHarness),
+        api.notice ? h('p', { 'data-testid': 'notice' }, api.notice.text, api.notice.canUndo ? ' [undo]' : '') : null,
+        api.library.playlists.map(p => h('span', { key: p.id, 'data-pl': p.name })))
+    }
+    act(() => root.render(h(Undoable, { expose: a => { api = a } })))
+    await flush()
+    act(() => api.deletePlaylist('p1'))
+    expect(container.querySelector('[data-pl="Warmup"]')).toBeNull()
+    expect(container.querySelector('[data-testid="notice"]')?.textContent).toBe('Deleted “Warmup” [undo]')
+    act(() => api.undo())
+    expect(container.querySelector('[data-pl="Warmup"]')).not.toBeNull()
+    expect(api.canUndo).toBe(false)
+  })
+
+  it('adding tracks reports duplicates and is undoable', async () => {
+    let api!: ReturnType<typeof usePlaylists>
+    function Adder({ expose }: { expose: (a: ReturnType<typeof usePlaylists>) => void }) {
+      const api = usePlaylists()
+      useEffect(() => expose(api))
+      return null
+    }
+    act(() => root.render(h(Adder, { expose: a => { api = a } })))
+    await flush()
+    act(() => api.addTracks('p1', ['a.mp3', 'b.mp3']))
+    expect(api.notice?.text).toBe('Added 1 track to “Warmup” · 1 already there')
+    expect(api.library.playlists[0].tracks).toEqual(['a.mp3', 'b.mp3'])
+    act(() => api.addTracks('p1', ['a.mp3']))
+    expect(api.notice).toMatchObject({ text: 'Already in “Warmup”', canUndo: false })
+    act(() => api.undo())
+    expect(api.library.playlists[0].tracks).toEqual(['a.mp3'])
+  })
+
+  it('finds playlists by name when there are many', async () => {
+    stored.playlists = Array.from({ length: 8 }, (_, i) => ({ id: `p${i}`, name: i === 5 ? 'Peak Time' : `List ${i}`, tracks: [], createdAt: 0, updatedAt: 0 }))
+    act(() => root.render(h(SidebarHarness)))
+    await flush()
+    const input = byLabel('Find playlist') as HTMLInputElement
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'peak')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(byLabel('Playlist Peak Time')).not.toBeNull()
+    expect(byLabel('Playlist List 1')).toBeNull()
   })
 
   it('collapses a folder on click', async () => {

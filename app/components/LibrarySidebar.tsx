@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Playlist, PlaylistFolder } from "../types";
-import { buildPlaylistTree, isInsideFolder, playlistsInFolder, type FolderNode } from "../lib/playlists";
+import { buildPlaylistTree, flattenPlaylistTree, isInsideFolder, playlistsInFolder, type FolderNode } from "../lib/playlists";
 import type { PlaylistsApi } from "../hooks/usePlaylists";
 import { DRAG_FOLDER, DRAG_PLAYLIST, DRAG_TRACKS, sameView, type LibraryView, type SourceItem } from "../lib/libraryView";
 
@@ -116,6 +116,11 @@ export default function LibrarySidebar({
   const [menu, setMenu] = useState<Menu>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);   // "pl:<id>" | "fd:<id>" | "root"
   const [showAllSets, setShowAllSets] = useState(false);
+  const [filter, setFilter] = useState("");
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return q ? flattenPlaylistTree(lib, p => p.name.toLowerCase().includes(q)) : [];
+  }, [lib, filter]);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   const toggleSection = (s: string) => setCollapsedSections(prev => { const n = new Set(prev); if (n.has(s)) n.delete(s); else n.add(s); return n; });
@@ -134,7 +139,6 @@ export default function LibrarySidebar({
     const id = playlists.createFolder("New Folder", parentId);
     setRenaming({ kind: "folder", id });
   };
-  const confirmDelete = (what: string) => window.confirm(`Delete ${what}? This can't be undone.`);
 
   // ── Drop handling ────────────────────────────────────────────────────────
   const acceptsDrop = (e: React.DragEvent, key: string, types: string[]) => {
@@ -305,7 +309,21 @@ export default function LibrarySidebar({
           onDrop: e => dropOnFolder(e, undefined),
         },
       )}
-      {!collapsedSections.has("playlists") && (
+      {!collapsedSections.has("playlists") && lib.playlists.length > 5 && (
+        <div className="px-1 pb-1">
+          <input type="search" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Find playlist…" aria-label="Find playlist"
+            className="w-full bg-[#0d0d14] border border-[#2c2c42] rounded-md px-2 py-1 text-[11px] text-[#e2e8f0] placeholder-[#424f63] focus:outline-none focus:border-[#7c3aed]" />
+        </div>
+      )}
+      {!collapsedSections.has("playlists") && filter.trim() !== "" && (
+        <div className="flex flex-col">
+          {filtered.map(e => e.kind === "folder" ? (
+            <div key={`f-${e.id}`} className="text-[10px] text-[#64748b] truncate py-0.5" style={{ paddingLeft: 8 + e.depth * 12 }}>📁 {e.name}</div>
+          ) : renderPlaylist(lib.playlists.find(p => p.id === e.id)!, e.depth))}
+          {filtered.length === 0 && <p className="px-2 text-[10px] text-[#424f63]">No playlist matches “{filter}”</p>}
+        </div>
+      )}
+      {!collapsedSections.has("playlists") && filter.trim() === "" && (
         <div className="flex flex-col">
           {tree.folders.map(n => renderFolder(n, 0))}
           {tree.playlists.map(p => renderPlaylist(p, 0))}
@@ -377,8 +395,7 @@ export default function LibrarySidebar({
                   ))}
                   <MenuSep />
                   <MenuItem label="Delete playlist" danger onClick={close(() => {
-                    if (!confirmDelete(`“${p.name}”`)) return;
-                    playlists.deletePlaylist(p.id);
+                    playlists.deletePlaylist(p.id);   // undoable from the notice
                     if (view.kind === "playlist" && view.id === p.id) onSelectView({ kind: "all" });
                   })} />
                 </>
@@ -396,9 +413,7 @@ export default function LibrarySidebar({
                     <MenuItem label="Push folder to Apple Music" onClick={close(() => onPushToAppleMusic(playlistsInFolder(lib, f.id), `Push folder “${f.name}” to Apple Music`))} />
                   )}
                   <MenuSep />
-                  <MenuItem label="Delete folder (keeps playlists)" danger onClick={close(() => {
-                    if (confirmDelete(`folder “${f.name}”`)) playlists.deleteFolder(f.id);
-                  })} />
+                  <MenuItem label="Delete folder (keeps playlists)" danger onClick={close(() => playlists.deleteFolder(f.id))} />
                 </>
               );
             }

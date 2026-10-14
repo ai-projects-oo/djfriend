@@ -3,6 +3,7 @@ import {
   EMPTY_PLAYLIST_LIBRARY, parsePlaylistLibrary, uniqueName, createPlaylist, renamePlaylist, deletePlaylist,
   duplicatePlaylist, addTracks, removeTracks, moveTracks, moveWithin, createFolder, renameFolder, toggleFolder,
   deleteFolder, movePlaylistToFolder, moveFolder, isInsideFolder, buildPlaylistTree, resolvePlaylist, flattenPlaylistTree,
+  setPlaylistOrder, describeAdd,
 } from '../app/lib/playlists'
 import type { PlaylistLibrary, Song } from '../app/types'
 
@@ -152,6 +153,21 @@ describe('folders', () => {
     const tree = buildPlaylistTree(lib)
     expect(tree.folders.map(n => n.folder.id)).toEqual(['f'])
     expect(tree.playlists.map(p => p.id)).toEqual(['p'])
+  })
+})
+
+describe('setPlaylistOrder', () => {
+  it('applies a sorted order and keeps unlisted tracks at the end', () => {
+    expect(tracksOf(setPlaylistOrder(withPlaylist(['a', 'b', 'c', 'gone']), 'p1', ['c', 'a', 'b', 'zz'], T1))).toEqual(['c', 'a', 'b', 'gone'])
+  })
+})
+
+describe('describeAdd', () => {
+  it('reports added and already-present tracks', () => {
+    const before = withPlaylist(['a'])
+    expect(describeAdd(before, addTracks(before, 'p1', ['a', 'b', 'c'], T1), 'p1', 3)).toEqual({ text: 'Added 2 tracks to “Warmup” · 1 already there', changed: true })
+    expect(describeAdd(before, addTracks(before, 'p1', ['b'], T1), 'p1', 1)).toEqual({ text: 'Added 1 track to “Warmup”', changed: true })
+    expect(describeAdd(before, before, 'p1', 1)).toEqual({ text: 'Already in “Warmup”', changed: false })
   })
 })
 

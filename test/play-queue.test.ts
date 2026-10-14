@@ -62,7 +62,10 @@ describe('editing the queue', () => {
   it('jumps, removes and moves while keeping the current track', () => {
     expect(Q.current(Q.jumpTo(q(['a', 'b', 'c']), 2))).toBe('c')
     expect(Q.removeAt(q(['a', 'b', 'c'], 2), 0)).toMatchObject({ items: ['b', 'c'], index: 1 })
-    expect(Q.removeAt(q(['a', 'b'], 1), 1)).toMatchObject({ items: ['a'], index: 0 })
+    // Removing the current, last track leaves nothing current (it doesn't jump back to the previous one)
+    expect(Q.removeAt(q(['a', 'b'], 1), 1)).toMatchObject({ items: ['a'], index: -1 })
+    // Removing the current track moves on to the one that followed it
+    expect(Q.current(Q.removeAt(q(['a', 'b', 'c'], 1), 1))).toBe('c')
     expect(Q.removeAt(q(['a'], 0), 0)).toMatchObject({ items: [], index: -1 })
     const moved = Q.moveInQueue(q(['a', 'b', 'c', 'd'], 1), 3, 2)
     expect(moved.items).toEqual(['a', 'b', 'd', 'c'])

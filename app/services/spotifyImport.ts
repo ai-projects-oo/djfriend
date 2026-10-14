@@ -1,3 +1,4 @@
+import { spotifyRateLimited } from './spotifyRateLimit';
 import type { SpotifyUserPlaylist, SpotifyImportTrack, SpotifyAudioFeatures } from '../lib/spotifyImport';
 
 const PENDING_IMPORT_KEY = 'djfriend-spotify-pending-import';
@@ -15,7 +16,7 @@ export function clearPendingImport(): void {
 }
 
 async function spotifyGet<T>(url: string, token: string): Promise<T> {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await spotifyRateLimited(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(err.error?.message ?? `Spotify error: ${res.status}`);

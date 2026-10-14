@@ -820,8 +820,10 @@ function AppInner() {
 
   // Run a generation requested by "Generate Set" once the new source has been applied
   useEffect(() => {
-    if (!pendingGenerate.current || activeTab !== "Set Generator" || !playlistFilterFiles || library.length === 0) return;
+    if (!pendingGenerate.current || activeTab !== "Set Generator") return;
+    // One request = one attempt: a source with no library tracks must not trigger a generate later
     pendingGenerate.current = false;
+    if (!playlistFilterFiles || library.length === 0) return;
     setTimeout(() => {
       setIsGenerating(true);
       setHasAttemptedGenerate(true);

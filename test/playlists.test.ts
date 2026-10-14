@@ -156,6 +156,20 @@ describe('folders', () => {
   })
 })
 
+describe('edits that change nothing', () => {
+  it('return the same library (no save, no empty undo step)', () => {
+    let lib = withPlaylist(['a', 'b', 'c'])
+    lib = createFolder(lib, { id: 'f', name: 'F' })
+    lib = movePlaylistToFolder(lib, 'p1', 'f', T1)
+    expect(renamePlaylist(lib, 'p1', 'Warmup', T1)).toBe(lib)
+    expect(movePlaylistToFolder(lib, 'p1', 'f', T1)).toBe(lib)
+    expect(moveTracks(lib, 'p1', ['b'], 1, T1)).toBe(lib)
+    expect(removeTracks(lib, 'p1', ['zz'], T1)).toBe(lib)
+    expect(setPlaylistOrder(lib, 'p1', ['a', 'b', 'c'], T1)).toBe(lib)
+    expect(addTracks(lib, 'p1', ['a'], T1)).toBe(lib)
+  })
+})
+
 describe('setPlaylistOrder', () => {
   it('applies a sorted order and keeps unlisted tracks at the end', () => {
     expect(tracksOf(setPlaylistOrder(withPlaylist(['a', 'b', 'c', 'gone']), 'p1', ['c', 'a', 'b', 'zz'], T1))).toEqual(['c', 'a', 'b', 'gone'])

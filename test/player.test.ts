@@ -106,6 +106,22 @@ describe('player', () => {
     expect(player.queue.items).toEqual(['a', 'b'])
   })
 
+  it('a saved volume of 0 stays muted after a restart', () => {
+    act(() => player.setVolume(0))
+    act(() => root.unmount())
+    root = createRoot(container)
+    act(() => root.render(h(Harness, { expose: p => { player = p } })))
+    expect(player.volume).toBe(0)
+    localStorage.removeItem('djfriend:playerVolume')
+  })
+
+  it('removing the playing track keeps the music going with the next one', () => {
+    act(() => player.playTracks(['a', 'b', 'c'], 0))
+    act(() => player.removeAt(0))
+    expect(player.currentSong?.file).toBe('b')
+    expect(player.playing).toBe(true)
+  })
+
   it('remembers the volume', () => {
     act(() => player.setVolume(0.4))
     expect(localStorage.getItem('djfriend:playerVolume')).toBe('0.4')

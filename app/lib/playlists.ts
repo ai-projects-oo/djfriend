@@ -5,15 +5,21 @@ import type { Playlist, PlaylistFolder, PlaylistLibrary, SmartCriteria, Song } f
 
 export const EMPTY_PLAYLIST_LIBRARY: PlaylistLibrary = { schemaVersion: 1, playlists: [], folders: [] };
 
+// `fn` returns the same playlist object when nothing changes — then the library is returned
+// unchanged too, so no save and no empty undo step happen
 function updatePlaylist(lib: PlaylistLibrary, id: string, now: number, fn: (p: Playlist) => Playlist): PlaylistLibrary {
   let changed = false;
   const playlists = lib.playlists.map(p => {
     if (p.id !== id) return p;
+    const next = fn(p);
+    if (next === p) return p;
     changed = true;
-    return { ...fn(p), updatedAt: now };
+    return { ...next, updatedAt: now };
   });
   return changed ? { ...lib, playlists } : lib;
 }
+
+const sameOrder = (a: string[], b: string[]) => a.length === b.length && a.every((f, i) => f === b[i]);
 
 /** Validates data read from disk; anything malformed is dropped rather than crashing the UI. */
 export function parsePlaylistLibrary(raw: unknown): PlaylistLibrary {
@@ -87,7 +93,7 @@ export function freezeSmartPlaylist(lib: PlaylistLibrary, id: string, files: str
 export function renamePlaylist(lib: PlaylistLibrary, id: string, name: string, now: number): PlaylistLibrary {
   const clean = name.trim();
   if (!clean) return lib;
-  return updatePlaylist(lib, id, now, p => ({ ...p, name: clean }));
+  return updatePlaylist(lib, id, now, p => (p.name === clean ? p : { ...p, name: clean }));
 }
 
 export function deletePlaylist(lib: PlaylistLibrary, id: string): PlaylistLibrary {
@@ -118,7 +124,10 @@ export function addTracks(lib: PlaylistLibrary, id: string, files: string[], now
 
 export function removeTracks(lib: PlaylistLibrary, id: string, files: string[], now: number): PlaylistLibrary {
   const drop = new Set(files);
-  return updatePlaylist(lib, id, now, p => (p.smart ? p : { ...p, tracks: p.tracks.filter(f => !drop.has(f)) }));
+  return updatePlaylist(lib, id, now, p => {
+    if (p.smart || !p.tracks.some(f => drop.has(f))) return p;
+    return { ...p, tracks: p.tracks.filter(f => !drop.has(f)) };
+  });
 }
 
 /**
@@ -126,7 +135,11 @@ export function removeTracks(lib: PlaylistLibrary, id: string, files: string[], 
  * `toIndex` in the playlist; `toIndex === tracks.length` moves them to the end.
  */
 export function moveTracks(lib: PlaylistLibrary, id: string, files: string[], toIndex: number, now: number): PlaylistLibrary {
-  return updatePlaylist(lib, id, now, p => (p.smart ? p : { ...p, tracks: moveWithin(p.tracks, files, toIndex) }));
+  return updatePlaylist(lib, id, now, p => {
+    if (p.smart) return p;
+    const tracks = moveWithin(p.tracks, files, toIndex);
+    return sameOrder(tracks, p.tracks) ? p : { ...p, tracks };
+  });
 }
 
 /**
@@ -139,7 +152,8 @@ export function setPlaylistOrder(lib: PlaylistLibrary, id: string, ordered: stri
     const inPlaylist = new Set(p.tracks);
     const head = dedupe(ordered.filter(f => inPlaylist.has(f)));
     const listed = new Set(head);
-    return { ...p, tracks: [...head, ...p.tracks.filter(f => !listed.has(f))] };
+    const tracks = [...head, ...p.tracks.filter(f => !listed.has(f))];
+    return sameOrder(tracks, p.tracks) ? p : { ...p, tracks };
   });
 }
 
@@ -210,7 +224,7 @@ function withFolder(p: Playlist, folderId: string | undefined): Playlist {
 
 export function movePlaylistToFolder(lib: PlaylistLibrary, playlistId: string, folderId: string | undefined, now: number): PlaylistLibrary {
   if (folderId && !lib.folders.some(f => f.id === folderId)) return lib;
-  return updatePlaylist(lib, playlistId, now, p => withFolder(p, folderId));
+  return updatePlaylist(lib, playlistId, now, p => (p.folderId === folderId ? p : withFolder(p, folderId)));
 }
 
 /** True when `folderId` is `ancestorId` or nested anywhere inside it. */

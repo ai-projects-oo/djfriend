@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  evaluateSmart, matchesRule, materializeSmartPlaylists, playStatsByFile, invalidRules, defaultRule, fieldKind, type SmartContext,
+  evaluateSmart, matchesRule, materializeSmartPlaylists, playStatsByFile, invalidRules, defaultRule, fieldKind, brokenSmartPlaylists, type SmartContext,
 } from '../app/lib/smartPlaylists'
 import { createPlaylist, addTracks, removeTracks, moveTracks, setSmartCriteria, freezeSmartPlaylist, duplicatePlaylist, parsePlaylistLibrary, EMPTY_PLAYLIST_LIBRARY } from '../app/lib/playlists'
 import type { HistoryEntry, SmartCriteria, SmartRule, Song } from '../app/types'
@@ -128,6 +128,25 @@ describe('materializeSmartPlaylists', () => {
     expect(tracks('y')).toEqual([])
   })
 
+  it('playlists caught in a reference loop are empty whatever the evaluation order', () => {
+    const build = (order: string[]) => {
+      const defs: Record<string, SmartCriteria> = {
+        A: { match: 'all', rules: [rule('playlist', 'in', 'B')] },
+        B: { match: 'all', rules: [rule('playlist', 'notIn', 'A')] },
+        C: { match: 'all', rules: [rule('playlist', 'in', 'A')] },
+        D: { match: 'all', rules: [rule('genre', 'contains', 'techno')] },
+      }
+      let pl = EMPTY_PLAYLIST_LIBRARY
+      for (const id of order) pl = createPlaylist(pl, { id, name: id, now: 0, smart: defs[id] })
+      const m = materializeSmartPlaylists(pl, lib, history, NOW)
+      return Object.fromEntries(m.playlists.map(p => [p.id, p.tracks]))
+    }
+    for (const order of [['A', 'B', 'C', 'D'], ['B', 'A', 'D', 'C'], ['C', 'D', 'B', 'A']]) {
+      expect(build(order)).toEqual({ A: [], B: [], C: [], D: ['b', 'c'] })
+    }
+    expect(brokenSmartPlaylists(createPlaylist(EMPTY_PLAYLIST_LIBRARY, { id: 'S', name: 'S', now: 0, smart: { match: 'all', rules: [rule('playlist', 'in', 'S')] } }))).toEqual(new Set(['S']))
+  })
+
   it('returns the same library object when there are no smart playlists', () => {
     const pl = createPlaylist(EMPTY_PLAYLIST_LIBRARY, { id: 's', name: 'S', now: 0, tracks: ['a'] })
     expect(materializeSmartPlaylists(pl, lib, history, NOW)).toBe(pl)
@@ -141,9 +160,10 @@ describe('smart playlists in the playlist library', () => {
   it('ignores manual track edits', () => {
     const l = base()
     expect(l.playlists[0].tracks).toEqual([])
-    expect(addTracks(l, 'p', ['a'], 1)).toEqual({ ...l, playlists: [{ ...l.playlists[0], updatedAt: 1 }] })
-    expect(removeTracks(l, 'p', ['a'], 1).playlists[0].tracks).toEqual([])
-    expect(moveTracks(l, 'p', ['a'], 0, 1).playlists[0].tracks).toEqual([])
+    // No change at all → same library object (nothing to save or undo)
+    expect(addTracks(l, 'p', ['a'], 1)).toBe(l)
+    expect(removeTracks(l, 'p', ['a'], 1)).toBe(l)
+    expect(moveTracks(l, 'p', ['a'], 0, 1)).toBe(l)
   })
 
   it('updates rules, duplicates with rules, and freezes into a regular playlist', () => {

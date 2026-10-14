@@ -1,10 +1,11 @@
 import type { PlaylistLibrary } from '../types';
 import { apiFetch } from './apiFetch';
-import { parsePlaylistLibrary, EMPTY_PLAYLIST_LIBRARY } from '../lib/playlists';
+import { parsePlaylistLibrary } from '../lib/playlists';
 
+/** Throws when the library can't be read — callers must not treat that as "no playlists" (saving would wipe the file). */
 export async function fetchPlaylistLibrary(): Promise<PlaylistLibrary> {
   const res = await apiFetch('/api/playlists');
-  if (!res.ok) return EMPTY_PLAYLIST_LIBRARY;
+  if (!res.ok) throw new Error(`Couldn't load playlists (${res.status})`);
   return parsePlaylistLibrary(await res.json());
 }
 

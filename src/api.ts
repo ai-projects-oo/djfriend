@@ -1802,8 +1802,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (process.platform !== 'darwin') { writeEvent({ type: 'error', message: 'Apple Music export is only available on macOS.' }); res.end(); return }
     let job
     try {
-      const body = await new Promise<string>((resolve, reject) => { let d = ''; req.on('data', c => { d += c }); req.on('end', () => resolve(d)); req.on('error', reject) })
-      job = validateExportJob(JSON.parse(body))
+      job = validateExportJob(await readJsonBody(req))
     } catch (err) {
       writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Invalid export job' }); res.end(); return
     }

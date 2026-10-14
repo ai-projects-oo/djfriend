@@ -1,5 +1,6 @@
 import type { SetTrack } from '../types';
 import { apiFetch } from './apiFetch';
+import { spotifyRateLimited } from './spotifyRateLimit';
 
 const STORAGE_PREFIX = 'djfriend-spotify';
 const TOKEN_KEY = `${STORAGE_PREFIX}-token`;
@@ -127,7 +128,7 @@ export async function exchangeCodeForToken(code: string): Promise<{ access_token
 }
 
 async function spotifyFetch<T>(url: string, token: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, {
+  const res = await spotifyRateLimited(url, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -309,13 +310,22 @@ async function createPlaylist(
       body: JSON.stringify({ name, public: false, description: 'Created by DJFriend' }),
     },
   );
-  await makePlaylistPrivate(playlist.id, token);
+  try {
+    await makePlaylistPrivate(playlist.id, token);
+  } catch (err) {
+    // Don't leave a public (or duplicate, on retry) playlist behind — remove it from the account
+    await spotifyRateLimited(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlist.id)}/followers`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+    throw err;
+  }
   return playlist;
 }
 
 async function makePlaylistPrivate(playlistId: string, token: string): Promise<void> {
   // Change-details returns an empty body, so this can't go through spotifyFetch (which parses JSON)
-  const res = await fetch(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}`, {
+  const res = await spotifyRateLimited(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ public: false }),

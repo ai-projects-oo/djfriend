@@ -18,7 +18,11 @@ export function usePlayer(songsByFile: Map<string, Song>) {
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(() => {
-    try { const v = Number(localStorage.getItem(VOLUME_KEY)); return v > 0 && v <= 1 ? v : 0.9; } catch { return 0.9; }
+    try {
+      const raw = localStorage.getItem(VOLUME_KEY);
+      const v = raw === null ? NaN : Number(raw);
+      return v >= 0 && v <= 1 ? v : 0.9;   // 0 (muted) is a valid saved volume
+    } catch { return 0.9; }
   });
   const queueRef = useRef(queue);
   const autoplay = useRef(false);
@@ -143,7 +147,12 @@ export function usePlayer(songsByFile: Map<string, Song>) {
       try { localStorage.setItem(VOLUME_KEY, String(clamped)); } catch { /* ignore */ }
     }, []),
     jumpTo: useCallback((index: number) => updateQueue(q => Q.jumpTo(q, index), true), [updateQueue]),
-    removeAt: useCallback((index: number) => updateQueue(q => Q.removeAt(q, index)), [updateQueue]),
+    // Removing the playing track keeps the music going with the next one
+    removeAt: useCallback((index: number) => {
+      const wasPlaying = index === queueRef.current.index && !audio().paused;
+      updateQueue(q => Q.removeAt(q, index), wasPlaying);
+      if (wasPlaying && Q.current(queueRef.current) === null) audio().pause();
+    }, [updateQueue, audio]),
     move: useCallback((from: number, to: number) => updateQueue(q => Q.moveInQueue(q, from, to)), [updateQueue]),
     clearUpNext: useCallback(() => updateQueue(q => Q.clearUpNext(q)), [updateQueue]),
     toggleShuffle: useCallback(() => updateQueue(q => Q.toggleShuffle(q, Date.now())), [updateQueue]),

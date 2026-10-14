@@ -94,13 +94,16 @@ export function jumpTo(q: PlayQueue, index: number): PlayQueue {
   return index >= 0 && index < q.items.length ? { ...q, index } : q;
 }
 
-/** Removes a queued track (by position). Removing the current track keeps playback at the same position. */
+/**
+ * Removes a queued track (by position). Removing the current track moves on to the track that
+ * followed it; if it was the last one, nothing is current any more (-1).
+ */
 export function removeAt(q: PlayQueue, index: number): PlayQueue {
   if (index < 0 || index >= q.items.length) return q;
   const items = q.items.filter((_, i) => i !== index);
   let i = q.index;
   if (index < q.index) i--;
-  if (i >= items.length) i = items.length - 1;
+  else if (index === q.index && i >= items.length) i = -1;
   return { ...q, items, index: items.length ? i : -1 };
 }
 

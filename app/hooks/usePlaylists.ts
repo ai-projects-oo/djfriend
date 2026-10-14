@@ -25,13 +25,23 @@ export function usePlaylists() {
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStack = useRef<PlaylistLibrary[]>([]);
+  const loadedRef = useRef(false);
 
+  // Edits and saves are only allowed after a successful load — otherwise the first save would
+  // overwrite the playlists on disk with an empty (or partial) library.
   useEffect(() => {
     let alive = true;
     fetchPlaylistLibrary()
-      .then(l => { if (alive) { setLib(l); latest.current = l; } })
-      .catch(() => { /* start empty — first save creates the file */ })
-      .finally(() => { if (alive) setLoaded(true); });
+      .then(l => {
+        if (!alive) return;
+        latest.current = l;
+        loadedRef.current = true;
+        setLib(l);
+        setLoaded(true);
+      })
+      .catch(err => {
+        if (alive) setSaveError(`${err instanceof Error ? err.message : "Couldn't load playlists"} — restart DJFriend before editing playlists.`);
+      });
     return () => { alive = false; };
   }, []);
 
@@ -60,9 +70,18 @@ export function usePlaylists() {
    * produces the notice shown afterwards (a fixed text, or one computed from before/after).
    */
   const update = useCallback((fn: (l: PlaylistLibrary) => PlaylistLibrary, opts: { undoable?: boolean; describe?: Describe } = {}) => {
+    if (!loadedRef.current) {
+      setNotice({ text: "Playlists are still loading — try again in a moment", canUndo: false, nonce: Date.now() });
+      return;
+    }
     const before = latest.current;
     const after = fn(before);
-    if (after === before) return;
+    if (after === before) {
+      // Nothing changed (e.g. tracks already in the playlist) — still say so, but nothing to save or undo
+      const d = typeof opts.describe === "function" ? opts.describe(before, after) : null;
+      if (d) setNotice({ text: d.text, canUndo: false, nonce: Date.now() });
+      return;
+    }
     latest.current = after;
     dirty.current = true;
     setLib(after);
@@ -131,7 +150,12 @@ export function usePlaylists() {
     }) }), [update]),
     toggleFolder: useCallback((id: string) => update(l => P.toggleFolder(l, id)), [update]),
     moveFolder: useCallback((id: string, parentId: string | undefined) => update(l => P.moveFolder(l, id, parentId), { undoable: true }), [update]),
-    applyAppleMusicResult: useCallback((result: AppleMusicExportResult) => update(l => applyAppleMusicResult(l, result)), [update]),
+    applyAppleMusicResult: useCallback((result: AppleMusicExportResult) => {
+      // Keep the new Music.app links in undo snapshots too — undoing an earlier edit must not
+      // forget them, or the next push would duplicate playlists in Music
+      undoStack.current = undoStack.current.map(l => applyAppleMusicResult(l, result));
+      update(l => applyAppleMusicResult(l, result));
+    }, [update]),
     setSmartCriteria: useCallback((id: string, smart: SmartCriteria) => update(l => P.setSmartCriteria(l, id, smart, Date.now()), { undoable: true }), [update]),
     freezeSmartPlaylist: useCallback((id: string, files: string[]) =>
       update(l => P.freezeSmartPlaylist(l, id, files, Date.now()), { undoable: true, describe: a => ({ text: `“${name(a, id)}” is now a regular playlist`, changed: true }) }), [update]),

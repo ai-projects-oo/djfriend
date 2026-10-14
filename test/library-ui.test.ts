@@ -7,9 +7,10 @@ import type { LibraryView } from '../app/lib/libraryView'
 
 // ── Server stand-in for playlist storage ─────────────────────────────────────
 let stored: PlaylistLibrary
+let loadFails = false
 const saved: PlaylistLibrary[] = []
 vi.mock('../app/services/playlistsApi', () => ({
-  fetchPlaylistLibrary: async () => stored,
+  fetchPlaylistLibrary: async () => { if (loadFails) throw new Error("Couldn't load playlists (500)"); return stored },
   savePlaylistLibrary: async (lib: PlaylistLibrary) => { saved.push(lib) },
 }))
 
@@ -51,6 +52,7 @@ beforeEach(() => {
     playlists: [{ id: 'p1', name: 'Warmup', tracks: ['a.mp3'], folderId: 'f1', createdAt: 0, updatedAt: 0 }],
   }
   saved.length = 0
+  loadFails = false
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -164,6 +166,40 @@ describe('LibrarySidebar', () => {
     expect(api.notice).toMatchObject({ text: 'Already in “Warmup”', canUndo: false })
     act(() => api.undo())
     expect(api.library.playlists[0].tracks).toEqual(['a.mp3'])
+  })
+
+  it('never saves (or allows edits) when loading playlists failed', async () => {
+    loadFails = true
+    let api!: ReturnType<typeof usePlaylists>
+    function Broken({ expose }: { expose: (a: ReturnType<typeof usePlaylists>) => void }) {
+      const api = usePlaylists()
+      useEffect(() => expose(api))
+      return null
+    }
+    act(() => root.render(h(Broken, { expose: a => { api = a } })))
+    await flush()
+    expect(api.saveError).toMatch(/Couldn't load playlists/)
+    act(() => { api.createPlaylist('New') })
+    await act(async () => { await new Promise(r => setTimeout(r, 450)) })
+    expect(api.library.playlists).toEqual([])
+    expect(saved).toEqual([])
+  })
+
+  it('undo after an Apple Music export keeps the Music links', async () => {
+    let api!: ReturnType<typeof usePlaylists>
+    function Linked({ expose }: { expose: (a: ReturnType<typeof usePlaylists>) => void }) {
+      const api = usePlaylists()
+      useEffect(() => expose(api))
+      return null
+    }
+    act(() => root.render(h(Linked, { expose: a => { api = a } })))
+    await flush()
+    act(() => api.renamePlaylist('p1', 'Warmup 2'))
+    act(() => api.applyAppleMusicResult({ rootFolderId: 'ROOT', folders: { f1: 'MF' }, playlists: { p1: { appleMusicId: 'MP', added: 1, skipped: [] } }, addedToLibrary: 0, tagged: 0, errors: [] }))
+    act(() => api.undo())
+    expect(api.library.playlists[0].name).toBe('Warmup')
+    expect(api.library.playlists[0].appleMusicId).toBe('MP')
+    expect(api.library.appleMusicRootId).toBe('ROOT')
   })
 
   it('finds playlists by name when there are many', async () => {

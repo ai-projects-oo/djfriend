@@ -50,10 +50,21 @@ describe('Spotify playlists created by DJFriend are private', () => {
     expect(calls.some(c => c.method === 'PUT' && c.url.endsWith('/v1/playlists/pl1') && (c.body as { public?: boolean }).public === false)).toBe(true)
   })
 
-  it('checks the playlist really is private before adding tracks', async () => {
+  it('checks the playlist really is private before adding tracks, and removes it if not', async () => {
     const calls = mockSpotify({ staysPublic: true })
     await expect(createPlaylistFromSpotifyIds(['a'], 'X', 'tok')).rejects.toThrow(/kept it public/)
     expect(calls.some(c => c.url.endsWith('/v1/playlists/pl1/tracks'))).toBe(false)
+    expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith('/v1/playlists/pl1/followers'))).toBe(true)
+  })
+
+  it('spaces Spotify calls at least 200ms apart', async () => {
+    const calls = mockSpotify()
+    const times: number[] = []
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (...args: Parameters<typeof fetch>) => { times.push(Date.now()); return orig(...args) }) as typeof fetch
+    await createPlaylistFromSpotifyIds(['a'], 'X', 'tok')
+    expect(calls.length).toBeGreaterThanOrEqual(4)
+    for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(195)
   })
 
   it('reports an error instead of silently leaving the playlist public', async () => {

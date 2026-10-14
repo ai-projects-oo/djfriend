@@ -194,6 +194,39 @@ export function evaluateSmart(criteria: SmartCriteria, songs: Song[], ctx: Smart
 }
 
 /**
+ * Smart playlists whose rules reference a loop of smart playlists (A → B → A), directly or
+ * through another playlist. These are empty — deciding up front keeps the result independent
+ * of evaluation order.
+ */
+export function brokenSmartPlaylists(lib: PlaylistLibrary): Set<string> {
+  const smart = new Map(lib.playlists.filter(p => p.smart).map(p => [p.id, p]));
+  const refs = (id: string) => (smart.get(id)?.smart?.rules ?? [])
+    .filter(r => r.field === 'playlist' && smart.has(r.value))
+    .map(r => r.value);
+  const state = new Map<string, 'visiting' | 'ok' | 'broken'>();
+  const visit = (id: string): boolean => {           // true = broken
+    const s = state.get(id);
+    if (s === 'visiting') return true;               // back edge: a loop
+    if (s) return s === 'broken';
+    state.set(id, 'visiting');
+    let bad = false;
+    for (const r of refs(id)) if (visit(r)) bad = true;
+    state.set(id, bad ? 'broken' : 'ok');
+    return bad;
+  };
+  for (const id of smart.keys()) visit(id);
+  // A playlist on a loop may have been marked 'ok' before the loop closed — re-run until stable
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const id of smart.keys()) {
+      if (state.get(id) !== 'broken' && refs(id).some(r => state.get(r) === 'broken')) { state.set(id, 'broken'); changed = true; }
+    }
+  }
+  return new Set([...state].filter(([, s]) => s === 'broken').map(([id]) => id));
+}
+
+/**
  * Returns the library with every smart playlist's `tracks` filled in from its rules.
  * Smart playlists may reference other playlists (smart or not); reference cycles resolve to empty.
  */
@@ -202,7 +235,7 @@ export function materializeSmartPlaylists(lib: PlaylistLibrary, songs: Song[], h
   const stats = playStatsByFile(history);
   const byId = new Map(lib.playlists.map(p => [p.id, p]));
   const resolved = new Map<string, Set<string>>();
-  const inProgress = new Set<string>();
+  const broken = brokenSmartPlaylists(lib);
 
   const members = (id: string): Set<string> => {
     const cached = resolved.get(id);
@@ -210,10 +243,8 @@ export function materializeSmartPlaylists(lib: PlaylistLibrary, songs: Song[], h
     const p = byId.get(id);
     if (!p) return new Set();
     if (!p.smart) { const s = new Set(p.tracks); resolved.set(id, s); return s; }
-    if (inProgress.has(id)) return new Set();   // cycle
-    inProgress.add(id);
+    if (broken.has(id)) { resolved.set(id, new Set()); order.set(id, []); return resolved.get(id)!; }
     const files = evaluateSmart(p.smart, songs, { now, stats, members }, p.id).map(s => s.file);
-    inProgress.delete(id);
     const set = new Set(files);
     resolved.set(id, set);
     order.set(id, files);

@@ -14,8 +14,12 @@ type AnalysisEvent =
   | { type: 'folder_done'; folder: string }
   | { type: 'enriching'; message: string }
   | { type: 'enrich_progress'; completed: number; total: number }
-  | { type: 'done'; songs: unknown; libraryName: string; resultsJson: Record<string, unknown>; playlistFiles?: string[] }
+  | { type: 'reading-library' }
+  | { type: 'done'; songs: unknown; libraryName: string; resultsJson: Record<string, unknown>; playlistFiles?: string[]; allPlaylists?: Record<string, string[]>; allPlaylistFolders?: Record<string, string> }
   | { type: 'error'; message: string };
+
+/** Queue entry name meaning "the whole Apple Music library" (all tracks + all playlists). */
+export const ALL_APPLE_MUSIC = '__all_apple_music__';
 
 async function streamAnalysis(
   response: Response,
@@ -86,6 +90,13 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
       return raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
     } catch { return {}; }
   });
+  // Map of Apple Music playlist name → the Music folder it sits in (from "Import entire library")
+  const [applePlaylistFolders, setApplePlaylistFolders] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem("djfriend-apple-playlist-folders");
+      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    } catch { return {}; }
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -94,6 +105,9 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   useEffect(() => {
     localStorage.setItem("djfriend-apple-playlist-files", JSON.stringify(applePlaylistFiles));
   }, [applePlaylistFiles]);
+  useEffect(() => {
+    localStorage.setItem("djfriend-apple-playlist-folders", JSON.stringify(applePlaylistFolders));
+  }, [applePlaylistFolders]);
 
   // Background patches (backfill, tag re-derive, waveform upgrade) are queued and applied to the
   // library at most once per PATCH_FLUSH_MS — each setLibrary re-renders the whole app.
@@ -291,10 +305,11 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     setAnalysisQueueState(prev => markAnalyzing(prev));
 
     try {
+      const isAll = playlistName === ALL_APPLE_MUSIC;
       const response = await apiFetch("/api/analyze-apple-music", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playlistName, bpmHint }),
+        body: JSON.stringify(isAll ? { all: true } : { playlistName, bpmHint }),
         signal: controller.signal,
       });
 
@@ -323,10 +338,18 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
           if (!songs) { setError('Analysis completed but returned invalid song data.'); return; }
           setLibrary(songs);
           setLibraryName(`${event.libraryName} (analyzed)`);
-          setAnalyzedApplePlaylists(prev => new Set([...prev, playlistName]));
-          // Store which files belong to this playlist (from server response)
-          if (event.playlistFiles && Array.isArray(event.playlistFiles)) {
-            setApplePlaylistFiles(prev => ({ ...prev, [playlistName]: event.playlistFiles as string[] }));
+          if (isAll && event.allPlaylists && typeof event.allPlaylists === "object") {
+            // Whole library: every Music playlist becomes an Apple Music source
+            const all = event.allPlaylists as Record<string, string[]>;
+            setApplePlaylistFiles(prev => ({ ...prev, ...all }));
+            if (event.allPlaylistFolders) setApplePlaylistFolders(prev => ({ ...prev, ...event.allPlaylistFolders }));
+            setAnalyzedApplePlaylists(prev => new Set([...prev, ...Object.keys(all)]));
+          } else {
+            setAnalyzedApplePlaylists(prev => new Set([...prev, playlistName]));
+            // Store which files belong to this playlist (from server response)
+            if (event.playlistFiles && Array.isArray(event.playlistFiles)) {
+              setApplePlaylistFiles(prev => ({ ...prev, [playlistName]: event.playlistFiles as string[] }));
+            }
           }
           setError(null);
         }
@@ -624,6 +647,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     analyzedApplePlaylists,
     setAnalyzedApplePlaylists,
     applePlaylistFiles,
+    applePlaylistFolders,
     setApplePlaylistFiles,
     error,
     openPlaylistPicker,

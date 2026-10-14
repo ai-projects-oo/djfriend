@@ -215,6 +215,29 @@ describe('LibrarySidebar', () => {
     expect(byLabel('Playlist List 1')).toBeNull()
   })
 
+  it('groups Apple Music playlists by their Music folder, collapsed until opened', async () => {
+    function Grouped() {
+      const api = usePlaylists()
+      return h(LibrarySidebar, {
+        playlists: api, view: { kind: 'all' }, onSelectView: () => {}, libraryCount: 0, playlistCounts: new Map(),
+        appleSources: [
+          { view: { kind: 'apple', name: 'Loose' }, label: 'Loose', count: 1 },
+          { view: { kind: 'apple', name: 'Queen' }, label: 'Queen', count: 14, group: 'Artists' },
+          { view: { kind: 'apple', name: 'Prince' }, label: 'Prince', count: 9, group: 'Artists' },
+        ],
+        spotifySources: [], setSources: [], onDropTracks: () => {}, onSaveAsPlaylist: () => {},
+      })
+    }
+    act(() => root.render(h(Grouped)))
+    await flush()
+    expect(byLabel('Loose')).not.toBeNull()
+    expect(byLabel('Apple Music folder Artists')?.textContent).toContain('2')
+    expect(byLabel('Queen')).toBeNull()
+    click(byLabel('Apple Music folder Artists')!)
+    expect(byLabel('Queen')).not.toBeNull()
+    expect(byLabel('Prince')).not.toBeNull()
+  })
+
   it('Spotify section opens the import page from the sidebar', async () => {
     const onImport = vi.fn()
     function Imports() {

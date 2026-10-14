@@ -33,7 +33,7 @@ import {
 } from "./lib/spotifyImport";
 import { downloadM3U, downloadRekordboxXml } from "./services/downloads";
 import { SpotifyIcon, M3UIcon } from "./components/Icons";
-import { useLibrary } from "./hooks/useLibrary";
+import { useLibrary, ALL_APPLE_MUSIC } from "./hooks/useLibrary";
 import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
@@ -360,6 +360,7 @@ function AppInner() {
     analyzedApplePlaylists,
     setAnalyzedApplePlaylists,
     applePlaylistFiles,
+    applePlaylistFolders,
     setApplePlaylistFiles,
     error,
     openPlaylistPicker,
@@ -618,9 +619,10 @@ function AppInner() {
   const appleSources = useMemo<SourceItem[]>(
     () => Object.keys(applePlaylistFiles).sort((a, b) => a.localeCompare(b)).map(name => {
       const v: LibraryView = { kind: "apple", name };
-      return { view: v, label: name, count: resolveLibraryView(v)?.songs.length ?? 0 };
+      const group = applePlaylistFolders[name];
+      return { view: v, label: name, count: resolveLibraryView(v)?.songs.length ?? 0, ...(group ? { group } : {}) };
     }),
-    [applePlaylistFiles, resolveLibraryView],
+    [applePlaylistFiles, applePlaylistFolders, resolveLibraryView],
   );
   const spotifySources = useMemo<SourceItem[]>(
     () => importHistory.map(e => ({ view: { kind: "spotify", id: e.id } as LibraryView, label: e.name, count: e.tracks.filter(t => t.inLibrary).length })),
@@ -1519,12 +1521,12 @@ function AppInner() {
                         className={`text-[10px] tabular-nums truncate max-w-[80px] ${item.status === "analyzing" ? "text-[#a6b5c8]" : "text-[#8394a8]"}`}
                       >
                         {item.status === "queued"
-                          ? item.playlistName
-                          : `${item.completed}/${item.total}`}
+                          ? (item.playlistName === ALL_APPLE_MUSIC ? "All of Apple Music" : item.playlistName)
+                          : item.total === 0 ? "Reading…" : `${item.completed}/${item.total}`}
                       </span>
                       <button
                         onClick={() => cancelQueueItem(item.playlistName)}
-                        aria-label={`Cancel ${item.playlistName}`}
+                        aria-label={`Cancel ${item.playlistName === ALL_APPLE_MUSIC ? "Apple Music library import" : item.playlistName}`}
                         className="text-[10px] text-[#8394a8] hover:text-red-400 transition-colors cursor-pointer leading-none flex-shrink-0"
                       >
                         ✕
@@ -4112,6 +4114,26 @@ function AppInner() {
                 Close
               </button>
             </div>
+            {playlistPicker.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPlaylists([]);
+                  setPlaylistSearch("");
+                  runAppleMusicAnalysis(ALL_APPLE_MUSIC);
+                }}
+                disabled={analysisQueue.some((item) => item.playlistName === ALL_APPLE_MUSIC)}
+                className="w-full mb-3 flex items-center gap-3 rounded-lg border border-[#7c3aed]/50 bg-[#7c3aed]/10 px-3 py-2.5 text-left hover:bg-[#7c3aed]/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-[#e2e8f0] flex-shrink-0" aria-hidden>
+                  <path d="M17.057 12.781c.032 2.588 2.254 3.462 2.287 3.477-.023.074-.351 1.204-1.151 2.371-.691 1.012-1.411 2.018-2.54 2.038-1.111.02-1.469-.658-2.738-.658-1.27 0-1.666.638-2.718.678-1.091.039-1.911-1.077-2.606-2.079-1.42-2.05-2.505-5.787-1.045-8.311.725-1.254 2.015-2.049 3.411-2.069 1.054-.02 2.049.71 2.693.71.643 0 1.839-.889 3.102-.759.53.021 2.017.213 2.971 1.611-.077.047-1.771 1.033-1.666 3.071zM14.7 5.124c.574-.694.962-1.66.856-2.624-.828.033-1.83.552-2.424 1.246-.532.616-.998 1.6-.873 2.544.923.072 1.866-.469 2.441-1.166z"/>
+                </svg>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-medium text-[#e2e8f0]">Import entire Apple Music library</span>
+                  <span className="block text-[11px] text-[#8394a8]">All local tracks + all {playlistPicker.length} playlists. Already-analysed tracks are skipped.</span>
+                </span>
+              </button>
+            )}
             {playlistPicker.length > 0 && (
               <input
                 type="text"

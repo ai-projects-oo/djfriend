@@ -117,6 +117,8 @@ export default function LibrarySidebar({
   const [dropTarget, setDropTarget] = useState<string | null>(null);   // "pl:<id>" | "fd:<id>" | "root"
   const [showAllSets, setShowAllSets] = useState(false);
   const [filter, setFilter] = useState("");
+  const [openAppleGroups, setOpenAppleGroups] = useState<Set<string>>(new Set());
+  const toggleAppleGroup = (g: string) => setOpenAppleGroups(prev => { const n = new Set(prev); if (n.has(g)) n.delete(g); else n.add(g); return n; });
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return q ? flattenPlaylistTree(lib, p => p.name.toLowerCase().includes(q)) : [];
@@ -344,7 +346,33 @@ export default function LibrarySidebar({
       </>)}
       {!collapsedSections.has("apple") && (
         appleSources.length > 0
-          ? appleSources.map(renderSource)
+          ? (() => {
+              // Music folders: collapsed by default (big libraries have hundreds of playlists);
+              // the folder holding the open playlist stays expanded
+              const loose = appleSources.filter(s => !s.group);
+              const groups = [...new Set(appleSources.map(s => s.group).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b));
+              return (
+                <>
+                  {loose.map(renderSource)}
+                  {groups.map(g => {
+                    const items = appleSources.filter(s => s.group === g);
+                    const open = openAppleGroups.has(g) || items.some(s => sameView(view, s.view));
+                    return (
+                      <div key={`apple-group-${g}`}>
+                        <button type="button" onClick={() => toggleAppleGroup(g)} aria-expanded={open} aria-label={`Apple Music folder ${g}`}
+                          className={`${itemBase} text-[#8394a8] hover:bg-[#20202e]`}>
+                          <span className="text-[9px] text-[#64748b] w-2" aria-hidden>{open ? "▾" : "▸"}</span>
+                          <span aria-hidden>📁</span>
+                          <span className="flex-1 min-w-0 truncate text-left">{g}</span>
+                          <span className="text-[10px] text-[#58656e] tabular-nums">{items.length}</span>
+                        </button>
+                        {open && <div className="pl-4">{items.map(renderSource)}</div>}
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()
           : <p className="px-2 text-[10px] text-[#424f63]">No playlists imported</p>
       )}
 

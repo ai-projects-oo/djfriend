@@ -269,6 +269,99 @@ export interface ImportEntry {
   tracks: ImportTrack[];
 }
 
+// ─── Playlists (Library sidebar) ──────────────────────────────────────────────
+
+/** A playlist owned by DJFriend. Tracks reference `Song.file`, in play order. */
+export interface Playlist {
+  id: string;
+  name: string;
+  tracks: string[];
+  folderId?: string;           // undefined = top level
+  createdAt: number;           // ms epoch
+  updatedAt: number;
+  // Where the playlist came from, if it was imported or saved from elsewhere
+  source?: { kind: 'apple-music' | 'spotify' | 'set'; ref: string };
+  appleMusicId?: string;       // persistent ID of the linked Music.app playlist (set by export)
+  smart?: SmartCriteria;       // set = smart playlist: tracks are computed from these rules, `tracks` is unused
+}
+
+// ─── Smart playlists ──────────────────────────────────────────────────────────
+
+export type SmartField =
+  | 'bpm' | 'energy' | 'year' | 'duration'           // numbers (energy 0–100, duration in minutes)
+  | 'title' | 'artist' | 'genre' | 'comment' | 'vibe' | 'mood'   // text
+  | 'key'                                             // Camelot key
+  | 'vocal'                                           // vocal / mostly-vocal / instrumental
+  | 'dateAdded'                                       // days ago
+  | 'playlist'                                        // membership in another playlist
+  | 'setCount' | 'lastPlayed';                        // from set history
+
+export type SmartOp =
+  | 'is' | 'isNot' | 'gt' | 'lt' | 'between'          // numbers (+ is/isNot for key, vocal, text)
+  | 'contains' | 'notContains'                        // text
+  | 'compatible'                                      // key: harmonically compatible with value
+  | 'inLast' | 'notInLast'                            // dateAdded / lastPlayed: within N days
+  | 'in' | 'notIn';                                   // playlist membership
+
+/** One rule. Values are kept as strings (as typed in the editor) and parsed when evaluated. */
+export interface SmartRule {
+  id: string;
+  field: SmartField;
+  op: SmartOp;
+  value: string;
+  value2?: string;             // upper bound for 'between'
+}
+
+export type SmartLimitBy = 'random' | 'bpm' | 'energy' | 'dateAdded' | 'title' | 'mostPlayed' | 'leastPlayed';
+
+export interface SmartCriteria {
+  match: 'all' | 'any';
+  rules: SmartRule[];
+  limit?: { count: number; by: SmartLimitBy };
+}
+
+export interface PlaylistFolder {
+  id: string;
+  name: string;
+  parentId?: string;           // undefined = top level
+  collapsed?: boolean;
+  appleMusicId?: string;       // persistent ID of the linked Music.app folder playlist (set by export)
+}
+
+/** Everything persisted in playlists.json. */
+export interface PlaylistLibrary {
+  schemaVersion: 1;
+  playlists: Playlist[];
+  folders: PlaylistFolder[];
+  appleMusicRootId?: string;   // persistent ID of the "DJFriend" folder in Music.app
+}
+
+// ─── Apple Music export ───────────────────────────────────────────────────────
+
+export type AppleMusicKeyField = 'grouping' | 'comment';
+
+/** Sent to POST /api/apple-music/export. Everything the export script needs, in one job. */
+export interface AppleMusicExportJob {
+  rootFolderName: string;
+  rootFolderId?: string;
+  /** Folders to mirror, parents before children. */
+  folders: { id: string; name: string; parentId?: string; appleMusicId?: string }[];
+  playlists: { id: string; name: string; folderId?: string; appleMusicId?: string; files: string[] }[];
+  /** Add local files that aren't in the Music library yet (otherwise they're skipped). */
+  addMissing: boolean;
+  /** Write DJFriend's BPM and Camelot key onto the Music tracks. */
+  writeBack?: { keyField: AppleMusicKeyField; tracks: Record<string, { bpm?: number; camelot?: string }> };
+}
+
+export interface AppleMusicExportResult {
+  rootFolderId: string;
+  folders: Record<string, string>;                       // DJFriend folder id → Music persistent ID
+  playlists: Record<string, { appleMusicId: string; added: number; skipped: string[] }>;
+  addedToLibrary: number;
+  tagged: number;
+  errors: string[];
+}
+
 // ─── GigFinder ────────────────────────────────────────────────────────────────
 
 export type GigLeadStatus = 'NEW' | 'RESEARCHED' | 'READY_TO_CONTACT' | 'CONTACTED' | 'FOLLOW_UP' | 'REPLIED' | 'BOOKED' | 'NOT_INTERESTED' | 'REJECTED'

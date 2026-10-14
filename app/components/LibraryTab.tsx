@@ -1,13 +1,13 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import type { Song } from "../types";
+import type { PlaylistLibrary, Song } from "../types";
+import { DRAG_TRACKS, type ContainingSource, type LibraryView } from "../lib/libraryView";
+import { flattenPlaylistTree, type PlaylistMenuEntry } from "../lib/playlists";
 import LibraryStatsBar from "./LibraryStatsBar";
-import LibraryPlayer from "./LibraryPlayer";
 import TrackInfoModal from "./TrackInfoModal";
 import { camelotColor } from "../lib/camelotColors";
 import WaveformBar from "./WaveformBar";
 import { apiFetch } from "../services/apiFetch";
 import { downloadM3U } from "../services/downloads";
-import { downloadRekordboxXml } from "../services/downloads";
 import { patchTrackMeta } from "../services/trackMeta";
 import type { SetTrack } from "../types";
 import { BEATPORT_UMBRELLAS } from "../lib/genreUtils";
@@ -63,12 +63,18 @@ function detectGenrePreset(selectedSongs: Song[]): { min: number; max: number } 
   return GENRE_BPM_PRESETS[top[0]] ?? null;
 }
 
+function shuffleOrder(files: string[]): string[] {
+  const out = [...files];
+  for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+  return out;
+}
+
 function toSetTrack(s: Song): SetTrack { return { ...s, slot: 0, targetEnergy: s.energy, harmonicWarning: false }; }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SortKey = "title" | "artist" | "bpm" | "key" | "energy" | "duration" | "year" | "dateAdded" | "genres" | "comment";
-type OptionalCol = "duration" | "year" | "comment" | "dateAdded" | "vibeTags" | "moodTags" | "vocalType";
+type SortKey = "order" | "title" | "artist" | "bpm" | "key" | "energy" | "duration" | "year" | "dateAdded" | "genres" | "comment";
+type OptionalCol = "duration" | "year" | "comment" | "dateAdded" | "vibeTags" | "moodTags" | "vocalType" | "playlists";
 
 const OPTIONAL_COLS: { key: OptionalCol; label: string; ai?: boolean }[] = [
   { key: "duration",  label: "Duration" },
@@ -78,6 +84,7 @@ const OPTIONAL_COLS: { key: OptionalCol; label: string; ai?: boolean }[] = [
   { key: "vibeTags",  label: "Vibe Tags",  ai: true },
   { key: "moodTags",  label: "Mood Tags",  ai: true },
   { key: "vocalType", label: "Vocal Type", ai: true },
+  { key: "playlists", label: "Playlists" },
 ];
 
 const LS_KEY = "djfriend:libraryColumns";
@@ -103,6 +110,43 @@ interface Props {
   onReanalyzed?: (file: string, update: { bpm: number; key: string; camelot: string; energy: number }) => void;
   onRemoveTracks?: (files: string[]) => void;
   onSendToGenerator?: (files: string[]) => void;
+  /** The view picked in the sidebar. Changing it resets sort and selection. */
+  viewKey?: string;
+  viewTitle?: string;
+  /** Tracks of the current view, in view order; defaults to the whole library. */
+  viewSongs?: Song[];
+  /** The view has a meaningful order (playlist, set, imported playlist) — shows the # column. */
+  ordered?: boolean;
+  /** Tracks in the view that are no longer in the library. */
+  missingCount?: number;
+  /** Set for editable playlists: move `files` before `beforeFile` (null = end). */
+  onReorder?: (files: string[], beforeFile: string | null) => void;
+  onRemoveFromView?: (files: string[]) => void;
+  playlistLibrary?: PlaylistLibrary;
+  /** The playlist tracks were last added to — offered as "Add to Last Playlist". */
+  lastPlaylist?: { id: string; name: string };
+  onAddToPlaylist?: (playlistId: string, files: string[]) => void;
+  onNewPlaylistFromSelection?: (files: string[]) => void;
+  /** Other playlists (e.g. Apple Music imports) containing a track, for "Show in Playlist". */
+  containingSources?: (song: Song) => ContainingSource[];
+  onShowIn?: (view: LibraryView, file: string) => void;
+  /** Names of the DJFriend playlists a track is in (for the Playlists column). */
+  playlistNamesFor?: (file: string) => string[];
+  onSelectionChange?: (files: string[]) => void;
+  /** Editable playlists: make the current sorted order the playlist's order. */
+  onSaveOrder?: (files: string[]) => void;
+  /** Shown as "Generate Set" in the view header (playlist / imported playlist views). */
+  onGenerateSet?: () => void;
+  /** Shown as "Edit Rules" in the view header (smart playlists). */
+  onEditRules?: () => void;
+  /** App-wide player: play these tracks starting at `start` (double-click / Play). */
+  onPlay?: (files: string[], start: number) => void;
+  onPlayNext?: (files: string[]) => void;
+  onPlayLater?: (files: string[]) => void;
+  /** Track currently loaded in the player (highlighted). */
+  nowPlayingFile?: string | null;
+  /** Select and scroll to this track (nonce changes each time it's requested). */
+  reveal?: { file: string; nonce: number };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -170,18 +214,71 @@ function SortHeader({ col, label, sortKey, sortAsc, onSort }: { col: SortKey; la
 
 // ─── Context menu ─────────────────────────────────────────────────────────────
 
-function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSendToGenerator, onDelete, onExportM3U, onClose }: {
+const menuItemClass = "w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded text-[#a6b5c8] hover:bg-[#2c2c42] hover:text-[#e2e8f0]";
+
+/** Menu item that opens a flyout to the side (hover, click or →). */
+function Submenu({ label, openLeft, children }: { label: string; openLeft: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button type="button" role="menuitem" aria-haspopup="menu" aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => { if (e.key === "ArrowRight" || e.key === "Enter") setOpen(true); if (e.key === "ArrowLeft") setOpen(false); }}
+        className={`${menuItemClass} flex items-center justify-between gap-4 ${open ? "bg-[#2c2c42] text-[#e2e8f0]" : ""}`}>
+        <span className="truncate">{label}</span><span aria-hidden className="text-[#64748b]">›</span>
+      </button>
+      {open && (
+        <div role="menu" aria-label={label}
+          className={`absolute -top-1 ${openLeft ? "right-full" : "left-full"} z-[101] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[220px] max-w-[320px] max-h-[60vh] overflow-y-auto`}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TreeEntries({ entries, onPick }: { entries: PlaylistMenuEntry[]; onPick: (id: string) => void }) {
+  return (
+    <>
+      {entries.map(e => e.kind === "folder" ? (
+        <div key={`f-${e.id}`} className="px-3 py-1 text-xs text-[#8394a8] truncate select-none" style={{ paddingLeft: 12 + e.depth * 14 }}>
+          <span aria-hidden>📁 </span>{e.name}
+        </div>
+      ) : (
+        <button key={`p-${e.id}`} type="button" role="menuitem" onClick={() => onPick(e.id)}
+          className={`${menuItemClass} truncate`} style={{ paddingLeft: 12 + e.depth * 14 }}>
+          <span aria-hidden className="text-[#7c3aed]">♫ </span>{e.name}
+        </button>
+      ))}
+    </>
+  );
+}
+
+function RowContextMenu({ menu, selection, onGetInfo, onPlay, onPlayNext, onPlayLater, onReanalyze, onSendToGenerator, onDelete, onExportM3U, onClose, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylist, onRemoveFromView, containingSources, onShowIn }: {
   menu: ContextMenu;
   selection: Set<string>;
   onGetInfo: (s: Song) => void;
   onPlay: (s: Song) => void;
+  onPlayNext?: (files: string[]) => void;
+  onPlayLater?: (files: string[]) => void;
   onReanalyze: (s: Song) => void;
   onSendToGenerator?: (files: string[]) => void;
   onDelete: (s: Song) => void;
   onExportM3U: (s: Song) => void;
   onClose: () => void;
+  playlistLibrary?: PlaylistLibrary;
+  lastPlaylist?: { id: string; name: string };
+  onAddToPlaylist?: (playlistId: string, files: string[]) => void;
+  onNewPlaylist?: (files: string[]) => void;
+  onRemoveFromView?: (files: string[]) => void;
+  containingSources?: (song: Song) => ContainingSource[];
+  onShowIn?: (view: LibraryView, file: string) => void;
 }) {
+  // Actions apply to the whole selection when the clicked row is part of it
+  const targets = selection.has(menu.song.file) && selection.size > 1 ? [...selection] : [menu.song.file];
+  const n = targets.length > 1 ? ` ${targets.length} tracks` : "";
   const ref = useRef<HTMLDivElement>(null);
+  const openLeft = menu.x > window.innerWidth - 440;
 
   useEffect(() => {
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
@@ -192,14 +289,59 @@ function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSen
   }, [onClose]);
 
   const item = (label: string, onClick: () => void, danger = false) => (
-    <button type="button" className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded ${danger ? "text-[#ef4444]/80 hover:bg-[#ef4444]/10 hover:text-[#ef4444]" : "text-[#a6b5c8] hover:bg-[#2c2c42] hover:text-[#e2e8f0]"}`} onClick={() => { onClick(); onClose(); }}>{label}</button>
+    <button type="button" role="menuitem" className={danger ? "w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded text-[#ef4444]/80 hover:bg-[#ef4444]/10 hover:text-[#ef4444]" : menuItemClass} onClick={() => { onClick(); onClose(); }}>{label}</button>
   );
   const sep = () => <div className="my-1 border-t border-[#2c2c42]" />;
 
+  // Smart playlists get their tracks from rules, so they can't be added to
+  const addEntries = useMemo(() => (playlistLibrary ? flattenPlaylistTree(playlistLibrary, p => !p.smart) : []), [playlistLibrary]);
+  const inEntries = useMemo(
+    () => (playlistLibrary ? flattenPlaylistTree(playlistLibrary, p => p.tracks.includes(menu.song.file)) : []),
+    [playlistLibrary, menu.song.file],
+  );
+  const others = useMemo(() => containingSources?.(menu.song) ?? [], [containingSources, menu.song]);
+  const otherGroups = [...new Set(others.map(o => o.group))];
+  const pick = (fn: () => void) => () => { fn(); onClose(); };
+
   return (
-    <div ref={ref} className="fixed z-[100] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[180px]" style={{ top: menu.y, left: menu.x }}>
+    <div ref={ref} role="menu" className="fixed z-[100] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[200px]" style={{ top: menu.y, left: menu.x }}>
+      {onAddToPlaylist && lastPlaylist && item(`Add${n} to Last Playlist, ${lastPlaylist.name}`, () => onAddToPlaylist(lastPlaylist.id, targets))}
+      {(onAddToPlaylist || onNewPlaylist) && (
+        <Submenu label={`Add${n} to Playlist`} openLeft={openLeft}>
+          {onNewPlaylist && (
+            <button type="button" role="menuitem" className={menuItemClass} onClick={pick(() => onNewPlaylist(targets))}>New Playlist</button>
+          )}
+          {onAddToPlaylist && addEntries.length > 0 && (
+            <>
+              {onNewPlaylist && sep()}
+              <TreeEntries entries={addEntries} onPick={id => { onAddToPlaylist(id, targets); onClose(); }} />
+            </>
+          )}
+        </Submenu>
+      )}
+      {onRemoveFromView && item(`Remove${n} from Playlist`, () => onRemoveFromView(targets))}
+      {(onAddToPlaylist || onNewPlaylist || onRemoveFromView) && sep()}
       {item("Play", () => onPlay(menu.song))}
+      {onPlayNext && item(`Play${n} Next`, () => onPlayNext(targets))}
+      {onPlayLater && item(`Play${n} Later`, () => onPlayLater(targets))}
       {item("Get Info", () => onGetInfo(menu.song))}
+      {onShowIn && (inEntries.length > 0 || others.length > 0) && (
+        <Submenu label="Show in Playlist" openLeft={openLeft}>
+          <TreeEntries entries={inEntries} onPick={id => { onShowIn({ kind: "playlist", id }, menu.song.file); onClose(); }} />
+          {otherGroups.map(group => (
+            <div key={group}>
+              {inEntries.length > 0 && sep()}
+              <div className="px-3 pt-1 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-[#58656e]">{group}</div>
+              {others.filter(o => o.group === group).map(o => (
+                <button key={`${group}-${o.label}`} type="button" role="menuitem" className={`${menuItemClass} truncate`}
+                  onClick={pick(() => onShowIn(o.view, menu.song.file))}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </Submenu>
+      )}
       {sep()}
       {item("Re-analyze Audio", () => onReanalyze(menu.song))}
       {item("Export as M3U", () => onExportM3U(menu.song))}
@@ -214,9 +356,29 @@ function RowContextMenu({ menu, selection, onGetInfo, onPlay, onReanalyze, onSen
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function LibraryTab({ library, isInitializing, onUpdateTrack, onReanalyzed, onRemoveTracks, onSendToGenerator }: Props) {
-  const [sortKey, setSortKey]   = useState<SortKey>("artist");
+export default function LibraryTab({
+  library, isInitializing, onUpdateTrack, onReanalyzed, onRemoveTracks, onSendToGenerator,
+  viewKey = "all", viewTitle, viewSongs, ordered = false, missingCount = 0,
+  onReorder, onRemoveFromView, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylistFromSelection,
+  containingSources, onShowIn, reveal, playlistNamesFor, onSelectionChange, onGenerateSet, onEditRules, onSaveOrder,
+  onPlay, onPlayNext, onPlayLater, nowPlayingFile,
+}: Props) {
+  const songs = viewSongs ?? library;
+  const [sortKey, setSortKey]   = useState<SortKey>(ordered ? "order" : "artist");
   const [sortAsc, setSortAsc]   = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [dropIndex, setDropIndex] = useState<number | null>(null);   // row the dragged tracks will land before
+  const draggingRef = useRef(false);                                  // drag started in this table
+
+  // New view → reset sort and selection (adjusting state during render, per React docs)
+  const [prevViewKey, setPrevViewKey] = useState(viewKey);
+  if (viewKey !== prevViewKey) {
+    setPrevViewKey(viewKey);
+    setSortKey(ordered ? "order" : "artist");
+    setSortAsc(true);
+    setSelected(new Set());
+    setDropIndex(null);
+  }
   const [search, setSearch]     = useState("");
   const [visibleCols, setVisibleCols] = useState<Set<OptionalCol>>(() => {
     try { const s = localStorage.getItem(LS_KEY); return s ? new Set(JSON.parse(s) as OptionalCol[]) : new Set(["duration", "comment"] as OptionalCol[]); }
@@ -225,15 +387,18 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   const [colMenuOpen, setColMenuOpen]   = useState(false);
   const [filtersOpen, setFiltersOpen]   = useState(false);
   const [filters, setFilters]           = useState<ColFilters>(loadFilters);
+  const [handledReveal, setHandledReveal] = useState(reveal?.nonce);
+  if (reveal && reveal.nonce !== handledReveal) {
+    setHandledReveal(reveal.nonce);
+    setSelected(new Set([reveal.file]));
+    setSearch("");
+    setFilters(DEFAULT_FILTERS);
+  }
   const [dupsOpen, setDupsOpen]         = useState(false);
   const [reanalyzing, setReanalyzing]   = useState<Set<string>>(new Set());
   const [deleting, setDeleting]         = useState(false);
   const [dupSelections, setDupSelections] = useState<Record<string, Set<string>>>({});
-  const [selected, setSelected]         = useState<Set<string>>(new Set());
   const [editMode, setEditMode]         = useState(false);
-  const [playlistMode, setPlaylistMode] = useState(false);
-  const [playlistName, setPlaylistName] = useState('My Playlist');
-  const [playlistFormat, setPlaylistFormat] = useState<'M3U' | 'XML'>('M3U');
   const [inlineEdit, setInlineEdit]     = useState<{ file: string; field: 'title' | 'artist' | 'year' | 'comment' } | null>(null);
   const [bulkBpmOpen, setBulkBpmOpen]   = useState(false);
   const [bulkBpmMin, setBulkBpmMin]     = useState('');
@@ -241,7 +406,6 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [infoSong, setInfoSong]         = useState<Song | null>(null);
   const [contextMenu, setContextMenu]   = useState<ContextMenu | null>(null);
-  const [nowPlaying, setNowPlaying]     = useState<Song | null>(null);
   const lastClickedIdx = useRef<number>(-1);
 
   const colMenuRef      = useRef<HTMLDivElement>(null);
@@ -284,6 +448,8 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
     return Object.values(groups).filter(g => g.length > 1);
   }, [library]);
 
+  const orderIndex = useMemo(() => new Map(songs.map((s, i) => [s.file, i])), [songs]);
+
   const rows = useMemo(() => {
     const q = search.toLowerCase();
     const bpmMin = filters.bpmMin !== "" ? parseFloat(filters.bpmMin) : null;
@@ -291,7 +457,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
     const eMin = filters.energyMin / 100;
     const eMax = filters.energyMax / 100;
     const gq = filters.genre.toLowerCase();
-    const filtered = library.filter(s => {
+    const filtered = songs.filter(s => {
       if (q && !s.title.toLowerCase().includes(q) && !s.artist.toLowerCase().includes(q)) return false;
       if (bpmMin !== null && s.bpm < bpmMin) return false;
       if (bpmMax !== null && s.bpm > bpmMax) return false;
@@ -304,6 +470,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
     return [...filtered].sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
+        case "order":     cmp = (orderIndex.get(a.file) ?? 0) - (orderIndex.get(b.file) ?? 0); break;
         case "title":     cmp = a.title.localeCompare(b.title); break;
         case "artist":    cmp = a.artist.localeCompare(b.artist); break;
         case "bpm":       cmp = a.bpm - b.bpm; break;
@@ -317,7 +484,10 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
       }
       return sortAsc ? cmp : -cmp;
     });
-  }, [library, search, filters, sortKey, sortAsc]);
+  }, [songs, orderIndex, search, filters, sortKey, sortAsc]);
+
+  // Reordering only makes sense when the table shows the playlist exactly in its own order
+  const canReorder = !!onReorder && sortKey === "order" && sortAsc && !search && !hasActiveFilters(filters);
 
   const firstMissingIdx = useMemo(() => rows.findIndex(s => s.bpm === 0 || !s.key || s.key === "Unknown" || s.genres.length === 0), [rows]);
   const handleSort = (key: SortKey) => { if (sortKey === key) setSortAsc(a => !a); else { setSortKey(key); setSortAsc(true); } };
@@ -332,7 +502,6 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
 
   // ── Row selection (no checkboxes — macOS style) ────────────────────────────
   const handleRowClick = useCallback((e: React.MouseEvent, song: Song, idx: number) => {
-    if (!editMode && !playlistMode) return;
     if (e.metaKey || e.ctrlKey) {
       // Toggle individual
       setSelected(prev => { const n = new Set(prev); if (n.has(song.file)) { n.delete(song.file); } else { n.add(song.file); } return n; });
@@ -347,7 +516,65 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
       setSelected(new Set([song.file]));
       lastClickedIdx.current = idx;
     }
-  }, [rows, editMode, playlistMode]);
+  }, [rows]);
+
+  // ── Drag: rows → sidebar playlists, and reordering inside a playlist ─────
+  const handleRowDragStart = (e: React.DragEvent, song: Song) => {
+    const files = selected.has(song.file) ? rows.filter(r => selected.has(r.file)).map(r => r.file) : [song.file];
+    if (!selected.has(song.file)) setSelected(new Set([song.file]));
+    e.dataTransfer.setData(DRAG_TRACKS, JSON.stringify(files));
+    e.dataTransfer.setData("text/plain", files.length > 1 ? `${files.length} tracks` : `${song.artist} – ${song.title}`);
+    e.dataTransfer.effectAllowed = "copyMove";
+    draggingRef.current = true;
+  };
+  const handleRowDragOver = (e: React.DragEvent, idx: number) => {
+    if (!canReorder || !draggingRef.current || !e.dataTransfer.types.includes(DRAG_TRACKS)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const target = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
+    if (target !== dropIndex) setDropIndex(target);
+  };
+  const handleRowDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData(DRAG_TRACKS);
+    const at = dropIndex;
+    setDropIndex(null);
+    if (!raw || at == null || !onReorder) return;
+    try {
+      const files = JSON.parse(raw) as string[];
+      onReorder(files, rows[at]?.file ?? null);
+    } catch { /* bad payload */ }
+  };
+  const handleDragEnd = () => { draggingRef.current = false; setDropIndex(null); };
+
+  // ── Keyboard: ⌘A select all, Delete removes from the playlist, Esc clears ──
+  const handleTableKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.target as HTMLElement).tagName === "INPUT") return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      setSelected(new Set(rows.map(r => r.file)));
+    } else if ((e.key === "Delete" || e.key === "Backspace") && onRemoveFromView && selected.size > 0) {
+      e.preventDefault();
+      onRemoveFromView([...selected]);
+      setSelected(new Set());
+    } else if (e.key === "Escape") {
+      setSelected(new Set());
+    }
+  };
+
+  useEffect(() => { tableScrollRef.current?.scrollTo({ top: 0 }); }, [viewKey]);
+  useEffect(() => { onSelectionChange?.([...selected]); }, [selected, onSelectionChange]);
+
+  // Scroll a revealed track into view (once per reveal request)
+  const scrolledReveal = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!reveal || scrolledReveal.current === reveal.nonce) return;
+    const idx = rows.findIndex(r => r.file === reveal.file);
+    if (idx < 0) return;
+    scrolledReveal.current = reveal.nonce;
+    tableScrollRef.current?.scrollTo({ top: Math.max(0, idx * ROW_H - tableViewH / 2), behavior: "smooth" });
+  }, [reveal, rows, tableViewH]);
 
   const handleSave = useCallback(async (file: string, patch: { artist?: string; title?: string; genres?: string[]; year?: number; comment?: string }) => {
     await patchTrackMeta(file, patch);
@@ -392,7 +619,8 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
     setContextMenu({ x, y, song });
   };
 
-  const nowPlayingIdx = nowPlaying ? rows.findIndex(s => s.file === nowPlaying.file) : -1;
+  // Play from this row through the rest of the view (vinyl/streaming-only tracks are skipped by the player)
+  const playFrom = (song: Song) => onPlay?.(rows.map(r => r.file), rows.findIndex(r => r.file === song.file));
   const sh = { sortKey, sortAsc, onSort: handleSort };
   const activeFilters = hasActiveFilters(filters);
 
@@ -426,17 +654,11 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
     <div className="h-full flex flex-col overflow-hidden">
       {/* ── Fixed top section ─────────────────────────────────────────────── */}
       <div className="flex-shrink-0 px-4 pt-3">
-        <LibraryStatsBar songs={library} onScrollToMissing={() => {
+        <LibraryStatsBar songs={songs} onScrollToMissing={() => {
           if (firstMissingIdx >= 0) tableScrollRef.current?.scrollTo({ top: Math.max(0, firstMissingIdx * ROW_H - tableViewH / 2), behavior: 'smooth' });
         }} />
       </div>
 
-      {/* Player */}
-      <LibraryPlayer
-        song={nowPlaying}
-        onPrev={nowPlayingIdx > 0 ? () => setNowPlaying(rows[nowPlayingIdx - 1]) : undefined}
-        onNext={nowPlayingIdx >= 0 && nowPlayingIdx < rows.length - 1 ? () => setNowPlaying(rows[nowPlayingIdx + 1]) : undefined}
-      />
 
       {/* Duplicates banner */}
       {dupGroups.length > 0 && (
@@ -476,58 +698,26 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
         </div>
       )}
 
-      {/* Playlist creation panel */}
-      {playlistMode && (
-        <div className="flex-shrink-0 mx-4 mt-2 flex flex-col gap-3 px-4 py-3 rounded-xl bg-[#1c1c2e] border border-[#7c3aed]/50">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-[#a78bfa]">Create Playlist</span>
-            <span className="text-[10px] text-[#8292a4]">— click rows to select tracks</span>
-            <span className="ml-auto text-[10px] text-[#a78bfa] font-medium">{selected.size} track{selected.size !== 1 ? 's' : ''} selected</span>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <input
-              type="text"
-              value={playlistName}
-              onChange={e => setPlaylistName(e.target.value)}
-              placeholder="Playlist name"
-              className="flex-1 min-w-[160px] px-2.5 py-1.5 rounded-md bg-[#20202e] border border-[#363650] text-xs text-[#e2e8f0] placeholder-[#58656e] focus:outline-none focus:border-[#7c3aed]/60"
-            />
-            <div className="flex rounded-md border border-[#363650] overflow-hidden flex-shrink-0">
-              {(['M3U', 'XML'] as const).map(fmt => (
-                <button key={fmt} type="button" onClick={() => setPlaylistFormat(fmt)}
-                  className={`px-3 py-1.5 text-xs transition-colors cursor-pointer ${playlistFormat === fmt ? 'bg-[#7c3aed] text-white' : 'bg-[#20202e] text-[#8292a4] hover:text-[#a6b5c8]'}`}>
-                  {fmt === 'XML' ? 'Rekordbox XML' : 'M3U'}
-                </button>
-              ))}
-            </div>
-            <button type="button" disabled={!playlistName.trim() || selected.size === 0}
-              onClick={() => {
-                const name = playlistName.trim() || 'My Playlist';
-                const songs = rows.filter(s => selected.has(s.file));
-                if (playlistFormat === 'M3U') downloadM3U(songs.map(toSetTrack), name);
-                else downloadRekordboxXml(songs, name);
-                setPlaylistMode(false); setEditMode(false); setSelected(new Set());
-              }}
-              className="px-3 py-1.5 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
-              Create
-            </button>
-            <button type="button"
-              onClick={() => { setPlaylistMode(false); setEditMode(false); setSelected(new Set()); }}
-              className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer flex-shrink-0">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Selection toolbar */}
-      {!playlistMode && selected.size > 0 && (
+      {selected.size > 0 && (editMode || selected.size > 1) && (
         <div className="flex-shrink-0 mx-4 mt-2 flex flex-col gap-2 px-3 py-2 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/30">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-semibold text-[#a78bfa]">{selected.size} track{selected.size > 1 ? "s" : ""} selected</span>
             {onSendToGenerator && (
               <button type="button" onClick={() => { onSendToGenerator([...selected]); setSelected(new Set()); }} className="text-xs px-2.5 py-1 rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] transition-colors cursor-pointer">
                 Use in Set Generator
+              </button>
+            )}
+            {onNewPlaylistFromSelection && (
+              <button type="button" onClick={() => { onNewPlaylistFromSelection(rows.filter(r => selected.has(r.file)).map(r => r.file)); setSelected(new Set()); }}
+                className="text-xs px-2.5 py-1 rounded-md border border-[#7c3aed]/50 text-[#a78bfa] hover:bg-[#7c3aed]/10 transition-colors cursor-pointer">
+                New Playlist
+              </button>
+            )}
+            {onRemoveFromView && (
+              <button type="button" onClick={() => { onRemoveFromView([...selected]); setSelected(new Set()); }}
+                className="text-xs px-2.5 py-1 rounded-md border border-[#2c2c42] text-[#8394a8] hover:text-[#ef4444] hover:border-[#ef4444]/40 transition-colors cursor-pointer">
+                Remove from Playlist
               </button>
             )}
             <button
@@ -654,11 +844,61 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
         </div>
       )}
 
+      {viewTitle && (
+        <div className="flex-shrink-0 flex items-baseline gap-3 px-4 pt-3">
+          <h2 className="text-lg font-semibold text-[#e2e8f0] truncate">{viewTitle}</h2>
+          <span className="text-xs text-[#64748b] whitespace-nowrap">
+            {songs.length} track{songs.length === 1 ? "" : "s"}
+            {songs.length > 0 && ` · ${fmt(songs.reduce((t, s) => t + (s.duration ?? 0), 0))}`}
+          </span>
+          {missingCount > 0 && (
+            <span className="text-[10px] text-[#f59e0b]" title="These tracks are in the playlist but no longer in your library">
+              {missingCount} missing
+            </span>
+          )}
+          <span className="ml-auto flex items-center gap-2">
+            {onSaveOrder && sortKey !== "order" && !search && !activeFilters && songs.length > 1 && (
+              <button type="button" onClick={() => { onSaveOrder(rows.map(r => r.file)); setSortKey("order"); setSortAsc(true); }}
+                title="Make this sorted order the playlist's order"
+                className="px-2.5 py-1 text-xs rounded-md border border-[#7c3aed]/50 text-[#a78bfa] hover:bg-[#7c3aed]/10 cursor-pointer">
+                Save this order
+              </button>
+            )}
+            {onReorder && !canReorder && songs.length > 1 && (
+              <button type="button" onClick={() => { setSortKey("order"); setSortAsc(true); setSearch(""); setFilters(DEFAULT_FILTERS); }}
+                className="text-[10px] text-[#64748b] hover:text-[#a78bfa] cursor-pointer">
+                Sort by # to reorder
+              </button>
+            )}
+            {onEditRules && (
+              <button type="button" onClick={onEditRules}
+                className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:text-[#e2e8f0] hover:border-[#7c3aed] cursor-pointer">
+                ⚙ Edit Rules
+              </button>
+            )}
+            {onPlay && songs.length > 0 && (
+              <>
+                <button type="button" onClick={() => onPlay(rows.map(r => r.file), 0)} aria-label={`Play ${viewTitle ?? "all"}`}
+                  className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#e2e8f0] hover:border-[#7c3aed] cursor-pointer">▶ Play</button>
+                <button type="button" onClick={() => onPlay(shuffleOrder(rows.map(r => r.file)), 0)} aria-label={`Shuffle ${viewTitle ?? "all"}`}
+                  className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:border-[#7c3aed] cursor-pointer">⤮ Shuffle</button>
+              </>
+            )}
+            {onGenerateSet && songs.length > 0 && (
+              <button type="button" onClick={onGenerateSet}
+                className="px-2.5 py-1 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] cursor-pointer">
+                Generate Set
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+
       {/* Search + filter + columns */}
       <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2">
         <input type="text" placeholder="Search title or artist…" value={search} onChange={e => setSearch(e.target.value)}
           className="flex-1 bg-[#20202e] border border-[#2c2c42] rounded-lg px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#3e4f65] focus:outline-none focus:border-[#7c3aed] transition-colors" />
-        {(search || activeFilters) && <span className="text-[10px] text-[#64748b] whitespace-nowrap">{rows.length} / {library.length}</span>}
+        {(search || activeFilters) && <span className="text-[10px] text-[#64748b] whitespace-nowrap">{rows.length} / {songs.length}</span>}
         <button type="button" onClick={() => { setEditMode(o => { if (o) setSelected(new Set()); return !o; }); }}
           className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${editMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#8292a4] hover:text-[#a6b5c8]"}`}>
           Edit
@@ -667,11 +907,14 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
           className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${activeFilters ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#8292a4] hover:text-[#a6b5c8]"}`}>
           Filter{activeFilters ? " ●" : ""}
         </button>
-        <button type="button"
-          onClick={() => { setPlaylistMode(true); setEditMode(true); setSelected(new Set()); setPlaylistName('My Playlist'); setPlaylistFormat('M3U'); }}
-          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${playlistMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#8292a4] hover:text-[#a6b5c8]"}`}>
-          Create Playlist
-        </button>
+        {onNewPlaylistFromSelection && (
+          <button type="button" disabled={selected.size === 0}
+            onClick={() => { onNewPlaylistFromSelection(rows.filter(r => selected.has(r.file)).map(r => r.file)); setSelected(new Set()); }}
+            title={selected.size === 0 ? "Select tracks first (click, ⌘-click or ⇧-click rows)" : `New playlist from ${selected.size} selected`}
+            className="px-3 py-1.5 text-xs border border-[#2c2c42] rounded-lg text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
+            New Playlist
+          </button>
+        )}
         <div className="relative flex-shrink-0" ref={colMenuRef}>
           <button type="button" onClick={() => setColMenuOpen(o => !o)} className="px-3 py-1.5 text-xs border border-[#2c2c42] rounded-lg text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer">Columns</button>
           {colMenuOpen && (
@@ -732,10 +975,13 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
       )}
 
       {/* ── Scrollable table ───────────────────────────────────────────────── */}
-      <div ref={tableScrollRef} className="flex-1 min-h-0 overflow-y-auto mt-2">
+      <div ref={tableScrollRef} tabIndex={0} onKeyDown={handleTableKeyDown} aria-label={viewTitle ? `${viewTitle} tracks` : "Tracks"}
+        className="flex-1 min-h-0 overflow-y-auto mt-2 focus:outline-none"
+        onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropIndex(null); }}>
         <table className="w-full border-collapse">
           <thead className="bg-[#16161e] sticky top-0 z-10">
             <tr className="border-b border-[#2c2c42]">
+              {ordered && <SortHeader col="order" label="#" {...sh} />}
               <th className="px-2 py-2 w-10" />
               <SortHeader col="title"     label="Title"    {...sh} />
               <SortHeader col="artist"    label="Artist"   {...sh} />
@@ -750,6 +996,7 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
               {visibleCols.has("vibeTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Vibe <AiBadge /></span></th>}
               {visibleCols.has("moodTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Mood <AiBadge /></span></th>}
               {visibleCols.has("vocalType") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Vocal <AiBadge /></span></th>}
+              {visibleCols.has("playlists") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Playlists</th>}
               <th className="px-3 py-2 w-8" />
             </tr>
           </thead>
@@ -762,17 +1009,31 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
               const isFirst     = idx === firstMissingIdx;
               const analyzing   = reanalyzing.has(song.file);
               const isSelected  = selected.has(song.file);
-              const isPlaying   = nowPlaying?.file === song.file;
+              const isPlaying   = nowPlayingFile === song.file;
               const cc = camelotColor(song.camelot);
               return (
                 <tr
                   key={song.file}
                   ref={isFirst ? missingRowRef : undefined}
                   className={`group transition-colors cursor-default select-none ${isSelected ? "bg-[#7c3aed]/10" : isPlaying ? "bg-[#7c3aed]/5" : "hover:bg-[#1c1c2e]"}`}
+                  style={dropIndex === idx ? { boxShadow: "inset 0 2px 0 #7c3aed" } : dropIndex === idx + 1 && idx === rows.length - 1 ? { boxShadow: "inset 0 -2px 0 #7c3aed" } : undefined}
+                  draggable={!inlineEdit}
+                  onDragStart={e => handleRowDragStart(e, song)}
+                  onDragOver={e => handleRowDragOver(e, idx)}
+                  onDrop={handleRowDrop}
+                  onDragEnd={handleDragEnd}
+                  aria-selected={isSelected}
                   onClick={e => { setInlineEdit(null); handleRowClick(e, song, idx); }}
-                  onDoubleClick={() => { setNowPlaying(song); }}
+                  onDoubleClick={() => playFrom(song)}
                   onContextMenu={e => handleRowContextMenu(e, song)}
                 >
+                  {ordered && (
+                    <td className="px-2 py-1.5 w-10 text-right">
+                      <span className={`text-xs tabular-nums ${canReorder ? "text-[#64748b] cursor-grab" : "text-[#424f63]"}`} title={canReorder ? "Drag to reorder" : undefined}>
+                        {(orderIndex.get(song.file) ?? 0) + 1}
+                      </span>
+                    </td>
+                  )}
                   {/* Play indicator / album art */}
                   <td className="px-2 py-1.5 relative">
                     <AlbumArt filePath={song.filePath} />
@@ -845,6 +1106,16 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
                   {visibleCols.has("vibeTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#8394a8] block truncate">{song.semanticTags?.vibeTags.join(", ") || "—"}</span></td>}
                   {visibleCols.has("moodTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#8394a8] block truncate">{song.semanticTags?.moodTags.join(", ") || "—"}</span></td>}
                   {visibleCols.has("vocalType") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-[10px] text-[#8394a8]">{song.semanticTags?.vocalType ?? "—"}</span></td>}
+                  {visibleCols.has("playlists") && (() => {
+                    const names = playlistNamesFor?.(song.file) ?? [];
+                    return (
+                      <td className="px-3 py-1.5 whitespace-nowrap">
+                        <span className={`text-xs tabular-nums ${names.length ? "text-[#a78bfa]" : "text-[#424f63]"}`} title={names.length ? names.join("\n") : "Not in any playlist"}>
+                          {names.length || "—"}
+                        </span>
+                      </td>
+                    );
+                  })()}
                   {/* Re-analyze */}
                   <td className="px-2 py-1.5">
                     <button
@@ -864,6 +1135,13 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
               );
             })}
             {vBotPad > 0 && <tr style={{ height: vBotPad }}><td colSpan={99} /></tr>}
+            {rows.length === 0 && (
+              <tr><td colSpan={99} className="px-4 py-12 text-center text-sm text-[#64748b]">
+                {songs.length === 0
+                  ? (onReorder ? "This playlist is empty — drag tracks onto it in the sidebar, or right-click tracks → Add to playlist." : "No tracks here.")
+                  : "No tracks match your search or filters."}
+              </td></tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -879,12 +1157,21 @@ export default function LibraryTab({ library, isInitializing, onUpdateTrack, onR
           menu={contextMenu}
           selection={selected}
           onGetInfo={s => setInfoSong(s)}
-          onPlay={s => setNowPlaying(s)}
+          onPlay={playFrom}
+          onPlayNext={onPlayNext}
+          onPlayLater={onPlayLater}
           onReanalyze={handleReanalyze}
           onSendToGenerator={onSendToGenerator}
           onDelete={handleDeleteSingle}
           onExportM3U={handleExportM3U}
           onClose={() => setContextMenu(null)}
+          playlistLibrary={playlistLibrary}
+          lastPlaylist={lastPlaylist}
+          containingSources={containingSources}
+          onShowIn={onShowIn}
+          onAddToPlaylist={onAddToPlaylist}
+          onNewPlaylist={onNewPlaylistFromSelection}
+          onRemoveFromView={onRemoveFromView ? (files => { onRemoveFromView(files); setSelected(new Set()); }) : undefined}
         />
       )}
     </div>

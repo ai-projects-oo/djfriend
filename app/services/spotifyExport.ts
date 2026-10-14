@@ -1,5 +1,6 @@
 import type { SetTrack } from '../types';
 import { apiFetch } from './apiFetch';
+import { spotifyRateLimited } from './spotifyRateLimit';
 
 const STORAGE_PREFIX = 'djfriend-spotify';
 const TOKEN_KEY = `${STORAGE_PREFIX}-token`;
@@ -127,7 +128,7 @@ export async function exchangeCodeForToken(code: string): Promise<{ access_token
 }
 
 async function spotifyFetch<T>(url: string, token: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, {
+  const res = await spotifyRateLimited(url, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -294,12 +295,14 @@ async function searchTrack(artist: string, title: string, token: string): Promis
   return null;
 }
 
+// Every playlist DJFriend creates on Spotify is private. Spotify doesn't always honour
+// `public: false` on create, so the visibility is set again right after.
 async function createPlaylist(
   userId: string,
   name: string,
   token: string,
 ): Promise<{ id: string; external_urls: { spotify: string } }> {
-  return spotifyFetch(
+  const playlist = await spotifyFetch<{ id: string; public?: boolean | null; external_urls: { spotify: string } }>(
     `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists`,
     token,
     {
@@ -307,6 +310,38 @@ async function createPlaylist(
       body: JSON.stringify({ name, public: false, description: 'Created by DJFriend' }),
     },
   );
+  try {
+    await makePlaylistPrivate(playlist.id, token);
+  } catch (err) {
+    // Don't leave a public (or duplicate, on retry) playlist behind — remove it from the account
+    await spotifyRateLimited(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlist.id)}/followers`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+    throw err;
+  }
+  return playlist;
+}
+
+async function makePlaylistPrivate(playlistId: string, token: string): Promise<void> {
+  // Change-details returns an empty body, so this can't go through spotifyFetch (which parses JSON)
+  const res = await spotifyRateLimited(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ public: false }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(`Spotify: couldn't make the playlist private — ${err.error?.message ?? res.statusText}`);
+  }
+  // Read it back: never report success for a playlist Spotify still lists as public
+  const check = await spotifyFetch<{ public?: boolean | null }>(
+    `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}?fields=public`,
+    token,
+  );
+  if (check.public === true) {
+    throw new Error('Spotify created the playlist but kept it public. Open it in Spotify and choose “Make private”.');
+  }
 }
 
 async function addTracksToPlaylist(playlistId: string, uris: string[], token: string): Promise<void> {

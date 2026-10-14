@@ -53,6 +53,8 @@ function reconcile(filePath: string, entry: Entry): void {
   const diskMtime = mtimeOf(filePath)
   if (diskMtime === null || diskMtime === entry.mtimeMs) return
   if (entry.dirtyKeys === 'all') {
+    // A full rewrite of a file we never read isn't a conflict — we simply replace it
+    if (entry.mtimeMs === null) return
     console.warn(`[results-store] ${filePath} changed on disk while a full rewrite was pending — keeping in-memory version`)
     return
   }

@@ -127,6 +127,7 @@ interface Props {
   onExport?: () => void;
   onSendToRekordbox?: () => Promise<{ isFirstTime: boolean } | null>;
   onExportSpotify?: () => void;
+  onSaveAsPlaylist?: () => void;
   onBulkReanalyze?: (indices: number[], bpmHint?: { min: number; max: number }) => Promise<void>;
   onBulkPatchBpm?: (indices: number[], multiplier: 2 | 0.5) => Promise<void>;
   isElectron?: boolean;
@@ -149,7 +150,7 @@ function totalDurationMinutes(tracks: SetTrack[]): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onSendToRekordbox, onExportSpotify, isElectron = false, isMacOS = false, hasAttemptedGenerate = false, hasAi = false }: Props) {
+export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheckThreshold = 0.12, showRekordboxExport, tipConfig, previewFile, previewPlaying, onPreview, onSwapTrack, onToggleLock, onSetAllLocked, onRemoveTrack, onReorderTrack, onUpdateTrack, onExport, onSendToRekordbox, onExportSpotify, onSaveAsPlaylist, isElectron = false, isMacOS = false, hasAttemptedGenerate = false, hasAi = false }: Props) {
   const [exportOpen, setExportOpen] = useState(false);
   const [rekordboxStatus, setRekordboxStatus] = useState<'idle' | 'sending' | 'done' | 'first-time'>('idle');
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -611,6 +612,15 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                   <CopyIcon size={14} className="shrink-0 opacity-60" />
                   {setStartTime ? 'Copy clock times' : 'Copy timestamps'}
                 </button>
+                {onSaveAsPlaylist && (
+                  <button
+                    onClick={() => { onSaveAsPlaylist(); setExportOpen(false); }}
+                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  >
+                    <span className="w-3.5 shrink-0 text-center text-[#7c3aed]" aria-hidden>♫</span>
+                    Save as Playlist
+                  </button>
+                )}
                 <button
                   onClick={() => { downloadM3U(tracks); onExport?.(); setExportOpen(false); }}
                   className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"

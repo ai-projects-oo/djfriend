@@ -23,6 +23,14 @@ export interface AudioProfile {
   vocalLikelihood?: number  // 0–1 voice probability from multi-feature spectral analysis
 }
 
+/** Vocal type implied by genre alone — genre rules take priority over audio features. */
+export function genreVocalType(genres: string[] | undefined): 'vocal' | 'instrumental' | undefined {
+  const genreStr = (genres ?? []).join(' ').toLowerCase()
+  if (/\b(vocal|r&b|soul|pop|indie|rock|reggae|funk|disco|jazz|gospel|country|blues|hip.?hop|rap|singer)\b/.test(genreStr)) return 'vocal'
+  if (/\b(techno|minimal|ambient|drone|instrumental|deep house|progressive house)\b/.test(genreStr)) return 'instrumental'
+  return undefined
+}
+
 export function deriveSemanticTags(p: AudioProfile): SemanticTags {
   const vibeTags: string[] = []
   const moodTags: string[] = []
@@ -77,15 +85,11 @@ export function deriveSemanticTags(p: AudioProfile): SemanticTags {
   if (eb > 132 && isMinor && p.energy > 0.65) venueTags.push('warehouse')
 
   // ── Vocal type ────────────────────────────────────────────────────────────
-  const genreStr = (p.genres ?? []).join(' ').toLowerCase()
-  const hasVocalGenre = /\b(vocal|r&b|soul|pop|indie|rock|reggae|funk|disco|jazz|gospel|country|blues|hip.?hop|rap|singer)\b/.test(genreStr)
-  const hasInstGenre = /\b(techno|minimal|ambient|drone|instrumental|deep house|progressive house)\b/.test(genreStr)
+  const fromGenre = genreVocalType(p.genres)
 
   let vocalType: 'vocal' | 'instrumental' | 'mostly-vocal' = 'instrumental'
-  if (hasVocalGenre) {
-    vocalType = 'vocal'
-  } else if (hasInstGenre) {
-    vocalType = 'instrumental'
+  if (fromGenre) {
+    vocalType = fromGenre
   } else if (p.vocalLikelihood !== undefined) {
     // Multi-feature spectral voice probability: spectral centroid, flatness, flux, mid/bass ratio, ZCR
     if (p.vocalLikelihood >= 0.62) vocalType = 'vocal'

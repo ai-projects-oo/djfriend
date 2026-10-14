@@ -1,4 +1,4 @@
-import { apiFetch } from "../lib/apiFetch";
+import { apiFetch } from "./apiFetch";
 
 export async function patchTrackMeta(
   file: string,

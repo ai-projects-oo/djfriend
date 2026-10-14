@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { Song } from "../types";
 import { parseSongs } from "../lib/genreUtils";
-import { apiFetch } from "../lib/apiFetch";
+import { apiFetch } from "../services/apiFetch";
+import { STATUS_FADE_MS } from "../components/LoaderStatus";
 
 interface UseLibraryOptions {
   onNewAnalysis?: () => void;
@@ -64,6 +65,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
   const [library, setLibrary] = useState<Song[]>([]);
   const [libraryName, setLibraryName] = useState<string>("");
   const [isInitializing, setIsInitializing] = useState(true); // true until the startup fetch resolves
+  const [initStatus, setInitStatus] = useState<{ label: string; detail?: string }>({ label: "Starting up…" });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisQueue, setAnalysisQueueState] = useState<QueueItem[]>([]);
   const [enrichmentStatus, setEnrichmentStatus] = useState<{ completed: number; total: number } | null>(null);
@@ -93,6 +95,27 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     localStorage.setItem("djfriend-apple-playlist-files", JSON.stringify(applePlaylistFiles));
   }, [applePlaylistFiles]);
 
+  // Background patches (backfill, tag re-derive, waveform upgrade) are queued and applied to the
+  // library at most once per PATCH_FLUSH_MS — each setLibrary re-renders the whole app.
+  const PATCH_FLUSH_MS = 1000;
+  const pendingPatchesRef = useRef<Map<string, Partial<Song>>>(new Map());
+  const patchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queueSongPatch = useCallback((key: string, patch: Partial<Song>) => {
+    const pending = pendingPatchesRef.current;
+    pending.set(key, { ...pending.get(key), ...patch });
+    if (patchTimerRef.current) return;
+    patchTimerRef.current = setTimeout(() => {
+      patchTimerRef.current = null;
+      const batch = pendingPatchesRef.current;
+      pendingPatchesRef.current = new Map();
+      setLibrary(prev => prev.map(s => {
+        const p = batch.get(s.filePath ?? s.file);
+        return p ? { ...s, ...p } : s;
+      }));
+    }, PATCH_FLUSH_MS);
+  }, []);
+  useEffect(() => () => { if (patchTimerRef.current) clearTimeout(patchTimerRef.current); }, []);
+
   // After library loads, stream missing comment/year from ID3 tags and merge into state
   const runBackfill = useCallback((loaded: Song[]) => {
     if (loaded.length === 0) return;
@@ -115,22 +138,15 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
             if (!line.trim()) continue;
             try { patches.push(JSON.parse(line) as { filePath: string; comment?: string; year?: number; duration?: number; dateAdded?: number }); } catch { /* skip */ }
           }
-          if (patches.length > 0) {
-            setLibrary(prev => {
-              const map = new Map(patches.map(p => [p.filePath, p]));
-              return prev.map(s => {
-                const p = map.get(s.filePath ?? s.file);
-                if (!p) return s;
-                return { ...s, ...(p.comment ? { comment: p.comment } : {}), ...(p.year != null ? { year: p.year } : {}), ...(p.duration != null ? { duration: p.duration } : {}), ...(p.dateAdded != null ? { dateAdded: p.dateAdded } : {}) };
-              });
-            });
+          for (const p of patches) {
+            queueSongPatch(p.filePath, { ...(p.comment ? { comment: p.comment } : {}), ...(p.year != null ? { year: p.year } : {}), ...(p.duration != null ? { duration: p.duration } : {}), ...(p.dateAdded != null ? { dateAdded: p.dateAdded } : {}) });
           }
           return pump();
         });
         return pump();
       })
       .catch(() => {});
-  }, []);
+  }, [queueSongPatch]);
 
   // Silently re-analyze tracks that have low-resolution waveforms (< 1000 pts = old 400-pt data)
   const runWaveformUpgrade = useCallback((loaded: Song[]) => {
@@ -146,13 +162,13 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
         if (!res.ok) return next();
         const d = await res.json() as { ok?: boolean; waveform?: number[]; frequencyWaveform?: { bass: number[]; mid: number[]; high: number[] }; vocalTimeline?: number[] };
         if (d.ok && (d.waveform || d.frequencyWaveform)) {
-          setLibrary(prev => prev.map(s => s.file === song.file ? { ...s, ...(d.waveform ? { waveform: d.waveform } : {}), ...(d.frequencyWaveform ? { frequencyWaveform: d.frequencyWaveform } : {}), ...(d.vocalTimeline ? { vocalTimeline: d.vocalTimeline } : {}) } : s));
+          queueSongPatch(song.filePath ?? song.file, { ...(d.waveform ? { waveform: d.waveform } : {}), ...(d.frequencyWaveform ? { frequencyWaveform: d.frequencyWaveform } : {}), ...(d.vocalTimeline ? { vocalTimeline: d.vocalTimeline } : {}) });
         }
       } catch { /* non-fatal */ }
       return next();
     };
     void Promise.all(Array.from({ length: Math.min(CONCURRENCY, stale.length) }, next));
-  }, []);
+  }, [queueSongPatch]);
 
   // Re-derive semantic tags using current rule set — streams patches for in-memory update
   const runRederive = useCallback(() => {
@@ -172,64 +188,76 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
             if (!line.trim()) continue;
             try { patches.push(JSON.parse(line) as { filePath: string; semanticTags: Song["semanticTags"] }); } catch { /* skip */ }
           }
-          if (patches.length > 0) {
-            setLibrary(prev => {
-              const map = new Map(patches.map(p => [p.filePath, p.semanticTags]));
-              return prev.map(s => {
-                const tags = map.get(s.filePath ?? s.file);
-                return tags !== undefined ? { ...s, semanticTags: tags } : s;
-              });
-            });
+          for (const p of patches) {
+            if (p.semanticTags !== undefined) queueSongPatch(p.filePath, { semanticTags: p.semanticTags });
           }
           return pump();
         });
         return pump();
       })
       .catch(() => {});
-  }, []);
+  }, [queueSongPatch]);
 
   // Auto-load saved library on mount
   useEffect(() => {
-    apiFetch("/results.json")
-      .then((r) => {
-        if (!r.ok) throw new Error("not found");
-        return r.json() as Promise<unknown>;
-      })
-      .then((data) => {
-        const songs = parseSongs(data);
-        if (songs && songs.length > 0) {
+    const MB = 1024 * 1024;
+    // Let the overlay paint (and finish its fade) before a step that blocks the UI thread
+    const settle = () => new Promise<void>(r => setTimeout(r, STATUS_FADE_MS * 2));
+
+    // Streams a results file, reporting download progress, then parses it
+    const loadResults = async (url: string, label: string): Promise<Song[] | null> => {
+      setInitStatus({ label: `Looking for ${label}…` });
+      const r = await apiFetch(url);
+      if (!r.ok || !r.body) return null;
+      const total = Number(r.headers.get("Content-Length")) || 0;
+      const reader = r.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      let lastMb = -1;
+      setInitStatus({ label: `Loading ${label}` });
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        const mb = Math.floor(received / MB);
+        if (mb !== lastMb) {
+          lastMb = mb;
+          setInitStatus({ label: `Loading ${label}`, detail: total ? `${mb} of ${Math.ceil(total / MB)} MB` : `${mb} MB` });
+        }
+      }
+      setInitStatus({ label: `Reading ${Math.max(1, Math.round(received / MB))} MB of track data…` });
+      await settle();
+      const text = new TextDecoder().decode(await new Blob(chunks as BlobPart[]).arrayBuffer());
+      const data = JSON.parse(text) as unknown;
+      if (!data) return null;
+      const songs = parseSongs(data);
+      if (!songs || songs.length === 0) return null;
+      setInitStatus({ label: `Preparing ${songs.length.toLocaleString()} tracks…` });
+      await settle();
+      return songs;
+    };
+
+    const load = async () => {
+      const sources: Array<[string, string, string]> = [
+        ["/results.json", "saved library", "results.json (auto-loaded)"],
+        ["/api/apple-library", "Apple Music library", "Apple Music library (auto-loaded)"],
+      ];
+      for (const [url, label, name] of sources) {
+        try {
+          const songs = await loadResults(url, label);
+          if (!songs) continue;
           setLibrary(songs);
-          setLibraryName("results.json (auto-loaded)");
+          setLibraryName(name);
           setError(null);
-          setIsInitializing(false);
           runBackfill(songs);
           runRederive();
           runWaveformUpgrade(songs);
           return;
-        }
-        throw new Error("empty");
-      })
-      .catch(() => {
-        apiFetch("/api/apple-library")
-          .then((r) => {
-            if (!r.ok) throw new Error("not found");
-            return r.json() as Promise<unknown>;
-          })
-          .then((data) => {
-            if (!data) return;
-            const songs = parseSongs(data);
-            if (songs && songs.length > 0) {
-              setLibrary(songs);
-              setLibraryName("Apple Music library (auto-loaded)");
-              setError(null);
-              runBackfill(songs);
-              runRederive();
-              runWaveformUpgrade(songs);
-            }
-          })
-          .catch(() => {})
-          .finally(() => setIsInitializing(false));
-      });
+        } catch { /* try next source */ }
+      }
+    };
+    void load().finally(() => setIsInitializing(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openPlaylistPicker = useCallback(async () => {
@@ -331,15 +359,15 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     runAppleMusicInternalRef.current = runAppleMusicInternal;
   }, [runAppleMusicInternal]);
 
-  // Public: enqueue a playlist for analysis
-  const runAppleMusicAnalysis = useCallback((playlistName: string, bpmHint?: { min: number; max: number }) => {
+  // Public: enqueue a playlist for analysis. `keepPickerOpen` is used by the per-row re-sync button.
+  const runAppleMusicAnalysis = useCallback((playlistName: string, bpmHint?: { min: number; max: number }, opts?: { keepPickerOpen?: boolean }) => {
     if (analysisQueueRef.current.some(item => item.playlistName === playlistName)) return;
 
     const newItem: QueueItem = { playlistName, status: 'queued', completed: 0, total: 0, bpmHint };
     analysisQueueRef.current = [...analysisQueueRef.current, newItem];
     setAnalysisQueueState([...analysisQueueRef.current]);
 
-    setPlaylistPicker(null);
+    if (!opts?.keepPickerOpen) setPlaylistPicker(null);
     setError(null);
     onNewAnalysisRef.current?.();
 
@@ -580,6 +608,7 @@ export function useLibrary({ onNewAnalysis }: UseLibraryOptions = {}) {
     setLibrary,
     libraryName,
     isInitializing,
+    initStatus,
     isAnalyzing,
     analysisProgress,
     enrichmentStatus,

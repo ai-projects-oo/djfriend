@@ -1,21 +1,4 @@
-import type { VinylReleaseData, VinylTrackEntry } from '../types';
-
-const KEY = 'djfriend-vinyl-tracks';
-
-export type VinylStore = Record<number, VinylReleaseData>;
-
-export function loadVinylStore(): VinylStore {
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as VinylStore) : {};
-  } catch {
-    return {};
-  }
-}
-
-export function saveVinylStore(store: VinylStore): void {
-  localStorage.setItem(KEY, JSON.stringify(store));
-}
+import type { VinylTrackEntry } from '../types';
 
 /** Auto-suggest the next position given existing tracks */
 export function nextPosition(tracks: VinylTrackEntry[]): string {

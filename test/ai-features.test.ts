@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, test, it, expect } from 'vitest'
 import { generateSet } from '../app/lib/setGenerator'
-import { deriveSemanticTags } from '../src/ai'
+import { deriveSemanticTags, genreVocalType } from '../src/ai'
 import type { AudioProfile } from '../src/ai'
 import type { Song, DJPreferences, CurvePoint } from '../app/types/index'
 
@@ -391,5 +391,30 @@ describe('deriveSemanticTags — output constraints', () => {
     expect(hasDup(tags.moodTags)).toBe(false)
     expect(hasDup(tags.venueTags)).toBe(false)
     expect(hasDup(tags.timeOfNightTags)).toBe(false)
+  })
+})
+
+// ─── genreVocalType — genre rules that override audio features ────────────────
+
+describe('genreVocalType', () => {
+  it('returns vocal for vocal genres', () => {
+    expect(genreVocalType(['Soul'])).toBe('vocal')
+    expect(genreVocalType(['Disco'])).toBe('vocal')
+  })
+  it('returns instrumental for instrumental genres', () => {
+    expect(genreVocalType(['Techno'])).toBe('instrumental')
+    expect(genreVocalType(['Deep House'])).toBe('instrumental')
+  })
+  it('returns undefined when genre does not decide', () => {
+    expect(genreVocalType(['Tech House'])).toBeUndefined()
+    expect(genreVocalType([])).toBeUndefined()
+    expect(genreVocalType(undefined)).toBeUndefined()
+  })
+  it('matches the vocalType deriveSemanticTags picks from genre', () => {
+    const base = { bpm: 124, camelot: '8A', energy: 0.6, vocalLikelihood: 0.9 }
+    // Genre beats a strong audio vocal signal
+    expect(deriveSemanticTags({ ...base, genres: ['Techno'] }).vocalType).toBe('instrumental')
+    // No deciding genre → audio signal is used
+    expect(deriveSemanticTags({ ...base, genres: ['Tech House'] }).vocalType).toBe('vocal')
   })
 })

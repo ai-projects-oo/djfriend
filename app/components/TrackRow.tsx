@@ -352,6 +352,11 @@ async function handleReanalyze() {
                     ▶ Spotify
                   </span>
                 )}
+                {track.vinylOnly && (
+                  <span className="shrink-0 text-[9px] px-1 py-0 rounded leading-4 font-medium" style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }} title="Vinyl only — BPM/key from AI, energy estimated">
+                    ● Vinyl
+                  </span>
+                )}
               </div>
               <div className="text-xs text-[#8394a8] truncate">{track.artist}</div>
               {tc.ai && track.selectionReason && track.selectionReason.length > 0 && (() => {

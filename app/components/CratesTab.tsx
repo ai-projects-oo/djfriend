@@ -1,12 +1,12 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { DiscogsCollectionEntry, DiscogsRelease, Song, VinylTrackEntry, VinylReleaseData } from '../types';
+import type { DiscogsCollectionEntry, DiscogsRelease, Song, VinylTrackEntry, VinylReleaseData, ManualData, VinylStore } from '../types';
 import { SpotifyIcon, DiscogsIcon, BeatportIcon, TraxsourceIcon } from './Icons';
-import type { ManualData } from '../lib/discogsManualData';
-import { saveManualData, saveRejected } from '../lib/discogsManualData';
-import { loadVinylStore, saveVinylStore, nextPosition, type VinylStore } from '../lib/vinylTracks';
+import { saveManualData, saveRejected } from '../services/discogsManualData';
+import { loadVinylStore, saveVinylStore } from '../services/vinylStore';
+import { nextPosition } from '../lib/vinylTracks';
 import { theme } from '../lib/theme';
-import { chatComplete } from '../lib/openAiApi';
-import { getAccessToken } from '../lib/openAiAuth';
+import { chatComplete } from '../services/openAiApi';
+import { getAccessToken } from '../services/openAiAuth';
 
 
 interface PrintSettings { stickerW: number; stickerH: number }
@@ -131,6 +131,7 @@ interface Props {
   library:             Song[];
   manualData:          Map<number, ManualData>;
   onManualDataChange:  (m: Map<number, ManualData>) => void;
+  onVinylStoreChange?: (store: VinylStore) => void;
   rejectedMatches:     Set<number>;
   onRejectedChange:    (s: Set<number>) => void;
 }
@@ -392,7 +393,7 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
 
 export default function CratesTab({
   collection, onSync, syncPhase, syncMessage, hasOAuth, hasSpotify,
-  library, manualData, onManualDataChange, rejectedMatches, onRejectedChange,
+  library, manualData, onManualDataChange, onVinylStoreChange, rejectedMatches, onRejectedChange,
 }: Props) {
   const [query,  setQuery]  = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -402,6 +403,8 @@ export default function CratesTab({
   const [linking,         setLinking]         = useState<number | null>(null);
   const [expandedTracks,  setExpandedTracks]  = useState<number | null>(null);
   const [vinylStore,      setVinylStore]      = useState<VinylStore>(() => loadVinylStore());
+  // Keep App in sync so AI-analysed vinyl tracks reach the set generator
+  useEffect(() => { onVinylStoreChange?.(vinylStore); }, [vinylStore, onVinylStoreChange]);
   const [autoImportProgress, setAutoImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [infoOpen, setInfoOpen] = useState<number | null>(null);
   const [printPreview, setPrintPreview] = useState<{ html: string; isA4: boolean } | null>(null);
@@ -568,21 +571,26 @@ export default function CratesTab({
     });
   }, []);
 
-  const clearAiEstimate = useCallback((releaseId: number) => {
+  const clearAiEstimates = useCallback((releaseIds: number[]) => {
     const next = new Map(manualData);
-    const curr = next.get(releaseId) ?? {};
-    const { aiBpm: _, aiBpmMin: __, aiBpmMax: ___, aiGenre: ____, ...rest } = curr;
-    void _; void __; void ___; void ____;
-    next.set(releaseId, rest);
+    for (const releaseId of releaseIds) {
+      const curr = next.get(releaseId);
+      if (!curr) continue;
+      const { aiBpm: _, aiBpmMin: __, aiBpmMax: ___, aiGenre: ____, aiPerTrack: _____, ...rest } = curr;
+      void _; void __; void ___; void ____; void _____;
+      next.set(releaseId, rest);
+    }
     saveManualData(next);
     onManualDataChange(next);
-    patchVinylRelease(releaseId, existing => ({
-      ...existing,
-      tracks: existing.tracks.map(t => { const { bpm: _, ...r } = t; void _; return r; }),
-    }));
+    for (const releaseId of releaseIds) {
+      patchVinylRelease(releaseId, existing => ({
+        ...existing,
+        tracks: existing.tracks.map(t => { const { bpm: _, camelot: __, genre: ___, ...r } = t; void _; void __; void ___; return r; }),
+      }));
+    }
   }, [manualData, onManualDataChange, patchVinylRelease]);
 
-  const aiEstimateVinyl = useCallback(async (release: DiscogsRelease, currentManualData?: Map<number, import('../lib/discogsManualData').ManualData>) => {
+  const aiEstimateVinyl = useCallback(async (release: DiscogsRelease, currentManualData?: Map<number, ManualData>) => {
     setAiLoading(release.releaseId);
     try {
       // Fetch tracklist if not yet cached (needed for per-track BPM lookup)
@@ -624,32 +632,61 @@ export default function CratesTab({
         }
       } catch { /* network issue — fall through to AI */ }
 
-      // 2. Use AI for genre (and BPM fallback if lookup found nothing)
+      // 2. Ask the AI per track (BPM, Camelot key, genre) plus a release-level genre.
+      // Track list priority: Discogs tracklist → tracks already in the vinyl store → whole release.
+      const storedTracks = loadVinylStore()[release.releaseId]?.tracks ?? [];
+      const aiInputTracks = discogsTracklist.length > 0
+        ? discogsTracklist.map(t => ({ position: t.position ?? '', title: t.title }))
+        : storedTracks.filter(t => t.title?.trim()).map(t => ({ position: t.position, title: t.title as string }));
+      const aiTracks = (aiInputTracks.length > 0 ? aiInputTracks : lookupTracks).slice(0, 24);
+      const trackLines = aiTracks.map((t, i) => `${i + 1}. [${t.position || '-'}] ${t.title}`).join('\n');
+
       const raw = await chatComplete([
         {
           role: 'system',
-          content: overallBpm
-            ? 'You are a DJ music tagger. Return only valid JSON, no markdown.'
-            : `You are an expert DJ and vinyl record analyst with deep knowledge of dance music history. Given a release, provide the BPM as precisely as possible. If you know the exact BPM return "bpm": XX. Only use "bpmMin"/"bpmMax" range when you genuinely cannot determine a single BPM. Return only valid JSON, no markdown.`,
+          content: 'You are an expert DJ and vinyl record analyst with deep knowledge of dance music history. For EACH track give its own BPM (a single integer, not a range) and Camelot key (e.g. "8A") when you know or can reasonably infer them from the actual track — never copy one value to all tracks. Use null for a field you cannot determine. Return only valid JSON, no markdown.',
         },
         {
           role: 'user',
           content: [
-            `Title: "${release.title}"`,
+            `Release: "${release.title}"`,
             `Artist: ${release.artist}`,
             `Label: ${label || 'unknown'}`,
             `Year: ${release.year ?? 'unknown'}`,
             `Discogs genres: ${genres || 'none'}`,
             `Styles: ${styles || 'none'}`,
-            discogsTracklist.length ? `Tracks: ${discogsTracklist.map(t => t.title).slice(0, 8).join(', ')}` : '',
-          ].filter(Boolean).join('\n') + (overallBpm
-            ? `\n\nReturn only: {"genre":"specific sub-genre"}`
-            : `\n\nReturn one of:\n{"genre":"specific sub-genre","bpm":XX,"confidence":"high"}\nor if uncertain:\n{"genre":"specific sub-genre","bpmMin":XX,"bpmMax":YY,"confidence":"low|medium"}`),
+            `Tracks:\n${trackLines}`,
+            `\nReturn: {"genre":"specific sub-genre","tracks":[{"n":1,"bpm":126,"camelot":"8A","genre":"sub-genre"}]} with one entry per track number.`,
+          ].join('\n'),
         },
-      ], { maxTokens: overallBpm ? 30 : 80 });
+      ], { maxTokens: 120 + aiTracks.length * 40 });
 
-      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { genre?: string; bpm?: number; bpmMin?: number; bpmMax?: number };
-      const effectiveBpm = overallBpm ?? parsed.bpm;
+      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as {
+        genre?: string;
+        tracks?: Array<{ n?: number; bpm?: number | null; camelot?: string | null; genre?: string | null }>;
+      };
+      const validBpm = (v: unknown): number | undefined =>
+        typeof v === 'number' && v >= 50 && v <= 220 ? Math.round(v) : undefined;
+      const validKey = (v: unknown): string | undefined =>
+        typeof v === 'string' && /^(1[0-2]|[1-9])[AB]$/i.test(v.trim()) ? v.trim().toUpperCase() : undefined;
+      const aiByIndex = new Map<number, { bpm?: number; camelot?: string; genre?: string }>();
+      for (const t of parsed.tracks ?? []) {
+        if (typeof t.n !== 'number') continue;
+        aiByIndex.set(t.n - 1, {
+          bpm: validBpm(t.bpm),
+          camelot: validKey(t.camelot),
+          genre: typeof t.genre === 'string' && t.genre.trim() ? t.genre.trim() : undefined,
+        });
+      }
+      // Final per-track results: confirmed lookup BPM wins over AI guess
+      const finalTracks = aiTracks.map((t, i) => {
+        const lookup = trackBpms.find(tb => tb.bpm && (tb.position === t.position || tb.title === t.title));
+        const ai = aiByIndex.get(i);
+        return { position: t.position, title: t.title, bpm: lookup?.bpm ?? ai?.bpm, camelot: ai?.camelot, genre: ai?.genre };
+      });
+
+      const trackBpmList = finalTracks.map(t => t.bpm).filter((b): b is number => !!b).sort((a, b) => a - b);
+      const effectiveBpm = overallBpm ?? (trackBpmList.length ? trackBpmList[Math.floor(trackBpmList.length / 2)] : undefined);
       const base = currentManualData ?? manualData;
       const next = new Map(base);
       const curr = next.get(release.releaseId) ?? {};
@@ -657,39 +694,46 @@ export default function CratesTab({
         ...curr,
         ...(parsed.genre ? { aiGenre: parsed.genre } : {}),
         aiBpm:    effectiveBpm ?? undefined,
-        aiBpmMin: effectiveBpm ? undefined : (parsed.bpmMin ?? undefined),
-        aiBpmMax: effectiveBpm ? undefined : (parsed.bpmMax ?? undefined),
+        aiBpmMin: undefined,
+        aiBpmMax: undefined,
+        aiPerTrack: true,
       });
       saveManualData(next);
       onManualDataChange(next);
 
-      // Merge per-track BPMs using a functional update so we always read the
-      // latest vinyl store state — avoids stale-closure empty-track bugs.
+      // Write per-track data via functional update so we read the latest vinyl store state.
       patchVinylRelease(release.releaseId, existing => {
-        let updatedTracks = existing.tracks.map(t => {
-          const hit = trackBpms.find(
-            tb => tb.position === t.position || (tb.title && t.title && tb.title === t.title),
-          );
-          // Only write BPM if Spotify confirmed this specific track — never propagate
-          // the overall median to tracks it didn't match (avoids all-same-BPM problem)
-          const bpm = hit?.bpm ?? t.bpm;
-          return bpm ? { ...t, bpm } : t;
+        const sameTrack = (a: { position?: string; title?: string }, b: { position?: string; title?: string }) =>
+          (!!a.title && !!b.title && a.title.trim().toLowerCase() === b.title.trim().toLowerCase()) ||
+          (!!a.position && a.position === b.position);
+        const merged = existing.tracks.map(t => {
+          const hit = finalTracks.find(f => sameTrack(f, t));
+          if (!hit) return t;
+          return {
+            ...t,
+            ...(t.bpm == null && hit.bpm ? { bpm: hit.bpm } : {}),
+            ...(!t.camelot && hit.camelot ? { camelot: hit.camelot } : {}),
+            ...(!t.genre && hit.genre ? { genre: hit.genre } : {}),
+          };
         });
-        // If no tracks existed yet, create them from the lookup results
-        if (updatedTracks.length === 0 && trackBpms.length > 0) {
-          updatedTracks = trackBpms
-            .filter(tb => tb.title)
-            .map(tb => ({
-              id: `${release.releaseId}-${tb.position || tb.title}-auto`,
-              position: tb.position || 'A',
-              title: tb.title,
-              ...(tb.bpm ? { bpm: tb.bpm } : {}),
-            }));
-        }
+        // Add tracks the store didn't have yet (only real tracks, not the album-title fallback)
+        const fromTracklist = aiInputTracks.length > 0;
+        const added = fromTracklist
+          ? finalTracks
+              .filter(f => f.title && !merged.some(t => sameTrack(f, t)))
+              .map((f, i) => ({
+                id: `${release.releaseId}-${f.position || i}-auto`,
+                position: f.position || `A${i + 1}`,
+                title: f.title,
+                ...(f.bpm ? { bpm: f.bpm } : {}),
+                ...(f.camelot ? { camelot: f.camelot } : {}),
+                ...(f.genre ? { genre: f.genre } : {}),
+              }))
+          : [];
         return {
           ...existing,
           ...(parsed.genre ? { genre: parsed.genre } : {}),
-          tracks: updatedTracks,
+          tracks: [...merged, ...added],
         };
       });
       return next;
@@ -770,7 +814,7 @@ export default function CratesTab({
     const unestimated = releases.filter(r => {
       const m = manualData.get(r.releaseId);
       const matched = !!(library.find(s => s.file === m?.matchedFile)) || r.inLibrary;
-      return !matched && !(m?.aiBpm || (m?.aiBpmMin && m?.aiBpmMax));
+      return !matched && !m?.aiPerTrack;
     });
     if (unestimated.length === 0) return;
     setAiEstimateError(null);
@@ -897,7 +941,7 @@ export default function CratesTab({
             const unmatchedWithoutEstimate = releases.filter(r => {
               const m = manualData.get(r.releaseId);
               const matched = !!(library.find(s => s.file === m?.matchedFile)) || r.inLibrary;
-              return !matched && !(m?.aiBpm || (m?.aiBpmMin && m?.aiBpmMax));
+              return !matched && !m?.aiPerTrack;
             });
             const estimatedCount = releases.filter(r => {
               const m = manualData.get(r.releaseId);
@@ -933,7 +977,7 @@ export default function CratesTab({
                   <button
                     type="button"
                     onClick={() => {
-                      releases.forEach(r => clearAiEstimate(r.releaseId));
+                      clearAiEstimates(releases.map(r => r.releaseId));
                     }}
                     title={`Clear AI estimations for ${estimatedCount} record${estimatedCount !== 1 ? 's' : ''}`}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#ef4444]/30 bg-[#ef4444]/5 text-[11px] text-[#f87171] hover:border-[#ef4444]/60 hover:bg-[#ef4444]/10 transition-colors cursor-pointer flex-shrink-0"
@@ -1091,22 +1135,22 @@ export default function CratesTab({
                               {bpmLabel}
                             </span>
                           )}
-                          {!hasAnyBpm && (
+                          {!aiData?.aiPerTrack && !isRunning && (
                             <button type="button"
-                              onClick={() => void aiEstimateVinyl(release)}
+                              onClick={() => { setExpandedTracks(release.releaseId); void aiEstimateVinyl(release); }}
                               disabled={isRunning || !!aiEstimateAllProgress}
                               className="text-[9px] text-white/30 hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer"
                             >
-                              {isRunning ? '…' : '✦ AI estimate'}
+                              {hasAnyBpm ? '✦ AI per track' : '✦ AI estimate'}
                             </button>
                           )}
-                          {hasAnyBpm && isRunning && (
+                          {isRunning && (
                             <span className="text-[9px] text-white/30">…</span>
                           )}
                           {(hasAnyBpm || aiData?.aiGenre) && !isRunning && (
                             <button
                               type="button"
-                              onClick={() => clearAiEstimate(release.releaseId)}
+                              onClick={() => clearAiEstimates([release.releaseId])}
                               title="Clear AI estimation"
                               className="text-[9px] text-white/20 hover:text-[#ef4444] transition-colors cursor-pointer ml-auto"
                             >

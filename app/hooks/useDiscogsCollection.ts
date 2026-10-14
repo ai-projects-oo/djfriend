@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import type { DiscogsCollectionEntry, DiscogsMode } from '../types';
-import { fetchDiscogsCollection, matchDiscogsCollection } from '../lib/discogsCollection';
+import { fetchDiscogsCollection } from '../services/discogsCollection';
+import { matchDiscogsCollection } from '../lib/discogsCollection';
 import type { Song } from '../types';
 
 const STORAGE_KEY = 'djfriend_discogs_collection';

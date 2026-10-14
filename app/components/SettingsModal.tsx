@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { apiFetch } from '../lib/apiFetch'
-import { redirectToSpotifyLogin } from '../lib/spotifyExport'
-import { saveApiKey, clearSession as clearOpenAiKey } from '../lib/openAiAuth'
-import { validateApiKey } from '../lib/openAiApi'
-import type { OpenAiSession } from '../lib/openAiAuth'
+import { apiFetch } from '../services/apiFetch'
+import { redirectToSpotifyLogin, getStoredToken, clearStoredToken } from '../services/spotifyExport'
+import { saveApiKey, clearSession as clearOpenAiKey } from '../services/openAiAuth'
+import { validateApiKey } from '../services/openAiApi'
+import type { OpenAiSession } from '../services/openAiAuth'
 import { SpotifyIcon, RekordboxIcon } from './Icons'
 
 type PathStatus = 'idle' | 'checking' | 'ok' | 'missing'
@@ -105,6 +105,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [showTips, setShowTips] = useState(true)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
+  const [spotifyConnected, setSpotifyConnected] = useState(false)
   const [openAiKeyInput, setOpenAiKeyInput] = useState('')
   const [savingOpenAiKey, setSavingOpenAiKey] = useState(false)
   const [openAiKeySaved, setOpenAiKeySaved] = useState(false)
@@ -151,6 +152,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         setShareTelemetry(d.shareTelemetry !== false)
         if (d.tipConfig) setShowTips(d.tipConfig.help !== false || d.tipConfig.info !== false || d.tipConfig.ai !== false)
         setHasSpotifySecret(d.hasSecret ?? false)
+        setSpotifyConnected(!!getStoredToken())
         setHasDiscogsOAuth(d.hasDiscogsOAuth ?? false)
         setHasDiscogsConsumerKey(d.hasDiscogsConsumerKey ?? false)
         setDiscogsConnectedAs(d.discogsUsername ?? '')
@@ -187,6 +189,11 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
     } finally {
       setSaving(false)
     }
+  }
+
+  function disconnectSpotify() {
+    clearStoredToken()
+    setSpotifyConnected(false)
   }
 
   async function saveSpotify() {
@@ -319,13 +326,17 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               <SpotifyIcon size={13} className="text-[#1db954]" />
               Spotify
             </h3>
-            {hasSpotifySecret && (
+            {spotifyConnected && (
               <span className="text-[10px] text-[#22c55e]">✓ connected</span>
             )}
           </div>
-          {hasSpotifySecret ? (
+          {spotifyConnected ? (
             <p className="text-xs text-[#8394a8] leading-relaxed">
               Spotify is connected. Import playlists and export sets directly from the app.
+            </p>
+          ) : hasSpotifySecret ? (
+            <p className="text-xs text-[#8394a8] leading-relaxed">
+              Connect your Spotify account to import playlists and export sets.
             </p>
           ) : (
             <p className="text-xs text-[#8394a8] leading-relaxed">
@@ -336,7 +347,15 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               {' '}to request access.
             </p>
           )}
-          {!hasSpotifySecret && (
+          {spotifyConnected ? (
+            <button
+              onClick={disconnectSpotify}
+              aria-label="Disconnect Spotify"
+              className="px-4 py-2 text-sm font-medium rounded-md border border-[#ef4444]/40 text-[#f87171] hover:bg-[#ef4444]/10 transition-colors cursor-pointer"
+            >
+              Disconnect
+            </button>
+          ) : (
             <button
               onClick={saveSpotify}
               disabled={savingSpotify}

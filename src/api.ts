@@ -37,6 +37,7 @@ function semverGt(a: string, b: string): boolean {
 const execFileAsync = promisify(execFile)
 export const APPLE_RESULTS_PATH = path.join(os.homedir(), 'Music', 'djfriend-results-v3.json')
 export const HISTORY_PATH = path.join(os.homedir(), 'Music', 'djfriend-history.json')
+export const PLAYLISTS_PATH = path.join(os.homedir(), 'Music', 'djfriend-playlists.json')
 
 // Community telemetry — persisted to disk so data survives server restarts
 const TELEMETRY_DIR = getSettingsDir()
@@ -937,6 +938,38 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (songsFolder) rederive(path.join(songsFolder, 'results.json'))
     rederive(APPLE_RESULTS_PATH)
     res.end()
+  })
+
+  // DJFriend-owned playlists and folders (Library sidebar). GET returns the stored library,
+  // PUT replaces it. Shape is checked here; the renderer re-validates on load.
+  middlewares.use('/api/playlists', (req, res, next) => {
+    res.setHeader('Content-Type', 'application/json')
+    if (req.method === 'GET') {
+      if (!fs.existsSync(PLAYLISTS_PATH)) { res.end(JSON.stringify({ schemaVersion: 1, playlists: [], folders: [] })); return }
+      fs.createReadStream(PLAYLISTS_PATH).pipe(res)
+      return
+    }
+    if (req.method === 'PUT') {
+      const chunks: Buffer[] = []
+      req.on('data', (c: Buffer) => chunks.push(c))
+      req.on('end', () => {
+        try {
+          const body = Buffer.concat(chunks).toString('utf-8')
+          const parsed = JSON.parse(body) as { schemaVersion?: unknown; playlists?: unknown; folders?: unknown }
+          if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.playlists) || !Array.isArray(parsed.folders)) throw new Error('Invalid playlist library')
+          const tmp = `${PLAYLISTS_PATH}.tmp`
+          fs.mkdirSync(path.dirname(PLAYLISTS_PATH), { recursive: true })
+          fs.writeFileSync(tmp, body, 'utf-8')
+          fs.renameSync(tmp, PLAYLISTS_PATH)
+          res.end(JSON.stringify({ ok: true }))
+        } catch {
+          res.writeHead(400)
+          res.end(JSON.stringify({ error: 'Invalid playlist library' }))
+        }
+      })
+      return
+    }
+    next()
   })
 
   middlewares.use('/api/history', async (req, res, next) => {

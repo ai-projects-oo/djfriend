@@ -269,6 +269,35 @@ export interface ImportEntry {
   tracks: ImportTrack[];
 }
 
+// ─── Playlists (Library sidebar) ──────────────────────────────────────────────
+
+/** A playlist owned by DJFriend. Tracks reference `Song.file`, in play order. */
+export interface Playlist {
+  id: string;
+  name: string;
+  tracks: string[];
+  folderId?: string;           // undefined = top level
+  createdAt: number;           // ms epoch
+  updatedAt: number;
+  // Where the playlist came from, if it was imported or saved from elsewhere
+  source?: { kind: 'apple-music' | 'spotify' | 'set'; ref: string };
+  appleMusicId?: string;       // persistent ID of the linked Music.app playlist (set by export)
+}
+
+export interface PlaylistFolder {
+  id: string;
+  name: string;
+  parentId?: string;           // undefined = top level
+  collapsed?: boolean;
+}
+
+/** Everything persisted in playlists.json. */
+export interface PlaylistLibrary {
+  schemaVersion: 1;
+  playlists: Playlist[];
+  folders: PlaylistFolder[];
+}
+
 // ─── GigFinder ────────────────────────────────────────────────────────────────
 
 export type GigLeadStatus = 'NEW' | 'RESEARCHED' | 'READY_TO_CONTACT' | 'CONTACTED' | 'FOLLOW_UP' | 'REPLIED' | 'BOOKED' | 'NOT_INTERESTED' | 'REJECTED'

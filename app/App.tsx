@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind, ManualData, VinylStore } from "./types";
+import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind, ManualData, VinylStore, Song } from "./types";
 import { DEFAULT_TIP_CONFIG, DEFAULT_DJ_SYSTEM, vinylDeckCount } from "./types";
 import EnergyCurveEditor from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
@@ -30,7 +30,7 @@ import {
   spotifyTrackToSong,
   findPartialMatchSong,
 } from "./lib/spotifyImport";
-import { downloadM3U } from "./services/downloads";
+import { downloadM3U, downloadRekordboxXml } from "./services/downloads";
 import { SpotifyIcon, M3UIcon } from "./components/Icons";
 import { useLibrary } from "./hooks/useLibrary";
 import { useSetGenerator } from "./hooks/useSetGenerator";
@@ -54,6 +54,10 @@ import OnboardingModal from "./components/OnboardingModal";
 import PlayerBar from "./components/PlayerBar";
 import GigFinderTab from "./components/GigFinderTab";
 import LoaderStatus from "./components/LoaderStatus";
+import LibrarySidebar from "./components/LibrarySidebar";
+import type { LibraryView, SourceItem } from "./lib/libraryView";
+import { usePlaylists } from "./hooks/usePlaylists";
+import { resolvePlaylist } from "./lib/playlists";
 import {
   getStoredSession,
   clearSession as clearOpenAiSession,
@@ -373,6 +377,9 @@ function AppInner() {
 
   // Playlist filter — which import entries restrict the generator pool (multi-select)
   const [playlistFilterIds, setPlaylistFilterIds] = useState<string[]>([]);
+  const playlistsApi = usePlaylists();
+  const [libraryView, setLibraryView] = useState<LibraryView>({ kind: "all" });
+  const [playlistToRename, setPlaylistToRename] = useState<string | undefined>(undefined);
   // Selection from Library tab — set when user taps "Use in Set Generator"
   const [librarySelection, setLibrarySelection] = useState<Set<string> | null>(null);
   // Controls visibility of the playlist picker select element in the Source card
@@ -500,6 +507,14 @@ function AppInner() {
         if (librarySelection) librarySelection.forEach(f => combined.add(f));
         continue;
       }
+      if (id.startsWith("pl:")) {
+        const pl = playlistsApi.library.playlists.find(p => p.id === id.slice(3));
+        if (pl) {
+          const inLibrary = new Set(library.map(s => s.file));
+          pl.tracks.forEach(f => { if (inLibrary.has(f)) combined.add(f); });
+        }
+        continue;
+      }
       if (id.startsWith("apple:")) {
         const name = id.slice(6);
         const files = applePlaylistFiles[name];
@@ -513,7 +528,84 @@ function AppInner() {
       if (entry) findSongsForImport(entry.tracks, library).forEach(s => combined.add(s.file));
     }
     return combined.size > 0 ? combined : undefined;
-  }, [playlistFilterIds, importHistory, library, applePlaylistFiles, librarySelection]);
+  }, [playlistFilterIds, importHistory, library, applePlaylistFiles, librarySelection, playlistsApi.library]);
+
+  // ── Library sidebar: resolve the selected view to songs ──────────────────
+  const songsByFile = useMemo(() => new Map(library.map(s => [s.file, s])), [library]);
+  const songsByPath = useMemo(() => {
+    const m = new Map<string, Song>();
+    for (const s of library) { m.set(s.file, s); if (s.filePath) m.set(s.filePath, s); }
+    return m;
+  }, [library]);
+
+  // Songs for any sidebar view, in that view's order (tracks missing from the library are skipped)
+  const resolveLibraryView = useCallback((v: LibraryView): { songs: Song[]; missing: number } | null => {
+    const unique = (list: Song[]) => { const seen = new Set<string>(); return list.filter(s => !seen.has(s.file) && seen.add(s.file)); };
+    switch (v.kind) {
+      case "all": return null;
+      case "playlist": {
+        const p = playlistsApi.library.playlists.find(x => x.id === v.id);
+        return p ? resolvePlaylist(p, songsByFile) : null;
+      }
+      case "apple": {
+        const files = applePlaylistFiles[v.name] ?? [];
+        const songs = files.map(f => songsByPath.get(f)).filter((s): s is Song => !!s);
+        return { songs: unique(songs), missing: files.length - songs.length };
+      }
+      case "spotify": {
+        const entry = importHistory.find(e => e.id === v.id);
+        return entry ? { songs: unique(findSongsForImport(entry.tracks, library)), missing: 0 } : null;
+      }
+      case "set": {
+        const entry = history.find(h => h.id === v.id);
+        return entry ? { songs: unique(entry.tracks.map(t => songsByFile.get(t.file) ?? t)), missing: 0 } : null;
+      }
+    }
+  }, [playlistsApi.library, songsByFile, songsByPath, applePlaylistFiles, importHistory, history, library]);
+
+  const libraryViewData = useMemo(() => {
+    const resolved = resolveLibraryView(libraryView);
+    const v = resolved ? libraryView : ({ kind: "all" } as LibraryView);
+    switch (v.kind) {
+      case "playlist": return { key: `pl:${v.id}`, title: playlistsApi.library.playlists.find(p => p.id === v.id)?.name ?? "Playlist", ...resolved!, playlistId: v.id };
+      case "apple":    return { key: `apple:${v.name}`, title: v.name, ...resolved! };
+      case "spotify":  return { key: `spotify:${v.id}`, title: importHistory.find(e => e.id === v.id)?.name ?? "Spotify playlist", ...resolved! };
+      case "set":      return { key: `set:${v.id}`, title: history.find(h => h.id === v.id)?.name ?? "Set", ...resolved! };
+      default:         return { key: "all", title: "All Tracks", songs: undefined, missing: 0 };
+    }
+  }, [libraryView, resolveLibraryView, playlistsApi.library, importHistory, history]);
+  const activePlaylistId = "playlistId" in libraryViewData ? libraryViewData.playlistId : undefined;
+
+  const playlistCounts = useMemo(
+    () => new Map(playlistsApi.library.playlists.map(p => [p.id, p.tracks.filter(f => songsByFile.has(f)).length])),
+    [playlistsApi.library, songsByFile],
+  );
+  const appleSources = useMemo<SourceItem[]>(
+    () => Object.keys(applePlaylistFiles).sort((a, b) => a.localeCompare(b)).map(name => {
+      const v: LibraryView = { kind: "apple", name };
+      return { view: v, label: name, count: resolveLibraryView(v)?.songs.length ?? 0 };
+    }),
+    [applePlaylistFiles, resolveLibraryView],
+  );
+  const spotifySources = useMemo<SourceItem[]>(
+    () => importHistory.map(e => ({ view: { kind: "spotify", id: e.id } as LibraryView, label: e.name, count: e.tracks.filter(t => t.inLibrary).length })),
+    [importHistory],
+  );
+  const setSources = useMemo<SourceItem[]>(
+    () => [...history].sort((a, b) => b.timestamp - a.timestamp).map(h => ({ view: { kind: "set", id: h.id } as LibraryView, label: h.name, count: h.tracks.length })),
+    [history],
+  );
+
+  const newPlaylistFrom = useCallback((name: string, files: string[], source?: { kind: "apple-music" | "spotify" | "set"; ref: string }) => {
+    const id = playlistsApi.createPlaylist(name, { tracks: files, source });
+    setLibraryView({ kind: "playlist", id });
+    return id;
+  }, [playlistsApi]);
+
+  const exportPlaylistFile = useCallback((name: string, songs: Song[], format: "M3U" | "XML") => {
+    if (format === "M3U") downloadM3U(songs.map((s, i) => ({ ...s, slot: i, targetEnergy: s.energy, harmonicWarning: false })), name);
+    else downloadRekordboxXml(songs, name, `${name}.xml`);
+  }, []);
 
   const playlistTotalMinutes = useMemo<number>(() => {
     if (playlistFilterIds.length === 0 || !playlistFilterFiles) return 0;
@@ -1575,7 +1667,7 @@ function AppInner() {
             <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 flex flex-col gap-4 lg:overflow-y-auto">
 
               {/* Card 1: Source — visible when playlists exist (Apple Music or Spotify) */}
-              {Object.keys(applePlaylistFiles).length === 0 && importHistory.length === 0 ? (
+              {Object.keys(applePlaylistFiles).length === 0 && importHistory.length === 0 && playlistsApi.library.playlists.length === 0 ? (
                 <div className="bg-[#20202e] border border-[#2c2c42] rounded-xl p-4 flex flex-col gap-2.5">
                   <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Source</span>
                   <div className="flex flex-col gap-1.5 py-1">
@@ -1634,6 +1726,8 @@ function AppInner() {
                               : playlistFilterIds.length === 1
                               ? (playlistFilterIds[0] === "__selection__"
                                   ? `Selection (${librarySelection?.size ?? 0})`
+                                  : playlistFilterIds[0].startsWith("pl:")
+                                  ? playlistsApi.library.playlists.find(p => p.id === playlistFilterIds[0].slice(3))?.name ?? "Playlist"
                                   : playlistFilterIds[0].startsWith("apple:")
                                   ? playlistFilterIds[0].slice(6)
                                   : importHistory.find((e) => e.id === playlistFilterIds[0])?.name ?? "Playlist")
@@ -1652,6 +1746,26 @@ function AppInner() {
                             >
                               — Full Library (no filter) —
                             </button>
+                            {[...playlistsApi.library.playlists].sort((a, b) => a.name.localeCompare(b.name)).map((pl) => {
+                              const id = `pl:${pl.id}`;
+                              const isSelected = playlistFilterIds.includes(id);
+                              return (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#2c2c42] transition-colors flex items-center gap-2 cursor-pointer"
+                                  style={{ color: isSelected ? "#a78bfa" : "#e2e8f0", backgroundColor: isSelected ? "#2c263c" : undefined }}
+                                  onClick={() => setPlaylistFilterIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                                >
+                                  <span className={`w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center ${isSelected ? "bg-[#7c3aed] border-[#7c3aed]" : "border-[#46465e]"}`}>
+                                    {isSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                                  </span>
+                                  <span className="text-[#7c3aed] shrink-0" aria-hidden>♫</span>
+                                  <span className="truncate flex-1">{pl.name}</span>
+                                  <span className="shrink-0 text-[10px] text-[#8394a8] whitespace-nowrap">{playlistCounts.get(pl.id) ?? 0} tracks</span>
+                                </button>
+                              );
+                            })}
                             {Object.entries(applePlaylistFiles).map(([name, files]) => {
                               const id = `apple:${name}`;
                               const inLib = files.filter(f => library.some(s => s.file === f || s.filePath === f)).length;
@@ -2858,10 +2972,52 @@ function AppInner() {
       )}
 
       {activeTab === "Library" && (
-        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <main className="flex-1 min-h-0 overflow-hidden flex">
+          <LibrarySidebar
+            playlists={playlistsApi}
+            view={libraryView}
+            onSelectView={setLibraryView}
+            libraryCount={library.length}
+            playlistCounts={playlistCounts}
+            appleSources={appleSources}
+            spotifySources={spotifySources}
+            setSources={setSources}
+            renameRequest={playlistToRename}
+            onDropTracks={(id, files) => playlistsApi.addTracks(id, files)}
+            onSaveAsPlaylist={(src) => {
+              const resolved = resolveLibraryView(src.view);
+              if (!resolved) return;
+              const source = src.view.kind === "apple" ? { kind: "apple-music" as const, ref: src.view.name }
+                : src.view.kind === "spotify" ? { kind: "spotify" as const, ref: src.view.id }
+                : src.view.kind === "set" ? { kind: "set" as const, ref: src.view.id }
+                : undefined;
+              newPlaylistFrom(src.label, resolved.songs.map(s => s.file), source);
+            }}
+            onImportApple={() => void openPlaylistPicker()}
+            onImportSpotify={() => setActiveTab("Imports")}
+            onExportPlaylist={(p, format) => exportPlaylistFile(p.name, resolvePlaylist(p, songsByFile).songs, format)}
+          />
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col">
           <LibraryTab
             isInitializing={isInitializing}
             library={library}
+            viewKey={libraryViewData.key}
+            viewTitle={libraryViewData.title}
+            viewSongs={libraryViewData.songs}
+            ordered={libraryView.kind !== "all"}
+            missingCount={libraryViewData.missing}
+            onReorder={activePlaylistId ? (files, before) => {
+              const pl = playlistsApi.library.playlists.find(p => p.id === activePlaylistId);
+              if (!pl) return;
+              playlistsApi.moveTracks(activePlaylistId, files, before ? pl.tracks.indexOf(before) : pl.tracks.length);
+            } : undefined}
+            onRemoveFromView={activePlaylistId ? (files) => playlistsApi.removeTracks(activePlaylistId, files) : undefined}
+            playlists={playlistsApi.library.playlists}
+            onAddToPlaylist={(id, files) => playlistsApi.addTracks(id, files)}
+            onNewPlaylistFromSelection={(files) => {
+              const id = newPlaylistFrom("Untitled Playlist", files);
+              setPlaylistToRename(id);
+            }}
             onUpdateTrack={(file, patch) => {
               setLibrary(lib => lib.map(s => s.file === file ? { ...s, ...patch } : s));
             }}
@@ -2877,6 +3033,7 @@ function AppInner() {
               setActiveTab("Set Generator");
             }}
           />
+          </div>
         </main>
       )}
 

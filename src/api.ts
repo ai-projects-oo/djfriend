@@ -175,6 +175,8 @@ export interface AppSong {
   bpm: number
   key: string
   camelot: string
+  keyConfidence?: number
+  keyVersion?: number
   energy: number
   genres: string[]
   genresFromSpotify?: boolean
@@ -347,6 +349,14 @@ interface AppleMusicTrack { filePath: string; file: string; artist: string | nul
  * others spread linearly by rank.  This is purely audio-based — no filename tags
  * are used.  Values update in-place on the resultsJson map.
  */
+/** Key-detection metadata to store alongside key/camelot (absent for Spotify-sourced keys). */
+function keyMeta(f: { keyConfidence?: number; keyVersion?: number }): Pick<AppSong, 'keyConfidence' | 'keyVersion'> {
+  return {
+    ...(f.keyConfidence != null ? { keyConfidence: f.keyConfidence } : {}),
+    ...(f.keyVersion != null ? { keyVersion: f.keyVersion } : {}),
+  }
+}
+
 function normalizeLibraryEnergy(resultsJson: Record<string, AppSong>): void {
   const entries = Object.entries(resultsJson).filter(([, s]) => typeof s.energy === 'number')
   if (entries.length < 2) return
@@ -534,7 +544,7 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
         ...(t.dateAdded != null ? { dateAdded: t.dateAdded } : {}),
         spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle,
         bpm: normalizeBpm(features.bpm, features.energy, genres, features.tagBpm),
-        key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy,
+        key: keyInfo.keyName, camelot: keyInfo.camelot, ...keyMeta(features), energy: features.energy,
         genres,
         ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}),
         ...(features.year != null ? { year: features.year } : {}),
@@ -1687,7 +1697,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           const camelot = keyInfo.camelot
           const resolvedYear = finalFeatures.year ?? localYear
           const resolvedComment = finalFeatures.comment ?? localComment
-          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizedBpm, key: keyInfo.keyName, camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(resolvedYear != null ? { year: resolvedYear } : {}), ...(resolvedComment ? { comment: resolvedComment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}), ...(finalFeatures.waveform ? { waveform: finalFeatures.waveform } : {}), ...(finalFeatures.frequencyWaveform ? { frequencyWaveform: finalFeatures.frequencyWaveform } : {}), semanticTags: deriveSemanticTags({ bpm: normalizedBpm, camelot, energy: finalFeatures.energy, genres, ...finalFeatures.spectral }) }
+          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizedBpm, key: keyInfo.keyName, camelot, ...keyMeta(finalFeatures), energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(resolvedYear != null ? { year: resolvedYear } : {}), ...(resolvedComment ? { comment: resolvedComment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}), ...(finalFeatures.waveform ? { waveform: finalFeatures.waveform } : {}), ...(finalFeatures.frequencyWaveform ? { frequencyWaveform: finalFeatures.frequencyWaveform } : {}), semanticTags: deriveSemanticTags({ bpm: normalizedBpm, camelot, energy: finalFeatures.energy, genres, ...finalFeatures.spectral }) }
         } catch { /* skip */ }
       }
       for (const song of Object.values(resultsJson)) {
@@ -2004,7 +2014,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const bpm = normalizeBpm(features.bpm, features.energy, cachedGenres, features.tagBpm)
       const semanticTags = deriveSemanticTags({ bpm, camelot: keyInfo.camelot, energy: features.energy, genres: cachedGenres, ...features.spectral })
       const patch: Partial<AppSong> = {
-        bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, semanticTags,
+        bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, ...keyMeta(features), energy: features.energy, semanticTags,
         ...(features.waveform ? { waveform: features.waveform } : {}),
         ...(features.frequencyWaveform ? { frequencyWaveform: features.frequencyWaveform } : {}),
         ...(features.vocalTimeline ? { vocalTimeline: features.vocalTimeline } : {}),
@@ -2013,7 +2023,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (songsFolder) patchResultsFile(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'), patch)
       patchResultsFile(APPLE_RESULTS_PATH, absolutePath, patch)
 
-      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, waveform: features.waveform, frequencyWaveform: features.frequencyWaveform, vocalTimeline: features.vocalTimeline }))
+      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, ...keyMeta(features), energy: features.energy, waveform: features.waveform, frequencyWaveform: features.frequencyWaveform, vocalTimeline: features.vocalTimeline }))
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Reanalysis failed' })) }
   })
 
@@ -2055,6 +2065,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           song.bpm = bpm
           song.key = keyInfo.keyName
           song.camelot = keyInfo.camelot
+          Object.assign(song, keyMeta(features))
           song.energy = features.energy
           if (features.energyProfile) (song as unknown as Record<string, unknown>).energyProfile = features.energyProfile
           if (features.waveform) (song as unknown as Record<string, unknown>).waveform = features.waveform

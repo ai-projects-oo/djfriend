@@ -46,6 +46,8 @@ export interface Song {
   bpm: number;
   key: string; // e.g. "E♭ Major"
   camelot: string; // e.g. "5B"
+  keyConfidence?: number; // 0–1 margin between the best and second-best key template (local analysis)
+  keyVersion?: number;    // key-detection algorithm version that produced key/camelot
   energy: number; // 0.0 – 1.0
   genres: string[];
   genresFromSpotify?: boolean; // true = genres from Spotify API (not final), absent/false = from ID3 tags

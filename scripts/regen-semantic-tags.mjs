@@ -3,7 +3,7 @@
  *
  * Re-derives vibeTags, moodTags, venueTags, timeOfNightTags for every track
  * in djfriend-results-v3.json using the current deriveSemanticTags rules and
- * the (now accurate) MixedInKey energy values.
+ * the current analysed energy values.
  *
  * Run: node scripts/regen-semantic-tags.mjs
  */

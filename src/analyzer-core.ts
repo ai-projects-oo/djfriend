@@ -4,7 +4,8 @@ import path from 'path';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { createRequire } from 'module';
-import { detectVocalProbability, detectVocalTimeline } from './vocal-detector.js';
+import { fft } from './dsp.js';
+import { detectKey, KEY_DETECTION_VERSION } from './keyDetection.js';
 
 const execFile = promisify(execFileCb);
 
@@ -38,6 +39,8 @@ export interface LocalAudioFeatures {
   tagBpm: number | null; // Raw ID3/metadata BPM tag — null if absent
   pitchClass: number; // 0–11 (matches Spotify pitch class, compatible with camelot.ts)
   mode: number;       // 1=major, 0=minor
+  keyConfidence?: number; // 0–1 margin between best and second-best key template
+  keyVersion?: number;    // KEY_DETECTION_VERSION that produced pitchClass/mode
   energy: number;     // 0–1 normalized via dBFS
   energyProfile?: EnergyProfile;
   waveform?: number[]; // ~1200 normalized RMS values (0–1) for waveform display
@@ -59,12 +62,6 @@ export interface LocalAudioFeatures {
   };
 }
 
-// Essentia's KeyExtractor returns key names using sharps/flats
-const KEY_TO_PITCH: Record<string, number> = {
-  C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3,
-  E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8,
-  Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
-};
 
 /**
  * Fast BPM detector using onset-strength autocorrelation.
@@ -147,22 +144,9 @@ function detectBpm(audio: Float32Array, sampleRate: number): number {
   return Math.round((fps * 60 / bestLag) * 10) / 10;
 }
 
-// Lazy singleton — WASM init is heavy, reuse across tracks
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let essentiaInstance: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- essentia.js has no TypeScript types
-function getEssentia(): any {
-  if (!essentiaInstance) {
-    const { Essentia, EssentiaWASM } = require('essentia.js') as { Essentia: new (wasm: unknown) => unknown; EssentiaWASM: unknown };
-    essentiaInstance = new Essentia(EssentiaWASM);
-  }
-  return essentiaInstance;
-}
-
 /**
- * Linear interpolation resampler. RhythmExtractor2013 and KeyExtractor
- * both assume 44100 Hz input, so we must resample if the file differs.
+ * Linear interpolation resampler. BPM, key and energy analysis all assume
+ * 44100 Hz input, so we must resample if the file differs.
  */
 function resample(audio: Float32Array, fromRate: number, toRate: number): Float32Array {
   const ratio = fromRate / toRate;
@@ -185,35 +169,6 @@ function correctBpmWithTag(detected: number, tagBpm: number | null): number {
   if (Math.abs(detected / tagBpm - 2) < 0.15) return Math.round((detected / 2) * 10) / 10;
   if (Math.abs(detected / tagBpm - 0.5) < 0.15) return Math.round((detected * 2) * 10) / 10;
   return detected;
-}
-
-// ── FFT (iterative Cooley-Tukey radix-2) ──────────────────────────────────────
-function fft(re: Float64Array, im: Float64Array): void {
-  const n = re.length;
-  for (let i = 1, j = 0; i < n; i++) {
-    let bit = n >> 1;
-    while (j & bit) { j ^= bit; bit >>= 1; }
-    j ^= bit;
-    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const half = len >> 1;
-    const angle = -2 * Math.PI / len;
-    const wRe = Math.cos(angle), wIm = Math.sin(angle);
-    for (let i = 0; i < n; i += len) {
-      let curRe = 1, curIm = 0;
-      for (let j = 0; j < half; j++) {
-        const a = i + j, b = a + half;
-        const tRe = curRe * re[b] - curIm * im[b];
-        const tIm = curRe * im[b] + curIm * re[b];
-        re[b] = re[a] - tRe; im[b] = im[a] - tIm;
-        re[a] += tRe; im[a] += tIm;
-        const nextRe = curRe * wRe - curIm * wIm;
-        curIm = curRe * wIm + curIm * wRe;
-        curRe = nextRe;
-      }
-    }
-  }
 }
 
 // Multi-band energy extraction for v3 energy formula
@@ -342,6 +297,30 @@ function extractMultiBandFeatures(channelData: Float32Array, sampleRate: number)
   const vocalLikelihood = Math.round(sigmoid(logit) * 1000) / 1000
 
   return { bassDb, midDb, highMidDb, highDb, zcRate, spectralCentroid, spectralFlatness, spectralFlux, vocalLikelihood };
+}
+
+/**
+ * Energy v5 — transparent, hand-weighted combination of loudness-related bands and onset activity.
+ * Not fitted to any third-party tool's ratings. Weights favour the bands a DJ hears as "drive":
+ * kick/sub (bass) and hats/air (high), with mids and spectral flux (rhythmic activity) as support.
+ * Library-wide percentile normalisation (normalizeLibraryEnergy in api.ts) is applied afterwards,
+ * so only the relative ordering of tracks matters here.
+ */
+export function energyScore(f: Pick<MultiBandFeatures, 'bassDb' | 'midDb' | 'highMidDb' | 'highDb' | 'spectralFlux'>): number {
+  const bandDb = 0.30 * f.bassDb + 0.20 * f.midDb + 0.20 * f.highMidDb + 0.30 * f.highDb;
+  const activity = Math.max(0, Math.min(5, f.spectralFlux));
+  const raw = (bandDb - 30) / 6 + (activity - 1) * 0.5;
+  return Math.round(sigmoid(raw) * 1000) / 1000;
+}
+
+/** Spectral vocal likelihood per ~3 s window across the whole track (drives the waveform's vocal lane). */
+export function computeVocalTimeline(channelData: Float32Array, sampleRate: number, windowSeconds = 3): number[] {
+  const win = Math.round(windowSeconds * sampleRate);
+  const out: number[] = [];
+  for (let start = 0; start + FFT_SIZE * 2 <= channelData.length; start += win) {
+    out.push(extractMultiBandFeatures(channelData.subarray(start, Math.min(channelData.length, start + win)), sampleRate).vocalLikelihood);
+  }
+  return out;
 }
 
 /** Normalized RMS of a slice (same dBFS scale as overall energy). */
@@ -521,7 +500,7 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
       }
     }
 
-    // Essentia algorithms require mono 44100 Hz PCM
+    // Analysis expects mono 44100 Hz PCM
     let channelData = audioBuffer.getChannelData(0);
     if (audioBuffer.sampleRate !== 44100) {
       channelData = resample(channelData, audioBuffer.sampleRate, 44100);
@@ -535,7 +514,6 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
       ? channelData.slice(SKIP_SAMPLES, SKIP_SAMPLES + WINDOW_SAMPLES)
       : channelData.slice(0, WINDOW_SAMPLES);
 
-    const e = getEssentia();
 
     // BPM — trust ID3 tag if present and in a valid DJ range (60–200).
     // For untagged tracks, run the internal onset-autocorrelation detector,
@@ -554,92 +532,25 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
       }
     }
 
-    // Key consensus — 5 segments spread across the first 75 % of the track × 4 profiles.
-    // Proportional spacing means we hit the main drop, verse and chorus regardless of
-    // track length, rather than being confined to the first 100 s.  Four diverse
-    // profiles (edma, temperley, edmm, bgate) reduce both pitch-class and mode errors.
-    const SEG_SAMPLES = 20 * 44100;
-    const NUM_SEGS = 5;
-    const KEY_PROFILES = ['edma', 'temperley', 'edmm', 'bgate', 'krumhansl', 'noland'] as const;
-    // Analyse the first 75 % of the track; clamp to the actual track length
+    // Key — CQT chromagram × Krumhansl-Schmuckler templates (src/keyDetection.ts)
+    const keyResult = detectKey(channelData);
+    const pitchClass = keyResult?.pitchClass ?? -1;
+    const mode = keyResult?.mode ?? 0;
+    const keyConfidence = keyResult?.confidence;
     const analysisEnd = Math.floor(channelData.length * 0.75);
-    const keyVotes: Array<{ pitchClass: number; mode: number; strength: number }> = [];
-    for (let seg = 0; seg < NUM_SEGS; seg++) {
-      const start = Math.floor((analysisEnd / NUM_SEGS) * seg);
-      const slice = channelData.slice(start, start + SEG_SAMPLES);
-      if (slice.length < SEG_SAMPLES / 2) break; // segment too short, skip
-      const vec = e.arrayToVector(slice);
-      for (const profile of KEY_PROFILES) {
-        const r = e.KeyExtractor(vec, true, 4096, 4096, 12, 3500, 60, 25, 0.2, profile);
-        keyVotes.push({
-          pitchClass: KEY_TO_PITCH[r.key] ?? -1,
-          mode: r.scale === 'major' ? 1 : 0,
-          strength: (r.strength as number) ?? 0,
-        });
-      }
-      vec.delete();
-    }
-
-
-    // Tally votes — identify key by pitchClass+mode; tie-break by cumulative strength
-    const tally = new Map<string, { pitchClass: number; mode: number; count: number; strength: number }>();
-    for (const v of keyVotes) {
-      if (v.pitchClass === -1) continue;
-      const k = `${v.pitchClass}-${v.mode}`;
-      const entry = tally.get(k);
-      if (entry) { entry.count++; entry.strength += v.strength; }
-      else tally.set(k, { pitchClass: v.pitchClass, mode: v.mode, count: 1, strength: v.strength });
-    }
-    let best = { pitchClass: -1, mode: 0, count: 0, strength: 0 };
-    for (const entry of tally.values()) {
-      if (entry.count > best.count || (entry.count === best.count && entry.strength > best.strength)) {
-        best = entry;
-      }
-    }
-    const pitchClass = best.pitchClass;
-    const mode = best.mode;
-    // Energy v4 — Multi-band spectral analysis including bass band
-    //
-    // v3 was calibrated on electronic music (MixedInKey corpus); the original
-    // formula rewarded hi-hat/brightness (4–20 kHz) and penalised bass-heavy
-    // genres like R&B and hip-hop that lack high-frequency content but are
-    // clearly energetic.  v4 adds a bass band (60–500 Hz, kick + sub) with a
-    // weight derived from the same OLS scaling as the other bands.  All means
-    // and stds for the original bands are unchanged; the bass band uses
-    // estimated values (mean=37.0, std=4.5) consistent with typical tracks.
-    // Library-wide percentile normalisation (normalizeLibraryEnergy) is applied
-    // after all tracks are scored, so only relative ordering matters here.
-    //
-    // Coefficients (v3 preserved, bass added):
-    //   bassDb     w=+0.0130  mean=37.0   std=4.5   ← new: 60–500 Hz
-    //   highMidDb  w=+0.0107  mean=28.454 std=5.648
-    //   highDb     w=+0.0209  mean=26.545 std=6.372
-    //   midDb      w=+0.0141  mean=32.203 std=4.492
-    //   zcRate     w=+0.0016  mean=0.064  std=0.029
     const energyData = channelData.slice(0, analysisEnd);
     const mbFeats = extractMultiBandFeatures(energyData, 44100);
-    const energy = Math.round(Math.max(0, Math.min(1,
-      0.5838
-      + (mbFeats.bassDb    - 37.0  ) / 4.5   * 0.0130
-      + (mbFeats.highMidDb - 28.454) / 5.648 * 0.0107
-      + (mbFeats.highDb    - 26.545) / 6.372 * 0.0209
-      + (mbFeats.midDb     - 32.203) / 4.492 * 0.0141
-      + (mbFeats.zcRate    - 0.064 ) / 0.029 * 0.0016
-    )) * 1000) / 1000;
+    const energy = energyScore(mbFeats);
 
     const energyProfile      = computeEnergyProfile(channelData, 44100);
     const waveform           = computeWaveform(channelData);
     const frequencyWaveform  = computeFrequencyWaveform(channelData, 44100);
 
-    // ML vocal detection — runs after main analysis, replaces spectral estimate when available.
-    // Returns -1 on first call (model not yet loaded) or error; spectral value is the fallback.
-    const [mlVocalProb, vocalTimeline] = await Promise.all([
-      detectVocalProbability(channelData, 44100),
-      detectVocalTimeline(channelData, 44100),
-    ]);
-    const vocalLikelihood = mlVocalProb >= 0 ? mlVocalProb : mbFeats.vocalLikelihood;
+    // Vocal presence — spectral estimate (overall + per ~3 s window for the waveform's vocal lane)
+    const vocalLikelihood = mbFeats.vocalLikelihood;
+    const vocalTimeline   = computeVocalTimeline(channelData, 44100);
 
-    return { bpm, tagBpm, pitchClass, mode, energy, energyProfile, waveform, frequencyWaveform, vocalTimeline: vocalTimeline.length > 0 ? vocalTimeline : undefined, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb, spectralCentroid: mbFeats.spectralCentroid, spectralFlatness: mbFeats.spectralFlatness, spectralFlux: mbFeats.spectralFlux, vocalLikelihood } };
+    return { bpm, tagBpm, pitchClass, mode, keyConfidence, keyVersion: KEY_DETECTION_VERSION, energy, energyProfile, waveform, frequencyWaveform, vocalTimeline: vocalTimeline.length > 0 ? vocalTimeline : undefined, year: tagYear, comment: tagComment, spectral: { zcRate: mbFeats.zcRate, bassDb: mbFeats.bassDb, midDb: mbFeats.midDb, highMidDb: mbFeats.highMidDb, highDb: mbFeats.highDb, spectralCentroid: mbFeats.spectralCentroid, spectralFlatness: mbFeats.spectralFlatness, spectralFlux: mbFeats.spectralFlux, vocalLikelihood } };
   } catch (err: unknown) {
     console.warn(`  (local analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;
@@ -669,7 +580,6 @@ export async function analyzeAudioBuffer(buf: Buffer, bpmHint?: { min: number; m
       ? channelData.slice(SKIP_SAMPLES, SKIP_SAMPLES + WINDOW_SAMPLES)
       : channelData.slice(0, WINDOW_SAMPLES);
 
-    const e = getEssentia();
 
     let bpm = correctBpmWithTag(detectBpm(grooveData.slice(0, 30 * 44100), 44100), null);
     if (bpmHint) {
@@ -681,50 +591,17 @@ export async function analyzeAudioBuffer(buf: Buffer, bpmHint?: { min: number; m
       }
     }
 
-    const SEG_SAMPLES = 20 * 44100;
-    const NUM_SEGS = 5;
-    const KEY_PROFILES = ['edma', 'temperley', 'edmm', 'bgate', 'krumhansl', 'noland'] as const;
+    const keyResult = detectKey(channelData);
+    const pitchClass = keyResult?.pitchClass ?? 0;
+    const mode = keyResult?.mode ?? 0;
+    const keyConfidence = keyResult?.confidence;
     const analysisEnd = Math.floor(channelData.length * 0.75);
-    const keyVotes: Array<{ pitchClass: number; mode: number; strength: number }> = [];
-    for (let seg = 0; seg < NUM_SEGS; seg++) {
-      const start = Math.floor((analysisEnd / NUM_SEGS) * seg);
-      const slice = channelData.slice(start, start + SEG_SAMPLES);
-      if (slice.length < SEG_SAMPLES / 2) break;
-      const vec = e.arrayToVector(slice);
-      for (const profile of KEY_PROFILES) {
-        const r = e.KeyExtractor(vec, true, 4096, 4096, 12, 3500, 60, 25, 0.2, profile);
-        keyVotes.push({ pitchClass: KEY_TO_PITCH[r.key] ?? -1, mode: r.scale === 'major' ? 1 : 0, strength: (r.strength as number) ?? 0 });
-      }
-      vec.delete();
-    }
-
-    const tally = new Map<string, { pitchClass: number; mode: number; count: number; strength: number }>();
-    for (const v of keyVotes) {
-      if (v.pitchClass === -1) continue;
-      const k = `${v.pitchClass}-${v.mode}`;
-      const entry = tally.get(k);
-      if (entry) { entry.count++; entry.strength += v.strength; }
-      else tally.set(k, { pitchClass: v.pitchClass, mode: v.mode, count: 1, strength: v.strength });
-    }
-    let best = { pitchClass: -1, mode: 0, count: 0, strength: 0 };
-    for (const entry of tally.values()) {
-      if (entry.count > best.count || (entry.count === best.count && entry.strength > best.strength)) best = entry;
-    }
-    const pitchClass = best.pitchClass >= 0 ? best.pitchClass : 0;
-    const mode = best.mode;
 
     const energyData = channelData.slice(0, analysisEnd);
     const mbFeats = extractMultiBandFeatures(energyData, 44100);
-    const energy = Math.round(Math.max(0, Math.min(1,
-      0.5838
-      + (mbFeats.bassDb    - 37.0  ) / 4.5   * 0.0130
-      + (mbFeats.highMidDb - 28.454) / 5.648 * 0.0107
-      + (mbFeats.highDb    - 26.545) / 6.372 * 0.0209
-      + (mbFeats.midDb     - 32.203) / 4.492 * 0.0141
-      + (mbFeats.zcRate    - 0.064 ) / 0.029 * 0.0016
-    )) * 1000) / 1000;
+    const energy = energyScore(mbFeats);
 
-    return { bpm, tagBpm: null, pitchClass, mode, energy };
+    return { bpm, tagBpm: null, pitchClass, mode, keyConfidence, keyVersion: KEY_DETECTION_VERSION, energy };
   } catch (err: unknown) {
     console.warn(`  (buffer analysis failed: ${err instanceof Error ? err.message : String(err)})`);
     return null;

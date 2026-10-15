@@ -1,5 +1,5 @@
 import type { Song } from '../types';
-import type { DiscogsRelease, DiscogsCollectionEntry } from '../types';
+import type { DiscogsRelease, DiscogsCollectionEntry, DiscogsMode } from '../types';
 
 function norm(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -86,4 +86,27 @@ export function getDiscogsMatchedFiles(
 ): Set<string> {
   const songs = findSongsForDiscogsCollection(collection, library);
   return new Set(songs.map(s => s.file));
+}
+
+/**
+ * Which files the set generator may draw from, given the media mode:
+ * - Digital ('library'): the playlist filter if any, else everything.
+ * - Vinyl ('crates'): only vinyl (records matched to library files + vinyl-only records), within the playlist if one is selected.
+ * - Mixed ('crates-first'): digital AND vinyl — the playlist (if any) limits the digital side, vinyl-only records
+ *   always stay eligible. Vinyl is favoured by the crates-first score bonus, not by excluding digital tracks.
+ * `undefined` = no restriction.
+ */
+export function generatorFilterFiles(
+  mode: DiscogsMode,
+  crateFiles: Set<string> | undefined,
+  playlistFiles: Set<string> | undefined,
+  vinylOnlyFiles: Iterable<string>,
+): Set<string> | undefined {
+  if (mode === 'crates' && crateFiles) {
+    if (!playlistFiles) return crateFiles.size > 0 ? crateFiles : undefined;
+    const both = new Set([...playlistFiles].filter(f => crateFiles.has(f)));
+    return both.size > 0 ? both : undefined;
+  }
+  if (mode === 'crates-first' && playlistFiles) return new Set([...playlistFiles, ...vinylOnlyFiles]);
+  return playlistFiles;
 }

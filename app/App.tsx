@@ -38,7 +38,7 @@ import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
 import { useDiscogsCollection } from "./hooks/useDiscogsCollection";
-import { getDiscogsMatchedFiles } from "./lib/discogsCollection";
+import { getDiscogsMatchedFiles, generatorFilterFiles } from "./lib/discogsCollection";
 import { loadVinylStore, saveVinylStore } from "./services/vinylStore";
 import { buildVinylSongs } from "./lib/vinylSongs";
 import { apiFetch, setAppPassword, getAppPassword } from "./services/apiFetch";
@@ -767,14 +767,11 @@ function AppInner() {
     [discogsMode, library, vinylSongs],
   );
 
-  // Effective playlist filter files — intersects playlist + discogs when both are active
-  const effectiveFilterFiles = useMemo<Set<string> | undefined>(() => {
-    if (!discogsCrateFiles && !playlistFilterFiles) return undefined;
-    if (!discogsCrateFiles) return playlistFilterFiles;
-    if (!playlistFilterFiles) return discogsCrateFiles.size > 0 ? discogsCrateFiles : undefined;
-    const intersection = new Set([...playlistFilterFiles].filter(f => discogsCrateFiles.has(f)));
-    return intersection.size > 0 ? intersection : undefined;
-  }, [playlistFilterFiles, discogsCrateFiles]);
+  // Files the generator may draw from for the media mode (Digital / Mixed / Vinyl) and playlist filter
+  const effectiveFilterFiles = useMemo<Set<string> | undefined>(
+    () => generatorFilterFiles(discogsMode, discogsCrateFiles, playlistFilterFiles, vinylSongs.map(s => s.file)),
+    [discogsMode, discogsCrateFiles, playlistFilterFiles, vinylSongs],
+  );
 
   // Auto-select effect wired below after setPrefs is available from useSetGenerator
 

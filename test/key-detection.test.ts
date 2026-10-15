@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   detectKey, keyFromChroma, scoreKeys, keyTemplate, pearson, cosine, chromagram, constantQ, decimate,
-  cqtBinFrequency, KS_MAJOR, KS_MINOR, KEY_DETECTION_VERSION,
+  cqtBinFrequency, KS_MAJOR, KS_MINOR, TRIAD_MAJOR, TRIAD_MINOR, KEY_DETECTION_VERSION,
 } from '../src/keyDetection';
 import { toCamelot } from '../src/camelot';
 
@@ -45,24 +45,35 @@ describe('similarity metrics', () => {
 
 describe('Krumhansl-Schmuckler templates', () => {
   it('C major / C minor templates are the unrotated profiles', () => {
-    expect(keyTemplate(0, 1)).toEqual([...KS_MAJOR]);
-    expect(keyTemplate(0, 0)).toEqual([...KS_MINOR]);
+    expect(keyTemplate(0, 1)).toEqual([...TRIAD_MAJOR]);
+    expect(keyTemplate(0, 0)).toEqual([...TRIAD_MINOR]);
+    expect(keyTemplate(0, 1, 'krumhansl')).toEqual([...KS_MAJOR]);
+    expect(keyTemplate(0, 0, 'krumhansl')).toEqual([...KS_MINOR]);
+  });
+  it('triad template: tonic triad anchors, other scale degrees secondary, non-scale notes zero', () => {
+    const c = keyTemplate(0, 1);
+    for (const i of [0, 4, 7]) expect(c[i]).toBeGreaterThan(1);
+    for (const i of [2, 5, 9, 11]) expect(c[i]).toBe(1);
+    for (const i of [1, 3, 6, 8, 10]) expect(c[i]).toBe(0);
+    const am = keyTemplate(9, 0);
+    for (const i of [9, 0, 4]) expect(am[i]).toBeGreaterThan(1);
   });
   it('rotation puts the tonic weight on the tonic pitch class', () => {
     for (let t = 0; t < 12; t++) {
-      expect(keyTemplate(t, 1)[t]).toBe(KS_MAJOR[0]);
-      expect(keyTemplate(t, 0)[t]).toBe(KS_MINOR[0]);
+      expect(keyTemplate(t, 1, 'krumhansl')[t]).toBe(KS_MAJOR[0]);
+      expect(keyTemplate(t, 0, 'krumhansl')[t]).toBe(KS_MINOR[0]);
+      expect(keyTemplate(t, 1)[t]).toBe(TRIAD_MAJOR[0]);
     }
   });
-  it('every one of the 24 templates scores itself as the best key', () => {
-    for (const mode of [0, 1]) for (let t = 0; t < 12; t++) {
-      const [best] = scoreKeys(keyTemplate(t, mode));
+  it('every one of the 24 templates scores itself as the best key (both profiles)', () => {
+    for (const profile of ['triad', 'krumhansl'] as const) for (const mode of [0, 1]) for (let t = 0; t < 12; t++) {
+      const [best] = scoreKeys(keyTemplate(t, mode, profile), 'pearson', profile);
       expect(best).toMatchObject({ pitchClass: t, mode });
       expect(best.score).toBeCloseTo(1);
     }
   });
   it('cosine metric also recovers each template', () => {
-    for (let t = 0; t < 12; t++) expect(scoreKeys(keyTemplate(t, 0), 'cosine')[0]).toMatchObject({ pitchClass: t, mode: 0 });
+    for (let t = 0; t < 12; t++) expect(scoreKeys(keyTemplate(t, 0, 'krumhansl'), 'cosine', 'krumhansl')[0]).toMatchObject({ pitchClass: t, mode: 0 });
   });
   it('scoreKeys returns all 24 keys sorted best-first', () => {
     const s = scoreKeys(keyTemplate(4, 1));
@@ -113,22 +124,26 @@ describe('detectKey (end to end)', () => {
   it('C major progression → 8B', () => {
     // C–F–G–C (C4 E4 G4 / F3 A3 C4 / G3 B3 D4)
     const audio = progression([[48, 60, 64, 67], [41, 53, 57, 60], [43, 55, 59, 62], [48, 60, 64, 67]], 2);
-    expect(camelotOf(detectKey(audio, { segments: 1, segmentSeconds: 8 }))).toBe('8B');
+    expect(camelotOf(detectKey(audio))).toBe('8B');
   });
   it('A minor progression → 8A', () => {
     // Am–Dm–E–Am
     const audio = progression([[45, 57, 60, 64], [38, 50, 53, 57], [40, 52, 56, 59], [45, 57, 60, 64]], 2);
-    expect(camelotOf(detectKey(audio, { segments: 1, segmentSeconds: 8 }))).toBe('8A');
+    expect(camelotOf(detectKey(audio))).toBe('8A');
   });
   it('G major progression → 9B', () => {
     const audio = progression([[43, 55, 59, 62], [36, 48, 52, 55], [38, 50, 54, 57], [43, 55, 59, 62]], 2);
-    expect(camelotOf(detectKey(audio, { segments: 1, segmentSeconds: 8 }))).toBe('9B');
+    expect(camelotOf(detectKey(audio))).toBe('9B');
   });
   it('tuning correction: a progression 30 cents sharp is still C major', () => {
     const parts = [[48, 60, 64, 67], [41, 53, 57, 60], [43, 55, 59, 62], [48, 60, 64, 67]].map(c => chord(c, 2, 30));
     const audio = new Float32Array(parts.reduce((n, p) => n + p.length, 0));
     let o = 0; for (const p of parts) { audio.set(p, o); o += p.length; }
-    expect(camelotOf(detectKey(audio, { segments: 1, segmentSeconds: 8 }))).toBe('8B');
+    expect(camelotOf(detectKey(audio))).toBe('8B');
+  });
+  it('Krumhansl profile option also detects C major', () => {
+    const audio = progression([[48, 60, 64, 67], [41, 53, 57, 60], [43, 55, 59, 62], [48, 60, 64, 67]], 2);
+    expect(camelotOf(detectKey(audio, { profile: 'krumhansl' }))).toBe('8B');
   });
   it('silence → null', () => {
     expect(detectKey(new Float32Array(SR * 10))).toBeNull();

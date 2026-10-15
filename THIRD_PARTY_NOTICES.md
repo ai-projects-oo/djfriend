@@ -8,7 +8,7 @@ Where a package is dual-licensed (e.g. `(MIT OR GPL-3.0-or-later)`), DJFriend us
 
 Map data © OpenStreetMap contributors, available under the Open Database License (ODbL) — https://www.openstreetmap.org/copyright
 
-Key detection uses the Krumhansl & Kessler (1982) probe-tone profiles (published research) and the Brown & Puckette (1992) constant-Q method; implemented from scratch in `src/keyDetection.ts`.
+Key detection is implemented from scratch in `src/keyDetection.ts` from published methods: the Brown & Puckette (1992) constant-Q transform, chroma template matching (tonic-triad template; Krumhansl & Kessler (1982) profiles optional). No third-party key-detection code is used.
 
 ## (MIT AND Zlib)
 

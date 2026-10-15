@@ -1,13 +1,18 @@
 /**
  * Musical key detection — DSP pipeline built from published, public-domain methods:
  *
- *   PCM → Constant-Q Transform → 12-bin chromagram → 24 Krumhansl-Schmuckler templates
+ *   PCM → Constant-Q Transform → 12-bin chromagram → 24 key templates
  *       → Pearson (or cosine) similarity → argmax → key
  *
  * - CQT: Brown & Puckette (1992) spectral-kernel method, 36 bins/octave, A1 (55 Hz) – A7 (3520 Hz).
- * - Chroma: energy of every octave folded into 12 pitch classes, with tuning correction
- *   (the 3 sub-bins per semitone tell us whether the track sits sharp/flat of A440).
- * - Templates: Krumhansl & Kessler (1982) probe-tone profiles, rotated to all 12 tonics.
+ * - Chroma: energy of the A2–A6 octaves (110–1760 Hz, where harmony lives — below is kick/sub,
+ *   above is mostly overtones) folded into 12 pitch classes, with tuning correction (the 3 sub-bins
+ *   per semitone tell us whether the track sits sharp/flat of A440) and spectral whitening
+ *   (each semitone minus its ±1-octave neighbourhood mean, so broadband drums don't smear the chroma).
+ * - Templates: the default "triad" template anchors the tonic triad with the other scale degrees as
+ *   secondary weights; Krumhansl & Kessler (1982) probe-tone profiles are available as `krumhansl`.
+ *   Template choice was benchmarked against key tags already in the user's own files — measurement
+ *   only; no weights were fitted to those tags.
  *
  * Pure and dependency-free; operates on the already-decoded 44.1 kHz mono buffer.
  */
@@ -19,6 +24,16 @@ export const KEY_DETECTION_VERSION = 2;
 // Krumhansl & Kessler (1982) probe-tone ratings, index 0 = tonic
 export const KS_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88] as const;
 export const KS_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17] as const;
+
+// Tonic triad = dominant anchors (1, 3, 5); remaining scale degrees = secondary weights; non-scale = 0
+export const TRIAD_MAJOR = [2, 0, 1, 0, 1.5, 1, 0, 1.75, 0, 1, 0, 1] as const;
+export const TRIAD_MINOR = [2, 0, 1, 1.5, 0, 1, 0, 1.75, 1, 0, 1, 0] as const;
+
+export type KeyProfile = 'triad' | 'krumhansl';
+const PROFILES: Record<KeyProfile, readonly [readonly number[], readonly number[]]> = {
+  triad: [TRIAD_MAJOR, TRIAD_MINOR],
+  krumhansl: [KS_MAJOR, KS_MINOR],
+};
 
 export type SimilarityMetric = 'pearson' | 'cosine';
 
@@ -68,27 +83,27 @@ export function cosine(a: ArrayLike<number>, b: ArrayLike<number>): number {
 }
 
 /** The template for a key: the C-based profile rotated so index `tonic` holds the tonic weight. */
-export function keyTemplate(tonic: number, mode: number): number[] {
-  const base = mode === 1 ? KS_MAJOR : KS_MINOR;
+export function keyTemplate(tonic: number, mode: number, profile: KeyProfile = 'triad'): number[] {
+  const base = PROFILES[profile][mode === 1 ? 0 : 1];
   return Array.from({ length: 12 }, (_, pc) => base[(pc - tonic + 12) % 12]);
 }
 
 /** Similarity of a 12-bin chroma vector (C = 0) to all 24 key templates, best first. */
-export function scoreKeys(chroma: ArrayLike<number>, metric: SimilarityMetric = 'pearson'): KeyScore[] {
+export function scoreKeys(chroma: ArrayLike<number>, metric: SimilarityMetric = 'pearson', profile: KeyProfile = 'triad'): KeyScore[] {
   const sim = metric === 'cosine' ? cosine : pearson;
   const out: KeyScore[] = [];
   for (const mode of [1, 0]) {
-    for (let tonic = 0; tonic < 12; tonic++) out.push({ pitchClass: tonic, mode, score: sim(chroma, keyTemplate(tonic, mode)) });
+    for (let tonic = 0; tonic < 12; tonic++) out.push({ pitchClass: tonic, mode, score: sim(chroma, keyTemplate(tonic, mode, profile)) });
   }
   return out.sort((a, b) => b.score - a.score);
 }
 
 /** Argmax over the 24 templates. Null when the chroma carries no pitch information (silence, noise floor). */
-export function keyFromChroma(chroma: ArrayLike<number>, metric: SimilarityMetric = 'pearson'): KeyResult | null {
+export function keyFromChroma(chroma: ArrayLike<number>, metric: SimilarityMetric = 'pearson', profile: KeyProfile = 'triad'): KeyResult | null {
   let max = 0, min = Infinity;
   for (let i = 0; i < 12; i++) { max = Math.max(max, chroma[i]); min = Math.min(min, chroma[i]); }
   if (!(max > 0) || max - min < max * 1e-6) return null;
-  const [best, second] = scoreKeys(chroma, metric);
+  const [best, second] = scoreKeys(chroma, metric, profile);
   const confidence = Math.max(0, Math.min(1, (best.score - second.score) / Math.max(1e-9, Math.abs(best.score))));
   return {
     pitchClass: best.pitchClass,
@@ -197,6 +212,10 @@ export function constantQ(signal: Float64Array): Float64Array[] {
 
 // ── Chromagram ───────────────────────────────────────────────────────────────
 
+const CHROMA_MIN_SEMITONE = 12;   // A2, 110 Hz
+const CHROMA_MAX_SEMITONE = 60;   // A6, 1760 Hz (exclusive)
+const WHITEN_SEMITONES = 12;
+
 /**
  * Folds CQT frames into one time-averaged 12-bin chroma vector (C = 0).
  * Tuning: whichever of the 3 sub-bin positions holds the most energy is taken as the semitone centre.
@@ -209,13 +228,24 @@ export function chromagram(cqtFrames: Float64Array[]): number[] {
   for (const f of cqtFrames) for (let k = 0; k < NUM_BINS; k++) subEnergy[k % BINS_PER_SEMITONE] += f[k];
   const centre = subEnergy.indexOf(Math.max(...subEnergy));
 
+  const semi = new Float64Array(SEMITONES);
   for (const f of cqtFrames) {
     for (let s = 0; s < SEMITONES; s++) {
       const c = s * BINS_PER_SEMITONE + centre;
       let e = f[c];
       if (c - 1 >= 0) e += 0.5 * f[c - 1];
       if (c + 1 < NUM_BINS) e += 0.5 * f[c + 1];
-      chroma[(A_PITCH_CLASS + s) % 12] += Math.log1p(100 * e);   // log compression tames loud bass notes
+      semi[s] = e;
+    }
+    for (let s = CHROMA_MIN_SEMITONE; s < CHROMA_MAX_SEMITONE; s++) {
+      // Whitening: keep only what stands out from the surrounding ±1 octave (tonal peaks, not drum noise)
+      let sum = 0, n = 0;
+      for (let d = -WHITEN_SEMITONES; d <= WHITEN_SEMITONES; d++) {
+        const j = s + d;
+        if (j >= 0 && j < SEMITONES) { sum += semi[j]; n++; }
+      }
+      const peak = Math.max(0, semi[s] - sum / n);
+      chroma[(A_PITCH_CLASS + s) % 12] += Math.sqrt(peak);   // compression tames loud bass notes
     }
   }
   return chroma.map(v => v / cqtFrames.length);
@@ -224,23 +254,18 @@ export function chromagram(cqtFrames: Float64Array[]): number[] {
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 /**
- * Detects the key of a decoded 44.1 kHz mono track. Analyses `segments` 20 s windows spread
- * over the first 75 % of the track (intro, verse, drop…) and averages them into one chromagram.
+ * Detects the key of a decoded 44.1 kHz mono track. Analyses the whole track (skipping the first
+ * and last 5 %, usually beat-only intro/outro) as one averaged chromagram.
  */
 export function detectKey(
   channelData: Float32Array,
-  opts: { segments?: number; segmentSeconds?: number; metric?: SimilarityMetric } = {},
+  opts: { metric?: SimilarityMetric; profile?: KeyProfile; trimEnds?: boolean } = {},
 ): KeyResult | null {
-  const segments = opts.segments ?? 5;
-  const segLen = Math.round((opts.segmentSeconds ?? 20) * SAMPLE_RATE);
-  const end = channelData.length > segLen * 2 ? Math.floor(channelData.length * 0.75) : channelData.length;
-  const frames: Float64Array[] = [];
-  for (let seg = 0; seg < segments; seg++) {
-    const start = Math.floor((end / segments) * seg);
-    const slice = channelData.subarray(start, Math.min(channelData.length, start + segLen));
-    if (slice.length < FRAME * DECIMATION) break;
-    frames.push(...constantQ(decimate(slice)));
-  }
+  const trim = opts.trimEnds !== false && channelData.length > SAMPLE_RATE * 20;
+  const start = trim ? Math.floor(channelData.length * 0.05) : 0;
+  const end = trim ? Math.floor(channelData.length * 0.95) : channelData.length;
+  if (end - start < FRAME * DECIMATION) return null;
+  const frames = constantQ(decimate(channelData.subarray(start, end)));
   if (frames.length === 0) return null;
-  return keyFromChroma(chromagram(frames), opts.metric);
+  return keyFromChroma(chromagram(frames), opts.metric, opts.profile);
 }

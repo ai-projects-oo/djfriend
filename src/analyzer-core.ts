@@ -532,7 +532,7 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
       }
     }
 
-    // Key — CQT chromagram × Krumhansl-Schmuckler templates (src/keyDetection.ts)
+    // Key — CQT chromagram × key templates (src/keyDetection.ts)
     const keyResult = detectKey(channelData);
     const pitchClass = keyResult?.pitchClass ?? -1;
     const mode = keyResult?.mode ?? 0;
@@ -615,7 +615,7 @@ export async function analyzeAudioBuffer(buf: Buffer, bpmHint?: { min: number; m
 export function analyzePcm(samples: Float32Array, sampleRate: number): { pitchClass: number; mode: number; keyConfidence?: number; keyVersion: number; bpm: number } | null {
   if (samples.length < sampleRate * 5) return null;
   const pcm = sampleRate !== 44100 ? resample(samples, sampleRate, 44100) : samples;
-  const key = detectKey(pcm, { segments: 1, segmentSeconds: pcm.length / 44100 });
+  const key = detectKey(pcm, { trimEnds: false });
   if (!key) return null;
   const bpm = detectBpm(pcm.subarray(0, Math.min(pcm.length, 30 * 44100)), 44100);
   return { pitchClass: key.pitchClass, mode: key.mode, keyConfidence: key.confidence, keyVersion: KEY_DETECTION_VERSION, bpm };

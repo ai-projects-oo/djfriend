@@ -14,7 +14,7 @@ type SpotifyExportStatus =
   | { phase: "searching"; completed: number; total: number }
   | { phase: "review"; matches: SpotifyMatchResult[]; playlistName: string }
   | { phase: "creating" }
-  | { phase: "done"; playlistUrl: string; matched: number; total: number }
+  | { phase: "done"; playlistUrl: string; matched: number; total: number; isPublic?: boolean }
   | { phase: "error"; message: string };
 
 interface UseSpotifyExportParams {

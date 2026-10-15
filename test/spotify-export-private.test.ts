@@ -26,7 +26,7 @@ function mockSpotify(opts: { createReturnsPublic?: boolean; privateFails?: boole
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('Spotify playlists created by DJFriend are private', () => {
+describe('Spotify playlists created by DJFriend ask to be private', () => {
   it('"Don\'t have" playlist: created with public:false, then set private before tracks are added', async () => {
     const calls = mockSpotify({ createReturnsPublic: true })
     const result = await createPlaylistFromSpotifyIds(['a', 'b'], "Don't have from Mix", 'tok')
@@ -40,7 +40,7 @@ describe('Spotify playlists created by DJFriend are private', () => {
     expect(priv).toBeGreaterThan(-1)
     expect(calls[priv].body).toEqual({ public: false })
     expect(priv).toBeLessThan(addTracks)
-    expect(result).toEqual({ playlistUrl: 'https://open.spotify.com/playlist/pl1', count: 2 })
+    expect(result).toEqual({ playlistUrl: 'https://open.spotify.com/playlist/pl1', count: 2, isPublic: false })
   })
 
   it('set export playlist is made private too', async () => {
@@ -50,11 +50,12 @@ describe('Spotify playlists created by DJFriend are private', () => {
     expect(calls.some(c => c.method === 'PUT' && c.url.endsWith('/v1/playlists/pl1') && (c.body as { public?: boolean }).public === false)).toBe(true)
   })
 
-  it('checks the playlist really is private before adding tracks, and removes it if not', async () => {
+  it('when Spotify keeps it public, still adds the tracks and reports isPublic so the UI can say so', async () => {
     const calls = mockSpotify({ staysPublic: true })
-    await expect(createPlaylistFromSpotifyIds(['a'], 'X', 'tok')).rejects.toThrow(/kept it public/)
-    expect(calls.some(c => c.url.endsWith('/v1/playlists/pl1/items'))).toBe(false)
-    expect(calls.some(c => c.method === 'DELETE' && c.url.includes('/v1/me/library?uris=spotify%3Aplaylist%3Apl1'))).toBe(true)
+    const result = await createPlaylistFromSpotifyIds(['a'], 'X', 'tok')
+    expect(result.isPublic).toBe(true)
+    expect(calls.some(c => c.url.endsWith('/v1/playlists/pl1/items'))).toBe(true)
+    expect(calls.some(c => c.method === 'DELETE')).toBe(false)
   })
 
   it('spaces Spotify calls at least 200ms apart', async () => {
@@ -67,8 +68,16 @@ describe('Spotify playlists created by DJFriend are private', () => {
     for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(195)
   })
 
-  it('reports an error instead of silently leaving the playlist public', async () => {
-    mockSpotify({ privateFails: true })
-    await expect(createPlaylistFromSpotifyIds(['a'], 'X', 'tok')).rejects.toThrow(/couldn't make the playlist private/)
+  it('a failed make-private request does not lose the playlist; it is reported as public', async () => {
+    mockSpotify({ privateFails: true, staysPublic: true })
+    const result = await createPlaylistFromSpotifyIds(['a'], 'X', 'tok')
+    expect(result.isPublic).toBe(true)
+  })
+
+  it('set export reports isPublic too', async () => {
+    mockSpotify({ staysPublic: true })
+    const match = { uri: 'spotify:track:x' } as NonNullable<SpotifyMatchResult['match']>
+    const r = await createPlaylistFromMatches([{ match, excluded: false } as SpotifyMatchResult], 'Friday set', 'tok')
+    expect(r.isPublic).toBe(true)
   })
 })

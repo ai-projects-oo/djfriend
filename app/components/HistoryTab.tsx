@@ -26,6 +26,8 @@ interface HistoryTabProps {
   handleRateEntry: (id: string, rating: 1 | 2 | 3 | 4 | 5 | null) => void;
   handleNoteEntry: (id: string, notes: string) => void;
   onLoadEntry: (entry: HistoryEntry) => void;
+  /** Plays tracks in DJFriend's player (files, start index) */
+  onPlay?: (files: string[], start: number) => void;
 }
 
 function getCurvePresetName(curve: CurvePoint[]): string {
@@ -52,7 +54,7 @@ export default function HistoryTab({
   handleRenameEntry,
   handleRateEntry,
   handleNoteEntry,
-  onLoadEntry,
+  onLoadEntry, onPlay,
 }: HistoryTabProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
 
@@ -397,20 +399,10 @@ export default function HistoryTab({
                           </span>
                           <button
                             onClick={() =>
-                              void fetch("/api/play-in-music", {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                },
-                                body: JSON.stringify({
-                                  filePath: track.filePath,
-                                  artist: track.artist,
-                                  title: track.title,
-                                }),
-                              })
+                              onPlay?.(entry.tracks.map(t => t.file), idx)
                             }
                             className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
-                            title="Play in Apple Music"
+                            title="Play"
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"

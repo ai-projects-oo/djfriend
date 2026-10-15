@@ -551,3 +551,27 @@ describe('Apple Music export', () => {
     expect(onPush).toHaveBeenLastCalledWith(['p1'], 'Push “Warmup” to Apple Music')
   })
 })
+
+describe('LibraryTab duplicates — where each copy is used', () => {
+  it('each duplicate shows how many playlists it is in, and hovering lists them by source', () => {
+    const lib = [song('one/x.mp3', 'Same'), song('two/x.mp3', 'Same'), song('c.mp3', 'Charlie')]
+    renderTable({
+      library: lib,
+      playlistNamesFor: f => (f === 'one/x.mp3' ? ['Warmup', 'Peak'] : []),
+      containingSources: s => (s.file === 'one/x.mp3' ? [{ group: 'Apple Music', label: 'Wine house', view: { kind: 'apple', name: 'Wine house' } }] : []),
+    })
+    const toggle = [...container.querySelectorAll('button')].find(b => b.textContent?.includes('duplicate group'))!
+    click(toggle)
+    const badges = [...container.querySelectorAll('[aria-label^="In "], [aria-label="Not in any playlist"]')] as HTMLElement[]
+    expect(badges.map(b => b.textContent)).toEqual(['in 3 playlists', 'no playlists'])
+    act(() => { badges[0].dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+    const tip = container.querySelector('[role="tooltip"]')!
+    expect(tip.textContent).toContain('Playlists')
+    expect(tip.textContent).toContain('Warmup')
+    expect(tip.textContent).toContain('Peak')
+    expect(tip.textContent).toContain('Apple Music')
+    expect(tip.textContent).toContain('Wine house')
+    act(() => { badges[0].dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
+    expect(container.querySelector('[role="tooltip"]')).toBeNull()
+  })
+})

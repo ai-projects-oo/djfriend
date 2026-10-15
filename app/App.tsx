@@ -38,7 +38,7 @@ import { useSetGenerator } from "./hooks/useSetGenerator";
 import { useSpotifyExport } from "./hooks/useSpotifyExport";
 import { useSpotifyImport } from "./hooks/useSpotifyImport";
 import { useDiscogsCollection } from "./hooks/useDiscogsCollection";
-import { getDiscogsMatchedFiles } from "./lib/discogsCollection";
+import { getDiscogsMatchedFiles, generatorFilterFiles } from "./lib/discogsCollection";
 import { loadVinylStore, saveVinylStore } from "./services/vinylStore";
 import { buildVinylSongs } from "./lib/vinylSongs";
 import { apiFetch, setAppPassword, getAppPassword } from "./services/apiFetch";
@@ -219,7 +219,7 @@ export default function App() {
 function AppInner() {
   const [activeTab, setActiveTab] = useState<
     "Set Generator" | "Library" | "Crates" | "History" | "Gig Finder"
-  >("Set Generator");
+  >("Library");
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
       const raw = localStorage.getItem("djfriend-history");
@@ -767,14 +767,11 @@ function AppInner() {
     [discogsMode, library, vinylSongs],
   );
 
-  // Effective playlist filter files — intersects playlist + discogs when both are active
-  const effectiveFilterFiles = useMemo<Set<string> | undefined>(() => {
-    if (!discogsCrateFiles && !playlistFilterFiles) return undefined;
-    if (!discogsCrateFiles) return playlistFilterFiles;
-    if (!playlistFilterFiles) return discogsCrateFiles.size > 0 ? discogsCrateFiles : undefined;
-    const intersection = new Set([...playlistFilterFiles].filter(f => discogsCrateFiles.has(f)));
-    return intersection.size > 0 ? intersection : undefined;
-  }, [playlistFilterFiles, discogsCrateFiles]);
+  // Files the generator may draw from for the media mode (Digital / Mixed / Vinyl) and playlist filter
+  const effectiveFilterFiles = useMemo<Set<string> | undefined>(
+    () => generatorFilterFiles(discogsMode, discogsCrateFiles, playlistFilterFiles, vinylSongs.map(s => s.file)),
+    [discogsMode, discogsCrateFiles, playlistFilterFiles, vinylSongs],
+  );
 
   // Auto-select effect wired below after setPrefs is available from useSetGenerator
 
@@ -1766,7 +1763,7 @@ function AppInner() {
 
         {/* Tab nav */}
         <div className="px-2 flex gap-1">
-          {(["Set Generator", "Library", "History", "Crates", "Gig Finder"] as const).map((tab) => {
+          {(["Library", "Set Generator", "History", "Crates", "Gig Finder"] as const).map((tab) => {
             const isCratesLocked = tab === "Crates" && !hasDiscogsOAuth;
             const isLocked = isCratesLocked;
             return (
@@ -3475,17 +3472,11 @@ function AppInner() {
                                         <button
                                           onClick={() => {
                                             if (track.inLibrary) {
-                                              void apiFetch("/api/play-in-music", {
-                                                method: "POST",
-                                                headers: {
-                                                  "Content-Type":
-                                                    "application/json",
-                                                },
-                                                body: JSON.stringify({
-                                                  artist: track.artist,
-                                                  title: track.title,
-                                                }),
-                                              });
+                                              // Play in DJFriend's own player, continuing with the playlist's other owned tracks
+                                              const owned = findSongsForImport(entry.tracks, library);
+                                              const [song] = findSongsForImport([track], library);
+                                              const at = song ? owned.findIndex(s => s.file === song.file) : -1;
+                                              if (at >= 0) player.playTracks(owned.map(s => s.file), at);
                                             } else {
                                               window.open(
                                                 `spotify:track:${track.spotifyId}`,
@@ -3495,7 +3486,7 @@ function AppInner() {
                                           className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
                                           title={
                                             track.inLibrary
-                                              ? "Play in Apple Music"
+                                              ? "Play"
                                               : "Play in Spotify"
                                           }
                                         >
@@ -3995,6 +3986,7 @@ function AppInner() {
             handleRateEntry={handleRateEntry}
             handleNoteEntry={handleNoteEntry}
             onLoadEntry={handleLoadHistoryEntry}
+            onPlay={player.playTracks}
           />
         </main>
       )}

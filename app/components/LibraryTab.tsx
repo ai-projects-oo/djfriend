@@ -209,6 +209,43 @@ function SortHeader({ col, label, sortKey, sortAsc, onSort }: { col: SortKey; la
   );
 }
 
+// ─── Duplicates: where a file is used ────────────────────────────────────────
+
+/** "In N playlists" badge; hover (or focus) lists every playlist, Apple Music playlist and set containing the file. */
+function DupPlaylists({ sources }: { sources: { group: string; label: string }[] }) {
+  const groups = [...new Set(sources.map(s => s.group))];
+  const n = sources.length;
+  // Fixed-position popover: the duplicates panel scrolls, which would clip an absolutely positioned one
+  const [pos, setPos] = useState<{ top: number; right: number; below: boolean } | null>(null);
+  const show = (e: React.SyntheticEvent<HTMLElement>) => {
+    if (!n) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const below = r.top < 280;
+    setPos({ top: below ? r.bottom + 4 : r.top - 4, right: window.innerWidth - r.right, below });
+  };
+  return (
+    <span className="flex-shrink-0" tabIndex={0} onMouseEnter={show} onMouseLeave={() => setPos(null)} onFocus={show} onBlur={() => setPos(null)}
+      aria-label={n ? `In ${n} playlist${n === 1 ? "" : "s"}: ${sources.map(s => s.label).join(", ")}` : "Not in any playlist"}>
+      <span className={`text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap ${n ? "border-[#7c3aed]/40 text-[#c4b5fd] bg-[#7c3aed]/10 cursor-help" : "border-[#2c2c42] text-[#7d8ba0]"}`}>
+        {n ? `in ${n} playlist${n === 1 ? "" : "s"}` : "no playlists"}
+      </span>
+      {pos && (
+        <span role="tooltip" style={{ top: pos.top, right: pos.right, transform: pos.below ? undefined : "translateY(-100%)" }}
+          className="fixed z-[120] w-64 max-h-64 overflow-y-auto rounded-lg border border-[#363650] bg-[#20202e] shadow-2xl p-2 text-left">
+          {groups.map(g => (
+            <span key={g} className="block mb-1 last:mb-0">
+              <span className="block text-[9px] uppercase tracking-widest font-semibold text-[#8d9aab] mb-0.5">{g}</span>
+              {sources.filter(s => s.group === g).map(s => (
+                <span key={`${g}-${s.label}`} className="block text-[11px] text-[#e2e8f0] truncate">{s.label}</span>
+              ))}
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function LibraryTab({
@@ -298,6 +335,11 @@ export default function LibraryTab({
   };
 
   const songsByFile = useMemo(() => new Map(library.map(s => [s.file, s])), [library]);
+  // Every playlist / import / set a track is in — shown on hover in the duplicates panel
+  const whereIs = useCallback((song: Song): { group: string; label: string }[] => [
+    ...(playlistNamesFor?.(song.file) ?? []).map(label => ({ group: "Playlists", label })),
+    ...(containingSources?.(song) ?? []).map(({ group, label }) => ({ group, label })),
+  ], [playlistNamesFor, containingSources]);
   const dupGroups = useMemo(() => {
     const groups: Record<string, Song[]> = {};
     for (const s of library) { const k = dupKey(s); (groups[k] ??= []).push(s); }
@@ -532,6 +574,7 @@ export default function LibraryTab({
                         <label key={s.file} className="flex items-center gap-3 cursor-pointer group/dup">
                           <input type="checkbox" checked={sel.has(s.file)} onChange={() => toggleDupSelection(gk, s.file)} className="w-3.5 h-3.5 accent-[#ef4444] cursor-pointer flex-shrink-0" />
                           <span className={`text-[10px] font-mono truncate flex-1 transition-colors ${sel.has(s.file) ? "text-[#ef4444]/70 line-through" : "text-[#9aa8ba] group-hover/dup:text-[#ccd6e2]"}`} title={s.filePath ?? s.file}>{s.filePath ?? s.file}</span>
+                          <DupPlaylists sources={whereIs(s)} />
                           <span className="text-[10px] text-[#7d8ba0] whitespace-nowrap">{s.bpm} BPM · {s.duration != null ? fmt(s.duration) : "—"}</span>
                         </label>
                       ))}

@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind, ManualData, VinylStore, Song, Playlist, SmartCriteria } from "./types";
+import type { HistoryEntry, DJPreferences, TipConfig, DiscogsMode, DJSystem, ChannelKind, ManualData, VinylStore, Song, Playlist, SmartCriteria, SyncRecord } from "./types";
 import { DEFAULT_TIP_CONFIG, DEFAULT_DJ_SYSTEM, vinylDeckCount } from "./types";
-import EnergyCurveEditor from "./components/EnergyCurveEditor";
+import EnergyCurveEditor, { DEFAULT_CURVE } from "./components/EnergyCurveEditor";
 import SetTracklist from "./components/SetTracklist";
 import SettingsModal from "./components/SettingsModal";
 import CalendarPicker from "./components/CalendarPicker";
 import HistoryTab from "./components/HistoryTab";
 import LibraryTab from "./components/LibraryTab";
-import { genreMatchesUmbrella, matchesGenrePrefs, TAG_GROUPS } from "./lib/genreUtils";
+import { genreMatchesUmbrella, matchesGenrePrefs, TAG_GROUPS, DEFAULT_PREFS } from "./lib/genreUtils";
 import GenrePicker from "./components/GenrePicker";
 import { parseRekordboxXml } from "./lib/rekordboxImport";
 import { GENRE_BPM_RANGES } from "./lib/bpmRanges";
@@ -63,6 +63,8 @@ import { materializeSmartPlaylists, evaluateSmart, playStatsByFile } from "./lib
 import SmartPlaylistEditor from "./components/SmartPlaylistEditor";
 import UndoToast from "./components/UndoToast";
 import NowPlayingBar from "./components/NowPlayingBar";
+import { useDeviceSync } from "./hooks/useDeviceSync";
+import { applyPlaylistRecords, applySetRecords, applyVinylRecords } from "./lib/sync/records";
 import TrackContextMenu, { type TrackMenuState } from "./components/TrackContextMenu";
 import TrackInfoModal from "./components/TrackInfoModal";
 import { exportTrackM3U, reanalyzeTrack, removeTracksFromLibrary } from "./services/trackActions";
@@ -700,6 +702,17 @@ function AppInner() {
     else if (v.kind === "apple") generateFrom(`apple:${v.name}`);
     else if (v.kind === "spotify") generateFrom(v.id);
   }, [generateFrom]);
+
+  // ── Phone sync (Phase 9) — end-to-end encrypted via the relay ─────────────
+  const { applyRemote: applyRemotePlaylists } = playlistsApi;
+  const deviceSync = useDeviceSync(
+    { library, playlistLib, history, vinylStore, ready: !isInitializing && library.length > 0 },
+    useCallback((applied: SyncRecord[]) => {
+      applyRemotePlaylists(l => applyPlaylistRecords(l, applied));
+      setVinylStore(v => applyVinylRecords(v, applied));
+      setHistory(h => applySetRecords(h, applied, songsByFile, { prefs: DEFAULT_PREFS, curve: DEFAULT_CURVE }));
+    }, [applyRemotePlaylists, songsByFile]),
+  );
 
   const { expandToPlaylist } = playlistsApi;
   const showIn = useCallback((view: LibraryView, file: string) => {
@@ -4634,6 +4647,7 @@ function AppInner() {
       </div>{/* end tab content wrapper */}
 
       <SettingsModal
+        phoneSync={{ pairing: deviceSync.pairing, status: deviceSync.status, onPair: deviceSync.pair, onUnpair: deviceSync.unpair, onSyncNow: () => void deviceSync.syncNow() }}
         open={settingsOpen}
         onClose={() => { setSettingsOpen(false); setSettingsScrollTo(undefined) }}
         scrollToSection={settingsScrollTo}

@@ -16,6 +16,7 @@ import { deriveSemanticTags, genreVocalType } from './ai.js'
 import { trainOnVectors, isValidModelWeights } from './mlTrain.js'
 import type { ModelWeights } from './mlTrain.js'
 import { upstashEnabled, redisGet, redisSet } from './upstash.js'
+import { createRelay, fileStorage, RELAY_LIMITS } from './syncRelay.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -688,6 +689,28 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     if (req.method !== 'GET') { next(); return }
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ requiresPassword: !!process.env.APP_PASSWORD }))
+  })
+
+  // Device-sync relay (Phase 9) — before the auth guard: paired phones have no app password; access is
+  // protected by the unguessable sync id, and the relay only ever holds end-to-end-encrypted data.
+  const relay = createRelay(fileStorage(process.env.SYNC_DIR || path.join(os.homedir(), '.djfriend', 'sync-relay')))
+  void relay.sweep().catch(() => {})
+  middlewares.use('/api/sync', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return }
+    const chunks: Buffer[] = []
+    let size = 0, tooBig = false
+    req.on('data', (c: Buffer) => { size += c.length; if (size > RELAY_LIMITS.snapshotBytes + 1024) tooBig = true; else chunks.push(c) })
+    req.on('end', () => {
+      res.setHeader('Content-Type', 'application/json')
+      if (tooBig) { res.statusCode = 413; res.end(JSON.stringify({ error: 'Too large' })); return }
+      const url = new URL(`/api/sync${req.url ?? ''}`, 'http://relay')
+      relay.handle(req.method ?? 'GET', url.pathname, url.searchParams, Buffer.concat(chunks).toString('utf-8'))
+        .then(r => { res.statusCode = r.status; res.end(JSON.stringify(r.body)) })
+        .catch(() => { res.statusCode = 500; res.end(JSON.stringify({ error: 'Relay error' })) })
+    })
   })
 
   // Auth guard — active only when APP_PASSWORD env var is set

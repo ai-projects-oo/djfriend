@@ -463,3 +463,30 @@ export interface GigFinderProfile {
   }
   locationFitThresholds: { maxKm: number; score: number }[]
 }
+
+// ─── Device sync (Phase 9: mobile companion) ─────────────────────────────────
+
+/** Contents of the pairing QR code. `key` is the shared secret — never sent to the relay. */
+export interface PairingPayload {
+  v: 1;
+  syncId: string;          // 128-bit random, base64url — the only identifier the relay sees
+  key: string;             // 256-bit random, base64url — XChaCha20-Poly1305 key
+  relay: string;           // relay base URL, e.g. https://djfriend.onrender.com
+}
+
+/** Hybrid logical clock: wall time (ms), logical counter, and the writing device — totally ordered. */
+export interface Hlc { t: number; c: number; d: string }
+
+export type SyncRecordType = 'track' | 'playlist' | 'folder' | 'set' | 'vinylTrack' | 'gigLead';
+
+/** One synced record. `deleted` marks a tombstone (data omitted). */
+export interface SyncRecord {
+  type: SyncRecordType;
+  id: string;
+  hlc: Hlc;
+  deleted?: boolean;
+  data?: unknown;
+}
+
+/** What the relay stores: opaque ciphertext plus the nonce. */
+export interface SyncEnvelope { n: string; c: string }

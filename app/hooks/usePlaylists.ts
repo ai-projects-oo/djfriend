@@ -150,6 +150,8 @@ export function usePlaylists() {
     }) }), [update]),
     toggleFolder: useCallback((id: string) => update(l => P.toggleFolder(l, id)), [update]),
     expandToPlaylist: useCallback((id: string) => update(l => P.expandToPlaylist(l, id)), [update]),
+    /** Applies changes that arrived from a paired device (not undoable, no notice). */
+    applyRemote: useCallback((fn: (l: PlaylistLibrary) => PlaylistLibrary) => update(fn), [update]),
     moveFolder: useCallback((id: string, parentId: string | undefined) => update(l => P.moveFolder(l, id, parentId), { undoable: true }), [update]),
     applyAppleMusicResult: useCallback((result: AppleMusicExportResult) => {
       // Keep the new Music.app links in undo snapshots too — undoing an earlier edit must not

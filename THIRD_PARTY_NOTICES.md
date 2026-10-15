@@ -47,6 +47,8 @@ Key detection is implemented from scratch in `src/keyDetection.ts` from publishe
 
 ## MIT
 
+- @noble/ciphers@2.4.0
+- qrcode@1.5.4
 - @borewit/text-codec@0.2.2
 - @emnapi/core@1.9.2
 - @emnapi/runtime@1.9.2

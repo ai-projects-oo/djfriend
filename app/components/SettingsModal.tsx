@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import PhonePairing, { type PhonePairingProps } from "./PhonePairing";
 import { apiFetch } from '../services/apiFetch'
 import { redirectToSpotifyLogin, getStoredToken, clearStoredToken } from '../services/spotifyExport'
 import { saveApiKey, clearSession as clearOpenAiKey } from '../services/openAiAuth'
@@ -86,12 +87,14 @@ interface Props {
   openAiFeatures?: OpenAiFeatures
   /** called when features change or user signs out */
   onOpenAiFeaturesChange?: (features: OpenAiFeatures | null) => void
+  /** phone pairing / encrypted sync (Phase 9) */
+  phoneSync?: PhonePairingProps
 }
 
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron')
 
-export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleared, scrollToSection, onSyncDiscogs, discogsCollection, discogsSyncPhase, discogsSyncMessage, openAiSession, openAiFeatures, onOpenAiFeaturesChange }: Props) {
+export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleared, scrollToSection, onSyncDiscogs, discogsCollection, discogsSyncPhase, discogsSyncMessage, openAiSession, openAiFeatures, onOpenAiFeaturesChange, phoneSync }: Props) {
   // Desktop-only state
   const [musicFolder, setMusicFolder] = useState('')
   const loadedMusicFolder = useRef('')
@@ -610,6 +613,13 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             </div>
           )}
         </div>
+
+{/* ── Phone (Phase 9 sync) ─────────────────────────────────── */}
+        {phoneSync && (
+          <div className="mt-5 pt-5 border-t border-[#2c2c42]">
+            <PhonePairing {...phoneSync} />
+          </div>
+        )}
 
 {/* ── Danger Zone (both platforms) ─────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#2c2c42]">

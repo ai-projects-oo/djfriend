@@ -295,60 +295,48 @@ async function searchTrack(artist: string, title: string, token: string): Promis
   return null;
 }
 
-// Every playlist DJFriend creates on Spotify is private. Spotify doesn't always honour
-// `public: false` on create, so the visibility is set again right after.
+// DJFriend asks Spotify for a private playlist (public:false on create, then again via PUT), but since
+// the Feb 2026 Web API changes Spotify keeps API-created playlists public regardless. The UI warns
+// before creating, and `isPublic` (Spotify's own read-back) is returned so it can tell the DJ to
+// switch it to private in the Spotify app.
 async function createPlaylist(
-  userId: string,
+  _userId: string,
   name: string,
   token: string,
-): Promise<{ id: string; external_urls: { spotify: string } }> {
+): Promise<{ id: string; external_urls: { spotify: string }; isPublic: boolean }> {
+  // Feb 2026 Web API migration: POST /users/{id}/playlists → POST /me/playlists
   const playlist = await spotifyFetch<{ id: string; public?: boolean | null; external_urls: { spotify: string } }>(
-    `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists`,
+    'https://api.spotify.com/v1/me/playlists',
     token,
     {
       method: 'POST',
       body: JSON.stringify({ name, public: false, description: 'Created by DJFriend' }),
     },
   );
-  try {
-    await makePlaylistPrivate(playlist.id, token);
-  } catch (err) {
-    // Don't leave a public (or duplicate, on retry) playlist behind — remove it from the account
-    await spotifyRateLimited(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlist.id)}/followers`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {});
-    throw err;
-  }
-  return playlist;
+  const isPublic = await requestPrivate(playlist.id, token);
+  return { ...playlist, isPublic };
 }
 
-async function makePlaylistPrivate(playlistId: string, token: string): Promise<void> {
+/** Asks Spotify to make the playlist private, then reads back what Spotify reports. Returns true if it is still public. */
+async function requestPrivate(playlistId: string, token: string): Promise<boolean> {
   // Change-details returns an empty body, so this can't go through spotifyFetch (which parses JSON)
-  const res = await spotifyRateLimited(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}`, {
+  await spotifyRateLimited(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ public: false }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(`Spotify: couldn't make the playlist private — ${err.error?.message ?? res.statusText}`);
-  }
-  // Read it back: never report success for a playlist Spotify still lists as public
+  }).catch(() => null);
   const check = await spotifyFetch<{ public?: boolean | null }>(
     `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}?fields=public`,
     token,
-  );
-  if (check.public === true) {
-    throw new Error('Spotify created the playlist but kept it public. Open it in Spotify and choose “Make private”.');
-  }
+  ).catch(() => null);
+  return check?.public !== false;
 }
 
 async function addTracksToPlaylist(playlistId: string, uris: string[], token: string): Promise<void> {
   // Spotify allows max 100 tracks per request; pass explicit position so order is guaranteed
   for (let i = 0; i < uris.length; i += 100) {
     await spotifyFetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+      `https://api.spotify.com/v1/playlists/${playlistId}/items`,   // Feb 2026 migration: /tracks → /items
       token,
       { method: 'POST', body: JSON.stringify({ uris: uris.slice(i, i + 100), position: i }) },
     );
@@ -379,26 +367,26 @@ export async function createPlaylistFromSpotifyIds(
   spotifyIds: string[],
   playlistName: string,
   token: string,
-): Promise<{ playlistUrl: string; count: number }> {
+): Promise<{ playlistUrl: string; count: number; isPublic: boolean }> {
   const userId = await getSpotifyUserId(token);
   const playlist = await createPlaylist(userId, playlistName, token);
   const uris = spotifyIds.map((id) => `spotify:track:${id}`);
   if (uris.length > 0) {
     await addTracksToPlaylist(playlist.id, uris, token);
   }
-  return { playlistUrl: playlist.external_urls.spotify, count: uris.length };
+  return { playlistUrl: playlist.external_urls.spotify, count: uris.length, isPublic: playlist.isPublic };
 }
 
 export async function createPlaylistFromMatches(
   matches: SpotifyMatchResult[],
   playlistName: string,
   token: string,
-): Promise<{ playlistUrl: string; matched: number; total: number }> {
+): Promise<{ playlistUrl: string; matched: number; total: number; isPublic: boolean }> {
   const userId = await getSpotifyUserId(token);
   const uris = matches.filter((m) => m.match && !m.excluded).map((m) => m.match!.uri);
   const playlist = await createPlaylist(userId, playlistName, token);
   if (uris.length > 0) {
     await addTracksToPlaylist(playlist.id, uris, token);
   }
-  return { playlistUrl: playlist.external_urls.spotify, matched: uris.length, total: matches.length };
+  return { playlistUrl: playlist.external_urls.spotify, matched: uris.length, total: matches.length, isPublic: playlist.isPublic };
 }

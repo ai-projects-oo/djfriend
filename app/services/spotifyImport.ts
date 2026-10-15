@@ -56,34 +56,38 @@ export async function fetchPlaylistTracks(
   token: string,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<{ playlistName: string; tracks: SpotifyImportTrack[] }> {
-  const meta = await spotifyGet<{ name: string; tracks: { total: number } }>(
+  // Feb 2026 Web API migration renamed the playlist's `tracks` field to `items` — accept both
+  const meta = await spotifyGet<{ name: string; tracks?: { total: number }; items?: { total: number } }>(
     `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}`,
     token,
   );
 
-  const total = meta.tracks.total;
+  const total = meta.items?.total ?? meta.tracks?.total ?? 0;
   const playlistName = meta.name;
   const tracks: SpotifyImportTrack[] = [];
   let offset = 0;
   const limit = 100;
 
   while (offset < total) {
+    type ApiTrack = { id: string; name: string; artists: Array<{ name: string }> };
     const data = await spotifyGet<{
-      items: Array<{ track: { id: string; name: string; artists: Array<{ name: string }> } | null } | null>;
+      items: Array<{ track?: ApiTrack | null; item?: ApiTrack | null } | null>;
     }>(
-      `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${limit}&offset=${offset}`,
+      // Feb 2026 migration: /playlists/{id}/tracks → /items, and each entry's `track` → `item`
+      `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/items?limit=${limit}&offset=${offset}`,
       token,
     );
 
-    for (const item of data.items) {
-      if (!item || !item.track) {
+    for (const entry of data.items) {
+      const t = entry?.item ?? entry?.track;
+      if (!t || !t.id) {
         tracks.push({ spotifyId: '', title: 'Unavailable track', artist: '', unavailable: true });
         continue;
       }
       tracks.push({
-        spotifyId: item.track.id,
-        title: item.track.name,
-        artist: item.track.artists.map((a) => a.name).join(', '),
+        spotifyId: t.id,
+        title: t.name,
+        artist: (t.artists ?? []).map((a) => a.name).join(', '),
       });
     }
 

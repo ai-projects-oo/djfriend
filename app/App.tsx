@@ -893,7 +893,7 @@ function AppInner() {
   const [crateGapsOpen, setCrateGapsOpen] = useState(true);
   const [spotifyGeneratingId, setSpotifyGeneratingId] = useState<string | null>(null);
   const [missingExportId, setMissingExportId] = useState<string | null>(null);
-  const [missingExportResult, setMissingExportResult] = useState<{ entryId: string; url: string; count: number } | null>(null);
+  const [missingExportResult, setMissingExportResult] = useState<{ entryId: string; url: string; count: number; isPublic?: boolean } | null>(null);
   const [missingExportError, setMissingExportError] = useState<{ entryId: string; message: string } | null>(null);
 
   // Clamp curve points into the library energy range whenever it changes.
@@ -1047,6 +1047,7 @@ function AppInner() {
       .filter(t => !t.inLibrary && !t.unavailable && t.spotifyId)
       .map(t => t.spotifyId);
     if (missingIds.length === 0) return;
+    if (!window.confirm(`Create a Spotify playlist of the ${missingIds.length} tracks you don't have?\n\nSpotify makes playlists created by apps public. Afterwards, open it in Spotify → ••• → Make private.`)) return;
     const token = getStoredToken();
     if (!token) {
       setMissingExportError({ entryId: entry.id, message: "Connect Spotify first — log in via the Spotify section in Settings." });
@@ -1057,13 +1058,13 @@ function AppInner() {
     setMissingExportResult(null);
     setMissingExportError(null);
     try {
-      const { playlistUrl, count } = await createPlaylistFromSpotifyIds(
+      const { playlistUrl, count, isPublic } = await createPlaylistFromSpotifyIds(
         missingIds,
         `Don't have from ${entry.name}`,
         token,
       );
-      setMissingExportResult({ entryId: entry.id, url: playlistUrl, count });
-      setTimeout(() => setMissingExportResult(null), 8000);
+      setMissingExportResult({ entryId: entry.id, url: playlistUrl, count, isPublic });
+      setTimeout(() => setMissingExportResult(null), isPublic ? 20000 : 8000);
     } catch (err) {
       setMissingExportError({ entryId: entry.id, message: err instanceof Error ? err.message : "Failed to create playlist." });
       setTimeout(() => setMissingExportError(null), 5000);
@@ -3425,6 +3426,9 @@ function AppInner() {
                           <div className="px-5 py-2 text-xs flex items-center gap-2 bg-[#1a2e1e] text-green-400 border-t border-[#2c2c42]">
                             <span>✓ Playlist created with {missingExportResult.count} track{missingExportResult.count !== 1 ? 's' : ''}.</span>
                             <a href={missingExportResult.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-green-300">Open on Spotify</a>
+                            {missingExportResult.isPublic !== false && (
+                              <span className="text-[#f59e0b]">Spotify lists it as public — open it → ••• → Make private.</span>
+                            )}
                           </div>
                         )}
                         {missingExportError?.entryId === entry.id && (
@@ -4543,6 +4547,9 @@ function AppInner() {
                     ),
                   )}
                 </div>
+                <p role="note" className="mb-3 text-xs text-[#f59e0b] bg-[#f59e0b0d] border border-[#f59e0b33] rounded-md px-3 py-2">
+                  ⚠ Spotify makes playlists created by apps public. Afterwards, open it in Spotify → ••• → Make private.
+                </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
@@ -4581,6 +4588,11 @@ function AppInner() {
                   {spotifyExportStatus.matched} of {spotifyExportStatus.total}{" "}
                   tracks added.
                 </p>
+                {spotifyExportStatus.isPublic !== false && (
+                  <p role="note" className="mb-4 text-xs text-[#f59e0b] bg-[#f59e0b0d] border border-[#f59e0b33] rounded-md px-3 py-2">
+                    Spotify lists this playlist as public. To hide it, open it in Spotify → ••• → Make private.
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <a
                     href={spotifyExportStatus.playlistUrl}

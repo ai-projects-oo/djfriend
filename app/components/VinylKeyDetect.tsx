@@ -66,7 +66,7 @@ export default function VinylKeyDetect({ trackLabel, onDetected }: Props) {
       <button type="button" onClick={busy ? () => abortRef.current?.abort() : () => void open()}
         aria-label={busy ? `Stop listening to ${trackLabel}` : `Detect key and BPM of ${trackLabel} from the record`}
         title={busy ? "Stop" : "Detect key + BPM: play the record into your audio input"}
-        className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer flex items-center gap-1 ${busy ? "border-[#7c3aed] text-[#c4b5fd] bg-[#7c3aed]/15" : "border-[#2c2c42] text-[#8394a8] hover:text-[#e2e8f0] hover:border-[#7c3aed]"}`}>
+        className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer flex items-center gap-1 ${busy ? "border-[#7c3aed] text-[#c4b5fd] bg-[#7c3aed]/15" : "border-[#2c2c42] text-[#b6c2d0] hover:text-[#e2e8f0] hover:border-[#7c3aed]"}`}>
         {phase.kind === "listening" ? (
           <>
             <span className="w-8 h-1 rounded-full bg-[#2c2c42] overflow-hidden inline-block" aria-hidden>
@@ -78,7 +78,7 @@ export default function VinylKeyDetect({ trackLabel, onDetected }: Props) {
       </button>
 
       {phase.kind === "listening" && (
-        <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-lg border border-[#363650] bg-[#20202e] p-2 shadow-2xl text-[10px] text-[#8394a8]">
+        <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-lg border border-[#363650] bg-[#20202e] p-2 shadow-2xl text-[10px] text-[#b6c2d0]">
           Listening — keep the record playing.
           <div className="mt-1.5 h-1.5 rounded-full bg-[#2c2c42] overflow-hidden" aria-label="Input level">
             <div className={`h-full ${phase.level > 0.95 ? "bg-[#ef4444]" : phase.level < 0.02 ? "bg-[#f59e0b]" : "bg-[#22c55e]"}`} style={{ width: `${Math.min(1, phase.level) * 100}%` }} />
@@ -91,10 +91,10 @@ export default function VinylKeyDetect({ trackLabel, onDetected }: Props) {
       {phase.kind === "setup" && (
         <div role="dialog" aria-label="Detect key from record"
           className="absolute right-0 top-full mt-1 z-20 w-64 rounded-lg border border-[#363650] bg-[#20202e] p-2.5 shadow-2xl flex flex-col gap-2">
-          <p className="text-[10px] text-[#8394a8] leading-snug">
+          <p className="text-[10px] text-[#b6c2d0] leading-snug">
             Play <span className="text-[#e2e8f0]">{trackLabel}</span> into an audio input (mixer line-out or audio interface), from its main section. DJFriend listens for {LISTEN_SECONDS} s and analyses it on this computer — nothing is recorded or saved.
           </p>
-          <label className="text-[9px] uppercase tracking-widest font-semibold text-[#6b7a94]" htmlFor="vinyl-input">Audio input</label>
+          <label className="text-[9px] uppercase tracking-widest font-semibold text-[#a3b0c2]" htmlFor="vinyl-input">Audio input</label>
           <select id="vinyl-input" value={deviceId ?? ""} onChange={e => setDeviceId(e.target.value)}
             className="bg-[#1c1c2e] border border-[#2c2c42] rounded px-1.5 py-1 text-[11px] text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] cursor-pointer">
             {phase.devices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}

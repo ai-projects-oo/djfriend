@@ -22,10 +22,10 @@ export default function UndoToast({ notice, onUndo, onDismiss }: Props) {
       <span className="truncate">{notice.text}</span>
       {notice.canUndo && (
         <button type="button" onClick={() => { onUndo(); }} className="font-semibold text-[#a78bfa] hover:text-white cursor-pointer flex-shrink-0">
-          Undo <span className="text-[10px] text-[#64748b] font-normal">⌘Z</span>
+          Undo <span className="text-[10px] text-[#9aa8ba] font-normal">⌘Z</span>
         </button>
       )}
-      <button type="button" onClick={onDismiss} aria-label="Dismiss" className="text-[#64748b] hover:text-[#e2e8f0] cursor-pointer flex-shrink-0">✕</button>
+      <button type="button" onClick={onDismiss} aria-label="Dismiss" className="text-[#9aa8ba] hover:text-[#e2e8f0] cursor-pointer flex-shrink-0">✕</button>
     </div>
   );
 }

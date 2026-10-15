@@ -23,10 +23,10 @@
 
   /* Text (brightest → dimmest) */
   --dj-text-primary:   #e2e8f0;
-  --dj-text-secondary: #94a3b8;
-  --dj-text-muted:     #7d8fa0;
-  --dj-text-subtle:    #607080;
-  --dj-text-dim:       #4a6070;
+  --dj-text-secondary: #b8c4d2;
+  --dj-text-muted:     #9aa8ba;
+  --dj-text-subtle:    #8090a6;
+  --dj-text-dim:       #64748b;
 
   /* Status */
   --dj-success: #22c55e;
@@ -95,9 +95,9 @@ body {
    here. These overrides lift them to readable values without touching every
    component individually.
    ─────────────────────────────────────────────────────────────────────────── */
-.text-\[\#64748b\] { color: #7d8fa0 !important; }
-.text-\[\#475569\] { color: #607080 !important; }
-.text-\[\#334155\] { color: #4a6070 !important; }
+.text-\[\#64748b\] { color: #9aa8ba !important; }
+.text-\[\#475569\] { color: #8090a6 !important; }
+.text-\[\#334155\] { color: #64748b !important; }
 
 ::-webkit-scrollbar {
   width: 6px;

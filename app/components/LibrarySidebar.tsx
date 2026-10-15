@@ -85,13 +85,13 @@ function SidebarMenu({ menu, folders, onClose, children }: { menu: NonNullable<M
 function MenuItem({ label, onClick, danger }: { label: string; onClick: () => void; danger?: boolean }) {
   return (
     <button type="button" role="menuitem" onClick={onClick}
-      className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer ${danger ? "text-[#ef4444]/80 hover:bg-[#ef4444]/10 hover:text-[#ef4444]" : "text-[#a6b5c8] hover:bg-[#2c2c42] hover:text-[#e2e8f0]"}`}>
+      className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer ${danger ? "text-[#ef4444]/80 hover:bg-[#ef4444]/10 hover:text-[#ef4444]" : "text-[#ccd6e2] hover:bg-[#2c2c42] hover:text-[#e2e8f0]"}`}>
       {label}
     </button>
   );
 }
 const MenuSep = () => <div className="my-1 border-t border-[#2c2c42]" />;
-const MenuLabel = ({ text }: { text: string }) => <div className="px-3 pt-1 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-[#58656e]">{text}</div>;
+const MenuLabel = ({ text }: { text: string }) => <div className="px-3 pt-1 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-[#8d9aab]">{text}</div>;
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
@@ -183,7 +183,7 @@ export default function LibrarySidebar({
         role="button"
         aria-label={`${p.smart ? "Smart playlist" : "Playlist"} ${p.name}`}
         aria-current={active ? "true" : undefined}
-        className={`${itemBase} ${dropTarget === key ? "bg-[#7c3aed]/30 ring-1 ring-[#7c3aed]" : active ? "bg-[#7c3aed]/15 text-white" : "text-[#a6b5c8] hover:bg-[#20202e]"}`}
+        className={`${itemBase} ${dropTarget === key ? "bg-[#7c3aed]/30 ring-1 ring-[#7c3aed]" : active ? "bg-[#7c3aed]/15 text-white" : "text-[#ccd6e2] hover:bg-[#20202e]"}`}
         style={{ paddingLeft: 8 + depth * 12 }}
       >
         <span className="text-[#7c3aed] flex-shrink-0" aria-hidden>{p.smart ? "⚙" : "♫"}</span>
@@ -193,8 +193,8 @@ export default function LibrarySidebar({
           <span className="flex-1 min-w-0 truncate">{p.name}</span>
         )}
         {highlightIds?.has(p.id) && dot("Contains the selected track")}
-        {p.appleMusicId && <span className="text-[9px] text-[#58656e] flex-shrink-0" title="Linked to Apple Music — push again to update" aria-label="Linked to Apple Music"></span>}
-        <span className="text-[10px] text-[#58656e] tabular-nums flex-shrink-0">{playlistCounts.get(p.id) ?? 0}</span>
+        {p.appleMusicId && <span className="text-[9px] text-[#8d9aab] flex-shrink-0" title="Linked to Apple Music — push again to update" aria-label="Linked to Apple Music"></span>}
+        <span className="text-[10px] text-[#8d9aab] tabular-nums flex-shrink-0">{playlistCounts.get(p.id) ?? 0}</span>
       </div>
     );
   };
@@ -216,10 +216,10 @@ export default function LibrarySidebar({
           role="button"
           aria-label={`Folder ${f.name}`}
           aria-expanded={!f.collapsed}
-          className={`${itemBase} ${dropTarget === key ? "bg-[#7c3aed]/30 ring-1 ring-[#7c3aed]" : "text-[#a6b5c8] hover:bg-[#20202e]"}`}
+          className={`${itemBase} ${dropTarget === key ? "bg-[#7c3aed]/30 ring-1 ring-[#7c3aed]" : "text-[#ccd6e2] hover:bg-[#20202e]"}`}
           style={{ paddingLeft: 8 + depth * 12 }}
         >
-          <span className="text-[9px] text-[#64748b] w-2 flex-shrink-0" aria-hidden>{f.collapsed ? "▸" : "▾"}</span>
+          <span className="text-[9px] text-[#9aa8ba] w-2 flex-shrink-0" aria-hidden>{f.collapsed ? "▸" : "▾"}</span>
           <span className="flex-shrink-0" aria-hidden>📁</span>
           {renaming?.kind === "folder" && renaming.id === f.id ? (
             <RenameInput initial={f.name} onCancel={() => setRenaming(null)} onCommit={name => { playlists.renameFolder(f.id, name); setRenaming(null); }} />
@@ -233,7 +233,7 @@ export default function LibrarySidebar({
             {node.folders.map(child => renderFolder(child, depth + 1))}
             {node.playlists.map(p => renderPlaylist(p, depth + 1))}
             {node.folders.length === 0 && node.playlists.length === 0 && (
-              <div className="text-[10px] text-[#424f63] italic py-0.5" style={{ paddingLeft: 28 + depth * 12 }}>Empty folder</div>
+              <div className="text-[10px] text-[#7d8ba0] italic py-0.5" style={{ paddingLeft: 28 + depth * 12 }}>Empty folder</div>
             )}
           </>
         )}
@@ -251,10 +251,10 @@ export default function LibrarySidebar({
         role="button"
         aria-label={s.label}
         aria-current={active ? "true" : undefined}
-        className={`${itemBase} ${active ? "bg-[#7c3aed]/15 text-white" : "text-[#8394a8] hover:bg-[#20202e]"}`}
+        className={`${itemBase} ${active ? "bg-[#7c3aed]/15 text-white" : "text-[#b6c2d0] hover:bg-[#20202e]"}`}
       >
         <span className="flex-1 min-w-0 truncate">{s.label}</span>
-        <span className="text-[10px] text-[#58656e] tabular-nums flex-shrink-0">{s.count}</span>
+        <span className="text-[10px] text-[#8d9aab] tabular-nums flex-shrink-0">{s.count}</span>
       </div>
     );
   };
@@ -262,7 +262,7 @@ export default function LibrarySidebar({
   const sectionHeader = (id: string, label: string, actions?: React.ReactNode, dropProps?: React.HTMLAttributes<HTMLDivElement>) => (
     <div className={`flex items-center gap-1 px-2 pt-3 pb-1 rounded-md ${dropTarget === "root" && id === "playlists" ? "bg-[#7c3aed]/20" : ""}`} {...dropProps}>
       <button type="button" onClick={() => toggleSection(id)} aria-expanded={!collapsedSections.has(id)}
-        className="flex-1 flex items-center gap-1 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b] hover:text-[#a6b5c8] cursor-pointer">
+        className="flex-1 flex items-center gap-1 text-left text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba] hover:text-[#ccd6e2] cursor-pointer">
         <span className="text-[8px] w-2" aria-hidden>{collapsedSections.has(id) ? "▸" : "▾"}</span>{label}
       </button>
       {actions}
@@ -271,7 +271,7 @@ export default function LibrarySidebar({
 
   const iconBtn = (label: string, glyph: string, onClick: () => void) => (
     <button type="button" onClick={onClick} title={label} aria-label={label}
-      className="w-5 h-5 flex items-center justify-center rounded text-[#64748b] hover:text-[#e2e8f0] hover:bg-[#2c2c42] text-xs cursor-pointer transition-colors">
+      className="w-5 h-5 flex items-center justify-center rounded text-[#9aa8ba] hover:text-[#e2e8f0] hover:bg-[#2c2c42] text-xs cursor-pointer transition-colors">
       {glyph}
     </button>
   );
@@ -288,11 +288,11 @@ export default function LibrarySidebar({
           role="button"
           aria-label="All tracks"
           aria-current={view.kind === "all" ? "true" : undefined}
-          className={`${itemBase} ${view.kind === "all" ? "bg-[#7c3aed]/15 text-white" : "text-[#a6b5c8] hover:bg-[#20202e]"}`}
+          className={`${itemBase} ${view.kind === "all" ? "bg-[#7c3aed]/15 text-white" : "text-[#ccd6e2] hover:bg-[#20202e]"}`}
         >
           <span aria-hidden>♪</span>
           <span className="flex-1">All Tracks</span>
-          <span className="text-[10px] text-[#58656e] tabular-nums">{libraryCount}</span>
+          <span className="text-[10px] text-[#8d9aab] tabular-nums">{libraryCount}</span>
         </div>
       )}
 
@@ -314,15 +314,15 @@ export default function LibrarySidebar({
       {!collapsedSections.has("playlists") && lib.playlists.length > 5 && (
         <div className="px-1 pb-1">
           <input type="search" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Find playlist…" aria-label="Find playlist"
-            className="w-full bg-[#0d0d14] border border-[#2c2c42] rounded-md px-2 py-1 text-[11px] text-[#e2e8f0] placeholder-[#424f63] focus:outline-none focus:border-[#7c3aed]" />
+            className="w-full bg-[#0d0d14] border border-[#2c2c42] rounded-md px-2 py-1 text-[11px] text-[#e2e8f0] placeholder-[#7d8ba0] focus:outline-none focus:border-[#7c3aed]" />
         </div>
       )}
       {!collapsedSections.has("playlists") && filter.trim() !== "" && (
         <div className="flex flex-col">
           {filtered.map(e => e.kind === "folder" ? (
-            <div key={`f-${e.id}`} className="text-[10px] text-[#64748b] truncate py-0.5" style={{ paddingLeft: 8 + e.depth * 12 }}>📁 {e.name}</div>
+            <div key={`f-${e.id}`} className="text-[10px] text-[#9aa8ba] truncate py-0.5" style={{ paddingLeft: 8 + e.depth * 12 }}>📁 {e.name}</div>
           ) : renderPlaylist(lib.playlists.find(p => p.id === e.id)!, e.depth))}
-          {filtered.length === 0 && <p className="px-2 text-[10px] text-[#424f63]">No playlist matches “{filter}”</p>}
+          {filtered.length === 0 && <p className="px-2 text-[10px] text-[#7d8ba0]">No playlist matches “{filter}”</p>}
         </div>
       )}
       {!collapsedSections.has("playlists") && filter.trim() === "" && (
@@ -331,7 +331,7 @@ export default function LibrarySidebar({
           {tree.playlists.map(p => renderPlaylist(p, 0))}
           {lib.playlists.length === 0 && lib.folders.length === 0 && (
             <button type="button" onClick={() => newPlaylist()}
-              className="mx-2 mt-1 text-left text-[11px] text-[#64748b] hover:text-[#a78bfa] cursor-pointer">
+              className="mx-2 mt-1 text-left text-[11px] text-[#9aa8ba] hover:text-[#a78bfa] cursor-pointer">
               + Create your first playlist
             </button>
           )}
@@ -360,11 +360,11 @@ export default function LibrarySidebar({
                     return (
                       <div key={`apple-group-${g}`}>
                         <button type="button" onClick={() => toggleAppleGroup(g)} aria-expanded={open} aria-label={`Apple Music folder ${g}`}
-                          className={`${itemBase} text-[#8394a8] hover:bg-[#20202e]`}>
-                          <span className="text-[9px] text-[#64748b] w-2" aria-hidden>{open ? "▾" : "▸"}</span>
+                          className={`${itemBase} text-[#b6c2d0] hover:bg-[#20202e]`}>
+                          <span className="text-[9px] text-[#9aa8ba] w-2" aria-hidden>{open ? "▾" : "▸"}</span>
                           <span aria-hidden>📁</span>
                           <span className="flex-1 min-w-0 truncate text-left">{g}</span>
-                          <span className="text-[10px] text-[#58656e] tabular-nums">{items.length}</span>
+                          <span className="text-[10px] text-[#8d9aab] tabular-nums">{items.length}</span>
                         </button>
                         {open && <div className="pl-4">{items.map(renderSource)}</div>}
                       </div>
@@ -373,7 +373,7 @@ export default function LibrarySidebar({
                 </>
               );
             })()
-          : <p className="px-2 text-[10px] text-[#424f63]">No playlists imported</p>
+          : <p className="px-2 text-[10px] text-[#7d8ba0]">No playlists imported</p>
       )}
 
       {sectionHeader("spotify", "Spotify", onImportSpotify && iconBtn("Import from Spotify", "⬇", onImportSpotify))}
@@ -385,7 +385,7 @@ export default function LibrarySidebar({
               role="button"
               aria-label="Spotify imports"
               aria-current={view.kind === "imports" ? "true" : undefined}
-              className={`${itemBase} ${view.kind === "imports" ? "bg-[#7c3aed]/15 text-white" : "text-[#8394a8] hover:bg-[#20202e]"}`}
+              className={`${itemBase} ${view.kind === "imports" ? "bg-[#7c3aed]/15 text-white" : "text-[#b6c2d0] hover:bg-[#20202e]"}`}
             >
               <span className="text-[#1db954]" aria-hidden>＋</span>
               <span className="flex-1">Import &amp; match…</span>
@@ -393,7 +393,7 @@ export default function LibrarySidebar({
           )}
           {spotifySources.length > 0
             ? spotifySources.map(renderSource)
-            : !onImportSpotify && <p className="px-2 text-[10px] text-[#424f63]">No playlists imported</p>}
+            : !onImportSpotify && <p className="px-2 text-[10px] text-[#7d8ba0]">No playlists imported</p>}
         </>
       )}
 
@@ -402,9 +402,9 @@ export default function LibrarySidebar({
         <>
           {setSources.length > 0
             ? visibleSets.map(renderSource)
-            : <p className="px-2 text-[10px] text-[#424f63]">No saved sets</p>}
+            : <p className="px-2 text-[10px] text-[#7d8ba0]">No saved sets</p>}
           {setSources.length > 15 && (
-            <button type="button" onClick={() => setShowAllSets(s => !s)} className="px-2 pt-0.5 text-[10px] text-[#64748b] hover:text-[#a78bfa] cursor-pointer">
+            <button type="button" onClick={() => setShowAllSets(s => !s)} className="px-2 pt-0.5 text-[10px] text-[#9aa8ba] hover:text-[#a78bfa] cursor-pointer">
               {showAllSets ? "Show fewer" : `Show all ${setSources.length}`}
             </button>
           )}

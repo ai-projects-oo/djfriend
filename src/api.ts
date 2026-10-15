@@ -21,7 +21,7 @@ import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { readProfile, writeProfile, readLeads, writeLeads, upsertLead, updateLead, deleteLead } from './gigfinder/store.js'
 import type { GigLead } from './gigfinder/types.js'
-import { loadResults, saveResults, flushResults, forgetResults } from './results-store.js'
+import { loadResults, saveResults, flushResults, forgetResults, resolveResultKeys } from './results-store.js'
 import { validateExportJob, runMusicExport } from './apple-music-export.js'
 import { readMusicLibrary } from './apple-music-library.js'
 
@@ -2174,6 +2174,15 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     const resolvedPath = (() => {
       if (path.isAbsolute(file) && fs.existsSync(file)) return file
       if (songsFolder) { const p = path.join(songsFolder, file); if (fs.existsSync(p)) return p }
+      // Apple Music tracks: the UI id is a basename — look up the stored full path
+      try {
+        if (fs.existsSync(APPLE_RESULTS_PATH)) {
+          const r = loadResults<AppSong>(APPLE_RESULTS_PATH)
+          const [k] = resolveResultKeys(r, [file])
+          const fp = k ? r[k].filePath : undefined
+          if (fp && fs.existsSync(fp)) return fp
+        }
+      } catch { /* ignore */ }
       return null
     })()
     if (resolvedPath && path.extname(resolvedPath).toLowerCase() === '.mp3' && isPathAllowed(resolvedPath, songsFolder, path.dirname(APPLE_RESULTS_PATH))) {
@@ -2201,9 +2210,10 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (!fs.existsSync(resultsPath)) return
       try {
         const results = loadResults<AppSong>(resultsPath)
-        if (!results[key]) return
-        Object.assign(results[key], safePatch)
-        saveResults(resultsPath, results, { defer: true, keys: [key] })
+        const [k] = resolveResultKeys(results, [key])
+        if (!k) return
+        Object.assign(results[k], safePatch)
+        saveResults(resultsPath, results, { defer: true, keys: [k] })
       } catch { /* ignore */ }
     }
     if (songsFolder) patchFile(path.join(songsFolder, 'results.json'), file)
@@ -2222,8 +2232,9 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (!fs.existsSync(resultsPath)) return
       try {
         const results = loadResults<AppSong>(resultsPath)
-        for (const f of files) delete results[f]
-        saveResults(resultsPath, results, { defer: true, keys: files })
+        const keys = resolveResultKeys(results, files)
+        for (const k of keys) delete results[k]
+        if (keys.length) saveResults(resultsPath, results, { defer: true, keys })
       } catch { /* ignore */ }
     }
     if (songsFolder) removeFromFile(path.join(songsFolder, 'results.json'))

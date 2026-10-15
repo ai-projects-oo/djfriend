@@ -31,7 +31,7 @@ function AlbumArtLarge({ filePath }: { filePath?: string }) {
   if (!src || failed) {
     return (
       <div className="w-20 h-20 rounded-lg bg-[#2c2c42] flex items-center justify-center flex-shrink-0">
-        <span className="text-3xl text-[#424f63]">♪</span>
+        <span className="text-3xl text-[#7d8ba0]">♪</span>
       </div>
     );
   }
@@ -46,7 +46,7 @@ function energyColor(e: number): string {
 }
 
 const inputCls = "w-full bg-[#1c1c2e] border border-[#363650] rounded-lg px-3 py-2 text-sm text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] transition-colors";
-const labelCls = "text-right text-xs text-[#64748b] self-center whitespace-nowrap";
+const labelCls = "text-right text-xs text-[#9aa8ba] self-center whitespace-nowrap";
 
 export default function TrackInfoModal({ song, library, onClose, onSave, onNavigate }: Props) {
   const [title, setTitle]     = useState(song.title);
@@ -105,23 +105,23 @@ export default function TrackInfoModal({ song, library, onClose, onSave, onNavig
           <AlbumArtLarge filePath={song.filePath} />
           <div className="flex-1 min-w-0">
             <p className="text-base font-semibold text-[#e2e8f0] truncate">{song.title || "Unknown Title"}</p>
-            <p className="text-sm text-[#8394a8] truncate mt-0.5">{song.artist || "Unknown Artist"}</p>
+            <p className="text-sm text-[#b6c2d0] truncate mt-0.5">{song.artist || "Unknown Artist"}</p>
             {/* Read-only audio stats */}
             <div className="flex items-center gap-3 mt-2 flex-wrap">
               {song.camelot && song.camelot !== "Unknown" && (
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: cc + "26", color: cc, border: `1px solid ${cc}66` }}>{song.camelot}</span>
               )}
               {song.bpm > 0 && (
-                <span className="text-[10px] text-[#8394a8] tabular-nums">{Math.round(song.bpm)} BPM</span>
+                <span className="text-[10px] text-[#b6c2d0] tabular-nums">{Math.round(song.bpm)} BPM</span>
               )}
               <div className="flex items-center gap-1.5">
                 <div className="w-10 h-1 bg-[#2c2c42] rounded-full overflow-hidden">
                   <div className="h-full rounded-full" style={{ width: `${Math.round(song.energy * 100)}%`, backgroundColor: energyColor(song.energy) }} />
                 </div>
-                <span className="text-[10px] text-[#8394a8]">{Math.round(song.energy * 100)}</span>
+                <span className="text-[10px] text-[#b6c2d0]">{Math.round(song.energy * 100)}</span>
               </div>
               {song.key && song.key !== "Unknown" && (
-                <span className="text-[10px] text-[#8394a8]">{song.key}</span>
+                <span className="text-[10px] text-[#b6c2d0]">{song.key}</span>
               )}
             </div>
           </div>
@@ -153,21 +153,21 @@ export default function TrackInfoModal({ song, library, onClose, onSave, onNavig
               type="button"
               disabled={currentIdx <= 0}
               onClick={() => onNavigate(library[currentIdx - 1])}
-              className="w-7 h-7 flex items-center justify-center rounded text-[#64748b] hover:text-[#a6b5c8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-sm"
+              className="w-7 h-7 flex items-center justify-center rounded text-[#9aa8ba] hover:text-[#ccd6e2] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-sm"
               title="Previous track (←)"
             >‹</button>
-            <span className="text-[10px] text-[#424f63] tabular-nums w-16 text-center">{currentIdx + 1} / {library.length}</span>
+            <span className="text-[10px] text-[#7d8ba0] tabular-nums w-16 text-center">{currentIdx + 1} / {library.length}</span>
             <button
               type="button"
               disabled={currentIdx >= library.length - 1}
               onClick={() => onNavigate(library[currentIdx + 1])}
-              className="w-7 h-7 flex items-center justify-center rounded text-[#64748b] hover:text-[#a6b5c8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-sm"
+              className="w-7 h-7 flex items-center justify-center rounded text-[#9aa8ba] hover:text-[#ccd6e2] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer text-sm"
               title="Next track (→)"
             >›</button>
           </div>
           {/* Buttons */}
           <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-1.5 text-xs border border-[#363650] rounded-lg text-[#8292a4] hover:text-[#a6b5c8] hover:border-[#424f63] transition-colors cursor-pointer">
+            <button type="button" onClick={onClose} className="px-4 py-1.5 text-xs border border-[#363650] rounded-lg text-[#b6c2d0] hover:text-[#ccd6e2] hover:border-[#424f63] transition-colors cursor-pointer">
               Cancel
             </button>
             <button

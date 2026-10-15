@@ -72,7 +72,7 @@ function computeTransitionHints(prev: SetTrack, next: SetTrack): TransitionHint[
   } else if (eDelta < -0.2) {
     hints.push({ icon: '↓', color: '#60a5fa', tip: 'Energy drop — sweep the highs with a filter and ease off the bass to soften the transition' });
   } else {
-    hints.push({ icon: '→', color: '#64748b', tip: 'Smooth blend — beatmatch and crossfade gradually for a seamless transition' });
+    hints.push({ icon: '→', color: '#9aa8ba', tip: 'Smooth blend — beatmatch and crossfade gradually for a seamless transition' });
   }
 
   const prevVocal = prev.semanticTags?.vocalType;
@@ -351,14 +351,14 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
   if (tracks.length === 0) {
     const isFilterBlocked = libraryLoaded && hasAttemptedGenerate;
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-[#64748b] gap-3 text-center px-8">
+      <div className="flex flex-col items-center justify-center py-16 text-[#9aa8ba] gap-3 text-center px-8">
         <span className="text-4xl">{isFilterBlocked ? '🔍' : '🎵'}</span>
         {!libraryLoaded ? (
           <p className="text-sm">Load a library above to get started.</p>
         ) : isFilterBlocked ? (
           <>
-            <p className="text-sm text-[#64748b]">No tracks matched your current settings.</p>
-            <p className="text-[11px] text-[#6b7a94] max-w-xs leading-relaxed">
+            <p className="text-sm text-[#9aa8ba]">No tracks matched your current settings.</p>
+            <p className="text-[11px] text-[#a3b0c2] max-w-xs leading-relaxed">
               Try widening your BPM range, reducing genre filters, or switching source to Full Library.
             </p>
           </>
@@ -393,12 +393,12 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
         {rekordboxStatus === 'done'    && <span className="text-[#00e040] shrink-0">✓</span>}
         {rekordboxStatus === 'first-time' && <span className="text-[#a78bfa] shrink-0">↗</span>}
         <div>
-          {rekordboxStatus === 'sending' && <span className="text-[#a6b5c8]">Sending to Rekordbox…</span>}
-          {rekordboxStatus === 'done'    && <span className="text-[#a6b5c8]">Sent. Open Rekordbox and import from <code className="text-[#e2e8f0]">~/Music/rekordbox/rekordbox.xml</code></span>}
+          {rekordboxStatus === 'sending' && <span className="text-[#ccd6e2]">Sending to Rekordbox…</span>}
+          {rekordboxStatus === 'done'    && <span className="text-[#ccd6e2]">Sent. Open Rekordbox and import from <code className="text-[#e2e8f0]">~/Music/rekordbox/rekordbox.xml</code></span>}
           {rekordboxStatus === 'first-time' && (
-            <span className="text-[#cbd5e1]">
+            <span className="text-[#e2e8f0]">
               File written to <code className="text-[#a78bfa]">~/Music/rekordbox/rekordbox.xml</code>
-              <br /><span className="text-[#a6b5c8] text-xs">First time? In Rekordbox → Preferences → Advanced → set the rekordbox xml path to that file, then click the XML icon in the sidebar to import.</span>
+              <br /><span className="text-[#ccd6e2] text-xs">First time? In Rekordbox → Preferences → Advanced → set the rekordbox xml path to that file, then click the XML icon in the sidebar to import.</span>
             </span>
           )}
         </div>
@@ -407,7 +407,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
     <div className="flex flex-col gap-4">
       {/* Stats bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <div className="flex flex-wrap gap-4 text-sm text-[#a6b5c8]">
+        <div className="flex flex-wrap gap-4 text-sm text-[#ccd6e2]">
           <span>
             <span className="text-[#e2e8f0] font-semibold">{tracks.length}</span> tracks
           </span>
@@ -415,7 +415,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
             <span className="text-[#e2e8f0] font-semibold">~{duration}</span>
             {prefs.setDuration != null && (
               <>
-                <span className="text-[#64748b]"> / </span>
+                <span className="text-[#9aa8ba]"> / </span>
                 <span className="text-[#e2e8f0] font-semibold">{prefs.setDuration}</span>
               </>
             )}
@@ -502,13 +502,13 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
           })()}
           {/* Set start time clock */}
           <div className="flex items-center gap-1.5">
-            <label className="text-[10px] text-[#64748b] whitespace-nowrap" htmlFor="set-start-time">Starts at</label>
+            <label className="text-[10px] text-[#9aa8ba] whitespace-nowrap" htmlFor="set-start-time">Starts at</label>
             <input
               id="set-start-time"
               type="time"
               value={setStartTime}
               onChange={e => setSetStartTime(e.target.value)}
-              className="bg-[#20202e] border border-[#363650] rounded px-2 py-1 text-xs text-[#a6b5c8] focus:outline-none focus:border-[#7c3aed] cursor-pointer"
+              className="bg-[#20202e] border border-[#363650] rounded px-2 py-1 text-xs text-[#ccd6e2] focus:outline-none focus:border-[#7c3aed] cursor-pointer"
               aria-label="Set start time"
             />
           </div>
@@ -516,7 +516,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
           <div className="relative" ref={columnsDropdownRef}>
             <button
               onClick={() => setColumnsOpen((o) => !o)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#20202e] border border-[#363650] text-xs text-[#a6b5c8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#20202e] border border-[#363650] text-xs text-[#ccd6e2] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer"
               title="Show/hide columns"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -530,7 +530,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                   <button
                     key={key}
                     onClick={() => toggleColumn(key)}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     <span
                       className="w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 text-[9px]"
@@ -554,7 +554,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
             <button
               onClick={() => setExportOpen((o) => !o)}
               disabled={tracks.length === 0}
-              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#20202e] border border-[#363650] text-sm text-[#a6b5c8] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-[#363650] disabled:hover:text-[#a6b5c8]"
+              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#20202e] border border-[#363650] text-sm text-[#ccd6e2] hover:border-[#7c3aed] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-[#363650] disabled:hover:text-[#ccd6e2]"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -571,7 +571,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                     void navigator.clipboard.writeText(text);
                     setExportOpen(false);
                   }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
                   <CopyIcon size={14} className="shrink-0 opacity-60" />
                   Copy as text
@@ -607,7 +607,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                     void navigator.clipboard.writeText(lines.join('\n'));
                     setExportOpen(false);
                   }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
                   <CopyIcon size={14} className="shrink-0 opacity-60" />
                   {setStartTime ? 'Copy clock times' : 'Copy timestamps'}
@@ -615,7 +615,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                 {onSaveAsPlaylist && (
                   <button
                     onClick={() => { onSaveAsPlaylist(); setExportOpen(false); }}
-                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     <span className="w-3.5 shrink-0 text-center text-[#7c3aed]" aria-hidden>♫</span>
                     Save as Playlist
@@ -623,7 +623,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                 )}
                 <button
                   onClick={() => { downloadM3U(tracks); onExport?.(); setExportOpen(false); }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
                   <M3UIcon size={14} className="shrink-0 opacity-60" />
                   Export as M3U
@@ -638,7 +638,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                       else setRekordboxStatus('idle');
                       setTimeout(() => setRekordboxStatus('idle'), result?.isFirstTime ? 12000 : 3000);
                     }}
-                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     <RekordboxIcon size={14} className="shrink-0 opacity-60" />
                     Send to Rekordbox
@@ -647,7 +647,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                 {showRekordboxExport && (
                   <button
                     onClick={() => { downloadRekordboxXml(tracks); onExport?.(); setExportOpen(false); }}
-                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     <RekordboxIcon size={14} className="shrink-0 opacity-60 opacity-40" />
                     Download Rekordbox XML
@@ -656,7 +656,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                 {onExportSpotify && (
                   <button
                     onClick={() => { onExportSpotify(); setExportOpen(false); }}
-                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
+                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
                   >
                     <SpotifyIcon size={14} className="shrink-0 text-[#1db954]" />
                     Export to Spotify
@@ -670,7 +670,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
           <div className="relative" ref={actionsDropdownRef}>
             <button
               onClick={() => setActionsOpen((o) => !o)}
-              className={`flex items-center justify-center w-8 h-8 rounded-md border transition-colors cursor-pointer ${actionsOpen || globalEditMode ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'bg-[#20202e] border-[#363650] text-[#a6b5c8] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
+              className={`flex items-center justify-center w-8 h-8 rounded-md border transition-colors cursor-pointer ${actionsOpen || globalEditMode ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'bg-[#20202e] border-[#363650] text-[#ccd6e2] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
               title="More actions"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
@@ -679,7 +679,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
               <div className="absolute right-0 top-full mt-1 z-20 min-w-[160px] rounded-md border border-[#363650] bg-[#20202e] shadow-lg overflow-hidden py-1">
                 <button
                   onClick={openGlobalEdit}
-                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   Edit
@@ -696,57 +696,57 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-[#a78bfa]">Edit selected tracks</span>
-              <span className="text-[10px] text-[#64748b]">— leave fields empty to keep current values</span>
+              <span className="text-[10px] text-[#9aa8ba]">— leave fields empty to keep current values</span>
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer"
                 checked={selectedIndices.size === tracks.length && tracks.length > 0}
                 onChange={e => setSelectedIndices(e.target.checked ? new Set(tracks.map((_, i) => i)) : new Set())}
                 title="Select all" />
-              <span className="text-[10px] text-[#64748b]">{selectedIndices.size}/{tracks.length}</span>
+              <span className="text-[10px] text-[#9aa8ba]">{selectedIndices.size}/{tracks.length}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1 min-w-[140px]">
-              <label className="text-[10px] text-[#64748b] uppercase tracking-wider">Artist</label>
+              <label className="text-[10px] text-[#9aa8ba] uppercase tracking-wider">Artist</label>
               <input value={editArtist} onChange={e => setEditArtist(e.target.value)} placeholder="Keep current"
-                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#6b7a94]" />
+                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#a3b0c2]" />
             </div>
             <div className="flex flex-col gap-1 min-w-[140px]">
-              <label className="text-[10px] text-[#64748b] uppercase tracking-wider">Title</label>
+              <label className="text-[10px] text-[#9aa8ba] uppercase tracking-wider">Title</label>
               <input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Keep current"
-                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#6b7a94]" />
+                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#a3b0c2]" />
             </div>
             <div className="flex flex-col gap-1 min-w-[160px]">
-              <label className="text-[10px] text-[#64748b] uppercase tracking-wider">Genre <span className="normal-case text-[#6b7a94]">(comma-sep)</span></label>
+              <label className="text-[10px] text-[#9aa8ba] uppercase tracking-wider">Genre <span className="normal-case text-[#a3b0c2]">(comma-sep)</span></label>
               <input value={editGenre} onChange={e => setEditGenre(e.target.value)} placeholder="e.g. house, deep house"
-                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#6b7a94]" />
+                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#a3b0c2]" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-[#64748b] uppercase tracking-wider">BPM</label>
+              <label className="text-[10px] text-[#9aa8ba] uppercase tracking-wider">BPM</label>
               <div className="flex items-center gap-1">
                 <input type="number" value={editBpm} onChange={e => setEditBpm(e.target.value)} placeholder="Keep"
-                  className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-16 placeholder:text-[#6b7a94]" />
+                  className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-16 placeholder:text-[#a3b0c2]" />
                 <button type="button" onClick={() => applyBpmMultiplier(2)}
-                  className="px-1.5 py-1 text-[10px] rounded border border-[#363650] text-[#a6b5c8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">×2</button>
+                  className="px-1.5 py-1 text-[10px] rounded border border-[#363650] text-[#ccd6e2] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">×2</button>
                 <button type="button" onClick={() => applyBpmMultiplier(0.5)}
-                  className="px-1.5 py-1 text-[10px] rounded border border-[#363650] text-[#a6b5c8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">÷2</button>
+                  className="px-1.5 py-1 text-[10px] rounded border border-[#363650] text-[#ccd6e2] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">÷2</button>
               </div>
             </div>
             <div className="flex flex-col gap-1 w-16">
-              <label className="text-[10px] text-[#64748b] uppercase tracking-wider">Key</label>
+              <label className="text-[10px] text-[#9aa8ba] uppercase tracking-wider">Key</label>
               <input value={editCamelot} onChange={e => setEditCamelot(e.target.value)} placeholder="e.g. 7A"
-                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs font-mono text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#6b7a94]" />
+                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs font-mono text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#a3b0c2]" />
             </div>
             <div className="flex flex-col gap-1 w-16">
-              <label className="text-[10px] text-[#64748b] uppercase tracking-wider">Year</label>
+              <label className="text-[10px] text-[#9aa8ba] uppercase tracking-wider">Year</label>
               <input type="number" value={editYear} onChange={e => setEditYear(e.target.value)} placeholder="Keep"
-                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#6b7a94]" />
+                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#a3b0c2]" />
             </div>
             <div className="flex flex-col gap-1 min-w-[160px]">
-              <label className="text-[10px] text-[#64748b] uppercase tracking-wider">Comment</label>
+              <label className="text-[10px] text-[#9aa8ba] uppercase tracking-wider">Comment</label>
               <input value={editComment} onChange={e => setEditComment(e.target.value)} placeholder="Keep current"
-                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#6b7a94]" />
+                className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-full placeholder:text-[#a3b0c2]" />
             </div>
             <div className="flex items-end gap-2 pb-0.5">
               <button onClick={() => void saveGlobalEdit()} disabled={saving || selectedIndices.size === 0}
@@ -754,7 +754,7 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                 {saving ? 'Saving…' : `Save ${selectedIndices.size > 0 ? `(${selectedIndices.size})` : ''}`}
               </button>
               <button onClick={closeGlobalEdit} disabled={saving}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-[#363650] text-[#a6b5c8] text-xs hover:text-[#e2e8f0] hover:border-[#64748b] disabled:opacity-50 transition-colors cursor-pointer">
+                className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-[#363650] text-[#ccd6e2] text-xs hover:text-[#e2e8f0] hover:border-[#64748b] disabled:opacity-50 transition-colors cursor-pointer">
                 Cancel
               </button>
               {globalEditError && (
@@ -781,40 +781,40 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
                       onChange={e => setSelectedIndices(e.target.checked ? new Set(tracks.map((_, i) => i)) : new Set())} />
                   </th>
                 )}
-                <th className="py-2 pl-4 pr-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider w-10">#</th>
-                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Track</th>
+                <th className="py-2 pl-4 pr-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider w-10">#</th>
+                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Track</th>
                 {visibleColumns.has('time') && (
-                  <th className="py-2 px-2 text-right text-[10px] font-semibold text-[#64748b] uppercase tracking-wider whitespace-nowrap">Time</th>
+                  <th className="py-2 px-2 text-right text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider whitespace-nowrap">Time</th>
                 )}
-                <th className="py-2 px-2 text-right text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">BPM</th>
-                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Key</th>
-                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Energy</th>
+                <th className="py-2 px-2 text-right text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">BPM</th>
+                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Key</th>
+                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Energy</th>
                 {visibleColumns.has('genre') && (
-                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Genre</th>
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Genre</th>
                 )}
                 {visibleColumns.has('year') && (
-                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Year</th>
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Year</th>
                 )}
                 {visibleColumns.has('dateAdded') && (
-                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider whitespace-nowrap">Added</th>
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider whitespace-nowrap">Added</th>
                 )}
                 {visibleColumns.has('comment') && (
-                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Comments</th>
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Comments</th>
                 )}
                 {visibleColumns.has('vibeTags') && (
-                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Vibe</th>
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Vibe</th>
                 )}
                 {visibleColumns.has('moodTags') && (
-                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Mood</th>
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Mood</th>
                 )}
                 {visibleColumns.has('vocalType') && (
-                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Vocal</th>
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Vocal</th>
                 )}
                 {visibleColumns.has('waveform') && (
-                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Waveform</th>
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Waveform</th>
                 )}
-                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#64748b] uppercase tracking-wider whitespace-nowrap">→ Transition</th>
-                <th className="py-2 pl-2 pr-4 text-right text-[10px] font-semibold text-[#64748b] uppercase tracking-wider">Actions</th>
+                <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider whitespace-nowrap">→ Transition</th>
+                <th className="py-2 pl-2 pr-4 text-right text-[10px] font-semibold text-[#9aa8ba] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -900,20 +900,20 @@ export default function SetTracklist({ tracks, prefs, libraryLoaded, energyCheck
             <div className="flex items-center gap-2">
               <button
                 onClick={() => void navigator.clipboard.writeText(aiNarrative)}
-                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[#a6b5c8] hover:text-[#e2e8f0] border border-[#363650] hover:border-[#64748b] transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[#ccd6e2] hover:text-[#e2e8f0] border border-[#363650] hover:border-[#64748b] transition-colors cursor-pointer"
                 title="Copy narrative"
               >
                 <CopyIcon size={10} /> Copy
               </button>
               <button
                 onClick={() => setAiNarrative(null)}
-                className="text-[#64748b] hover:text-[#a6b5c8] transition-colors cursor-pointer text-xs"
+                className="text-[#9aa8ba] hover:text-[#ccd6e2] transition-colors cursor-pointer text-xs"
                 title="Dismiss"
                 aria-label="Dismiss narrative"
               >✕</button>
             </div>
           </div>
-          <p className="text-sm text-[#cbd5e1] leading-relaxed">{aiNarrative}</p>
+          <p className="text-sm text-[#e2e8f0] leading-relaxed">{aiNarrative}</p>
         </div>
       )}
     </div>

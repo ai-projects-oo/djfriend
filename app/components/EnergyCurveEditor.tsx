@@ -265,13 +265,13 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, library
           className="absolute left-0 top-0 flex flex-col justify-between text-[10px] pointer-events-none"
           style={{ height: SVG_HEIGHT, paddingTop: PADDING.top, paddingBottom: PADDING.bottom }}
         >
-          <span className={`pl-1 ${libraryEnergyRange ? 'text-[#7c3aed]' : 'text-[#475569]'}`}>
+          <span className={`pl-1 ${libraryEnergyRange ? 'text-[#7c3aed]' : 'text-[#8090a6]'}`}>
             {libraryEnergyRange ? Math.round(libraryEnergyRange.max * 100) : '100'}
           </span>
-          <span className="pl-1 text-[#475569]">
+          <span className="pl-1 text-[#8090a6]">
             {libraryEnergyRange ? Math.round(((libraryEnergyRange.min + libraryEnergyRange.max) / 2) * 100) : '50'}
           </span>
-          <span className={`pl-1 ${libraryEnergyRange ? 'text-[#7c3aed]' : 'text-[#475569]'}`}>
+          <span className={`pl-1 ${libraryEnergyRange ? 'text-[#7c3aed]' : 'text-[#8090a6]'}`}>
             {libraryEnergyRange ? Math.round(libraryEnergyRange.min * 100) : '0'}
           </span>
         </div>
@@ -416,7 +416,7 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, library
               {/* Section header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5568]">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#8090a6]">
                     {section.label}
                   </span>
                   <span className="text-[9px] text-[#2a2a3a] tabular-nums">
@@ -425,7 +425,7 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, library
                 </div>
                 {section.label === 'Start' && (
                   <button onClick={handleReset} title="Reset all"
-                    className="text-[#2a2a3a] hover:text-[#475569] transition-colors cursor-pointer text-xs leading-none">
+                    className="text-[#2a2a3a] hover:text-[#8090a6] transition-colors cursor-pointer text-xs leading-none">
                     ↺
                   </button>
                 )}
@@ -440,7 +440,7 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, library
                     className={`px-2 py-0.5 text-[10px] rounded border transition-colors cursor-pointer whitespace-nowrap ${
                       activePreset === name
                         ? 'border-[#7c3aed] bg-[#7c3aed]/15 text-[#e2e8f0]'
-                        : 'border-[#2a2a3a] text-[#64748b] hover:border-[#7c3aed] hover:text-[#e2e8f0]'
+                        : 'border-[#2a2a3a] text-[#9aa8ba] hover:border-[#7c3aed] hover:text-[#e2e8f0]'
                     }`}
                   >
                     {name}
@@ -458,7 +458,7 @@ export default function EnergyCurveEditor({ points, onChange, setTracks, library
                     className={`w-6 h-5 text-[10px] rounded border transition-colors flex-shrink-0 ${
                       count === n
                         ? 'border-[#7c3aed] bg-[#7c3aed]/20 text-[#e2e8f0] cursor-default'
-                        : 'border-[#1e1e2e] text-[#475569] hover:border-[#7c3aed] hover:text-[#e2e8f0] cursor-pointer'
+                        : 'border-[#1e1e2e] text-[#8090a6] hover:border-[#7c3aed] hover:text-[#e2e8f0] cursor-pointer'
                     }`}
                   >
                     {n}

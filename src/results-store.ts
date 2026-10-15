@@ -146,3 +146,24 @@ for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
     process.kill(process.pid, sig)
   })
 }
+
+/**
+ * Maps the track ids the UI uses (Song.file — a basename for Apple Music tracks) to results.json keys
+ * (the absolute or folder-relative path). Matches the key itself, then filePath, then `file` — the
+ * last only when exactly one entry has that name, so two same-named files are never both removed.
+ */
+export function resolveResultKeys(results: Record<string, { file?: string; filePath?: string }>, ids: string[]): string[] {
+  const byFile = new Map<string, string[]>()
+  const byPath = new Map<string, string>()
+  for (const [k, v] of Object.entries(results)) {
+    if (v.filePath) byPath.set(v.filePath, k)
+    if (v.file) { const l = byFile.get(v.file); if (l) l.push(k); else byFile.set(v.file, [k]) }
+  }
+  const out = new Set<string>()
+  for (const id of ids) {
+    if (id in results) out.add(id)
+    else if (byPath.has(id)) out.add(byPath.get(id)!)
+    else { const l = byFile.get(id); if (l?.length === 1) out.add(l[0]) }
+  }
+  return [...out]
+}

@@ -91,24 +91,24 @@ export default function AppleMusicExportDialog({ title, prepare, playlistNames, 
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-sm font-semibold text-[#e2e8f0]"> {title}</h3>
           {!running && (
-            <button type="button" onClick={onClose} aria-label="Close" className="text-xs text-[#8394a8] hover:text-[#e2e8f0] cursor-pointer">Close</button>
+            <button type="button" onClick={onClose} aria-label="Close" className="text-xs text-[#b6c2d0] hover:text-[#e2e8f0] cursor-pointer">Close</button>
           )}
         </div>
 
         {stage.kind === "options" && (
           <>
-            <p className="text-xs text-[#8394a8] leading-relaxed">
+            <p className="text-xs text-[#b6c2d0] leading-relaxed">
               {prepared.job.playlists.length} playlist{prepared.job.playlists.length === 1 ? "" : "s"} · {prepared.trackCount} tracks go into the
-              <span className="text-[#a6b5c8]"> DJFriend</span> folder in Music. Pushing again replaces their contents.
+              <span className="text-[#ccd6e2]"> DJFriend</span> folder in Music. Pushing again replaces their contents.
               Your other Music playlists aren’t touched.
             </p>
 
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input type="checkbox" checked={opts.addMissing} onChange={e => setOpts(o => ({ ...o, addMissing: e.target.checked }))}
                 className="mt-0.5 w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer" />
-              <span className="text-xs text-[#a6b5c8]">
+              <span className="text-xs text-[#ccd6e2]">
                 Add tracks that aren’t in your Music library yet
-                <span className="block text-[10px] text-[#64748b]">Otherwise they’re left out of the Music playlist.</span>
+                <span className="block text-[10px] text-[#9aa8ba]">Otherwise they’re left out of the Music playlist.</span>
               </span>
             </label>
 
@@ -116,9 +116,9 @@ export default function AppleMusicExportDialog({ title, prepare, playlistNames, 
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input type="checkbox" checked={opts.writeBack !== null} onChange={e => setKeyField(e.target.checked ? "grouping" : null)}
                   className="mt-0.5 w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer" />
-                <span className="text-xs text-[#a6b5c8]">
+                <span className="text-xs text-[#ccd6e2]">
                   Write BPM and key to the Music tracks
-                  <span className="block text-[10px] text-[#64748b]">So Rekordbox and Serato see them when importing from Apple Music. Overwrites Music’s BPM.</span>
+                  <span className="block text-[10px] text-[#9aa8ba]">So Rekordbox and Serato see them when importing from Apple Music. Overwrites Music’s BPM.</span>
                 </span>
               </label>
               {opts.writeBack !== null && (
@@ -130,7 +130,7 @@ export default function AppleMusicExportDialog({ title, prepare, playlistNames, 
                     <label key={value} className="flex items-center gap-2 cursor-pointer">
                       <input type="radio" name="keyField" checked={opts.writeBack === value} onChange={() => setKeyField(value)}
                         className="w-3 h-3 accent-[#7c3aed] cursor-pointer" />
-                      <span className="text-[11px] text-[#a6b5c8]">{label} <span className="text-[#64748b]">— {hint}</span></span>
+                      <span className="text-[11px] text-[#ccd6e2]">{label} <span className="text-[#9aa8ba]">— {hint}</span></span>
                     </label>
                   ))}
                 </div>
@@ -143,9 +143,9 @@ export default function AppleMusicExportDialog({ title, prepare, playlistNames, 
                   {skippedTotal} track{skippedTotal === 1 ? "" : "s"} can’t be exported {showSkipped ? "▴" : "▾"}
                 </button>
                 {showSkipped && (
-                  <ul className="mt-1.5 max-h-32 overflow-y-auto flex flex-col gap-0.5 text-[10px] text-[#8394a8]">
+                  <ul className="mt-1.5 max-h-32 overflow-y-auto flex flex-col gap-0.5 text-[10px] text-[#b6c2d0]">
                     {Object.entries(prepared.skipped).flatMap(([pid, list]) => list.map((s, i) => (
-                      <li key={`${pid}-${i}`} className="truncate">{playlistNames.get(pid)}: {s.title} <span className="text-[#58656e]">({skipReasonText(s.reason)})</span></li>
+                      <li key={`${pid}-${i}`} className="truncate">{playlistNames.get(pid)}: {s.title} <span className="text-[#8d9aab]">({skipReasonText(s.reason)})</span></li>
                     )))}
                   </ul>
                 )}
@@ -153,7 +153,7 @@ export default function AppleMusicExportDialog({ title, prepare, playlistNames, 
             )}
 
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#8292a4] hover:text-[#a6b5c8] cursor-pointer">Cancel</button>
+              <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#b6c2d0] hover:text-[#ccd6e2] cursor-pointer">Cancel</button>
               <button type="button" onClick={() => void start()} disabled={prepared.trackCount === 0}
                 className="px-3 py-1.5 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 Export to Music
@@ -166,14 +166,14 @@ export default function AppleMusicExportDialog({ title, prepare, playlistNames, 
           const frac = progressFraction(stage, prepared.job.playlists.length);
           return (
             <div className="flex flex-col gap-3" aria-live="polite">
-              <p className="text-xs text-[#a6b5c8]">{progressText(stage.progress)}</p>
+              <p className="text-xs text-[#ccd6e2]">{progressText(stage.progress)}</p>
               <div className="h-1 bg-[#2c2c42] rounded-full overflow-hidden">
                 <div className={`h-full bg-[#7c3aed] rounded-full transition-all ${frac === null ? "animate-pulse w-full" : ""}`}
                   style={frac === null ? undefined : { width: `${Math.round(frac * 100)}%` }} />
               </div>
-              <p className="text-[10px] text-[#64748b]">Music may open. The first time, macOS asks to let DJFriend control Music — click OK.</p>
+              <p className="text-[10px] text-[#9aa8ba]">Music may open. The first time, macOS asks to let DJFriend control Music — click OK.</p>
               <div className="flex justify-end">
-                <button type="button" onClick={() => abortRef.current?.abort()} className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#8292a4] hover:text-[#ef4444] cursor-pointer">Cancel</button>
+                <button type="button" onClick={() => abortRef.current?.abort()} className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#b6c2d0] hover:text-[#ef4444] cursor-pointer">Cancel</button>
               </div>
             </div>
           );
@@ -187,7 +187,7 @@ export default function AppleMusicExportDialog({ title, prepare, playlistNames, 
           return (
             <div className="flex flex-col gap-2" aria-live="polite">
               <p className="text-xs text-[#34d399]">✓ Exported {entries.length} playlist{entries.length === 1 ? "" : "s"} with {added} tracks to Music.</p>
-              <ul className="text-[11px] text-[#8394a8] flex flex-col gap-0.5">
+              <ul className="text-[11px] text-[#b6c2d0] flex flex-col gap-0.5">
                 {r.addedToLibrary > 0 && <li>{r.addedToLibrary} file{r.addedToLibrary === 1 ? "" : "s"} added to your Music library</li>}
                 {r.tagged > 0 && <li>BPM / key written to {r.tagged} track{r.tagged === 1 ? "" : "s"}</li>}
                 {notInMusic > 0 && <li className="text-[#f59e0b]">{notInMusic} track{notInMusic === 1 ? "" : "s"} weren’t in Music and were left out</li>}
@@ -210,7 +210,7 @@ export default function AppleMusicExportDialog({ title, prepare, playlistNames, 
           <div className="flex flex-col gap-3" role="alert">
             <p className="text-xs text-[#ef4444] leading-relaxed">{stage.message}</p>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#8292a4] cursor-pointer">Close</button>
+              <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#b6c2d0] cursor-pointer">Close</button>
               <button type="button" onClick={() => setStage({ kind: "options" })} className="px-3 py-1.5 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] cursor-pointer">Try again</button>
             </div>
           </div>

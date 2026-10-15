@@ -379,6 +379,24 @@ export function computeEnergyProfile(channelData: Float32Array, sampleRate: numb
   return { intro, body, peak, outro, variance, dropStrength };
 }
 
+// mpg123-decoder prints "mpg123-decoder: …" via console.error for every damaged MP3 frame it skips.
+// Those are non-fatal (the frame is dropped, decoding continues), so count them instead of flooding
+// the log, and report one line per file.
+let skippedMp3Frames = 0;
+const consoleError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+  if (typeof args[0] === 'string' && args[0].startsWith('mpg123-decoder:')) { skippedMp3Frames++; return; }
+  consoleError(...args);
+};
+async function decodeQuietly(decode: (buf: Buffer) => Promise<AudioBuffer>, buf: Buffer, label: string): Promise<AudioBuffer> {
+  const before = skippedMp3Frames;
+  try { return await decode(buf); }
+  finally {
+    const n = skippedMp3Frames - before;
+    if (n > 0) console.warn(`  (${label}: skipped ${n} damaged MP3 frame${n === 1 ? '' : 's'})`);
+  }
+}
+
 // Fallback decoder for formats not supported by audio-decode (e.g. M4A/AAC).
 // Uses macOS's built-in afconvert to transcode to 16-bit mono 44100 Hz WAV,
 // then feeds the WAV through the normal audio-decode pipeline.
@@ -490,7 +508,7 @@ export async function analyzeAudio(filePath: string, bpmHint?: { min: number; ma
     const fileBuffer = fs.readFileSync(filePath);
     let audioBuffer: AudioBuffer;
     try {
-      audioBuffer = await decodeAudio(fileBuffer);
+      audioBuffer = await decodeQuietly(decodeAudio, fileBuffer, path.basename(filePath));
     } catch (decodeErr) {
       const msg = decodeErr instanceof Error ? decodeErr.message : String(decodeErr);
       if ((msg.includes('Missing decoder for') || msg.includes('Cannot detect audio format')) && process.platform === 'darwin') {
@@ -563,7 +581,7 @@ export async function analyzeAudioBuffer(buf: Buffer, bpmHint?: { min: number; m
     const decodeAudio = (require('audio-decode') as { default: (buf: Buffer) => Promise<AudioBuffer> }).default;
     let audioBuffer: AudioBuffer;
     try {
-      audioBuffer = await decodeAudio(buf);
+      audioBuffer = await decodeQuietly(decodeAudio, buf, 'buffer');
     } catch (err) {
       console.warn(`  (audio-decode failed for buffer: ${err instanceof Error ? err.message : String(err)})`);
       return null;

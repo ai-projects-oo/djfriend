@@ -24,11 +24,11 @@ function FolderInput({ label, labelIcon, value, status, placeholder, hint, onCha
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-xs text-[#8394a8] flex items-center gap-1.5">
+        <label className="text-xs text-[#b6c2d0] flex items-center gap-1.5">
           {labelIcon}
           {label}
         </label>
-        {status === 'checking' && <span className="text-[10px] text-[#8394a8]">Checking…</span>}
+        {status === 'checking' && <span className="text-[10px] text-[#b6c2d0]">Checking…</span>}
         {status === 'ok' && <span className="text-[10px] text-[#22c55e]">✓ Found</span>}
         {status === 'missing' && <span className="text-[10px] text-[#ef4444]">Folder not found</span>}
       </div>
@@ -39,7 +39,7 @@ function FolderInput({ label, labelIcon, value, status, placeholder, hint, onCha
           onChange={e => onChange(e.target.value)}
           onBlur={onBlur}
           placeholder={placeholder}
-          className={`flex-1 rounded-md border bg-[#20202e] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#3e4f65] focus:outline-none transition-colors ${
+          className={`flex-1 rounded-md border bg-[#20202e] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#6b7a94] focus:outline-none transition-colors ${
             status === 'ok' ? 'border-[#22c55e]' :
             status === 'missing' ? 'border-[#ef4444]' :
             'border-[#363650] focus:border-[#7c3aed]'
@@ -48,13 +48,13 @@ function FolderInput({ label, labelIcon, value, status, placeholder, hint, onCha
         <button
           type="button"
           onClick={() => void onBrowse()}
-          className="px-3 py-2 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:text-[#e2e8f0] hover:border-[#7c3aed] bg-[#20202e] transition-colors cursor-pointer whitespace-nowrap"
+          className="px-3 py-2 text-xs rounded-md border border-[#363650] text-[#ccd6e2] hover:text-[#e2e8f0] hover:border-[#7c3aed] bg-[#20202e] transition-colors cursor-pointer whitespace-nowrap"
           aria-label={`Browse for ${label}`}
         >
           Browse…
         </button>
       </div>
-      {hint && <p className="mt-1 text-[10px] text-[#8394a8]">{hint}</p>}
+      {hint && <p className="mt-1 text-[10px] text-[#b6c2d0]">{hint}</p>}
     </div>
   )
 }
@@ -269,7 +269,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
       <div className="w-full max-w-md rounded-xl border border-[#363650] bg-[#0e0e16] shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-semibold text-[#e2e8f0]">Settings</h2>
-          <button onClick={onClose} className="text-[#8394a8] hover:text-[#a6b5c8] transition-colors" aria-label="Close settings">
+          <button onClick={onClose} className="text-[#b6c2d0] hover:text-[#ccd6e2] transition-colors" aria-label="Close settings">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -279,7 +279,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         {/* ── Desktop-only: Folders ─────────────────────────────────── */}
         {isElectron && (
           <div className="space-y-4 mb-5">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8]">Folders</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#b6c2d0]">Folders</h3>
 
             {!musicFolder && (
               <div className="rounded-lg border border-[#7c3aed44] bg-[#1a1030] px-4 py-3">
@@ -322,7 +322,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         {/* ── Spotify (both platforms) ──────────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#2c2c42] space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] flex items-center gap-1.5">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#b6c2d0] flex items-center gap-1.5">
               <SpotifyIcon size={13} className="text-[#1db954]" />
               Spotify
             </h3>
@@ -331,15 +331,15 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             )}
           </div>
           {spotifyConnected ? (
-            <p className="text-xs text-[#8394a8] leading-relaxed">
+            <p className="text-xs text-[#b6c2d0] leading-relaxed">
               Spotify is connected. Import playlists and export sets directly from the app.
             </p>
           ) : hasSpotifySecret ? (
-            <p className="text-xs text-[#8394a8] leading-relaxed">
+            <p className="text-xs text-[#b6c2d0] leading-relaxed">
               Connect your Spotify account to import playlists and export sets.
             </p>
           ) : (
-            <p className="text-xs text-[#8394a8] leading-relaxed">
+            <p className="text-xs text-[#b6c2d0] leading-relaxed">
               To enable Spotify integration, reach out at{' '}
               <a href="mailto:obo_odedr@hotmail.com" className="text-[#1db954] hover:underline">
                 obo_odedr@hotmail.com
@@ -369,10 +369,10 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
         {/* ── Performance ───────────────────────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#2c2c42]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">Performance</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#b6c2d0] mb-3">Performance</h3>
 
           <div>
-            <p className="text-xs text-[#8394a8] mb-2">Concurrent Process Mode</p>
+            <p className="text-xs text-[#b6c2d0] mb-2">Concurrent Process Mode</p>
             <div className="space-y-2">
               {(['performance', 'normal', 'power-saving'] as const).map(value => (
                 <label key={value} className="flex items-center gap-3 cursor-pointer select-none">
@@ -394,7 +394,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
         {/* ── Display ──────────────────────────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#2c2c42]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">Display</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#b6c2d0] mb-3">Display</h3>
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -413,14 +413,14 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             />
             <span className="flex flex-col">
               <span className="text-sm text-[#e2e8f0]">Show tips</span>
-              <span className="text-[11px] text-[#8394a8]">Hover tooltips on tracks and controls</span>
+              <span className="text-[11px] text-[#b6c2d0]">Hover tooltips on tracks and controls</span>
             </span>
           </label>
         </div>
 
         {/* ── AI & Privacy ─────────────────────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#2c2c42]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">AI & Privacy</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#b6c2d0] mb-3">AI & Privacy</h3>
           <label className="flex items-start gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -439,7 +439,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             />
             <div className="flex flex-col gap-0.5">
               <span className="text-sm text-[#e2e8f0]">Help improve the AI for everyone</span>
-              <span className="text-[11px] text-[#8394a8]">
+              <span className="text-[11px] text-[#b6c2d0]">
                 Anonymously shares transition patterns (BPM, key, energy — no track names or metadata) after each set. Helps train a community model that benefits all DJFriend users.
               </span>
             </div>
@@ -447,17 +447,17 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           {mlStats && (
             <div className="mt-3 rounded-lg bg-[#1c1c2e] border border-[#2c2c42] px-3 py-2.5 flex items-center justify-between gap-4">
               <div className="flex flex-col gap-0.5">
-                <span className="text-[11px] text-[#8394a8]">Community model</span>
-                <span className="text-[10px] text-[#6b7a94]">v{mlStats.modelVersion} · {mlStats.trainedSamples.toLocaleString()} transitions learned</span>
+                <span className="text-[11px] text-[#b6c2d0]">Community model</span>
+                <span className="text-[10px] text-[#a3b0c2]">v{mlStats.modelVersion} · {mlStats.trainedSamples.toLocaleString()} transitions learned</span>
               </div>
               <div className="flex gap-3 text-right">
                 <div className="flex flex-col items-end">
                   <span className="text-xs font-semibold text-[#a78bfa] tabular-nums">{mlStats.vectorCount.toLocaleString()}</span>
-                  <span className="text-[10px] text-[#6b7a94]">positive</span>
+                  <span className="text-[10px] text-[#a3b0c2]">positive</span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-xs font-semibold text-[#f87171] tabular-nums">{mlStats.negativeCount.toLocaleString()}</span>
-                  <span className="text-[10px] text-[#6b7a94]">rejected</span>
+                  <span className="text-[10px] text-[#a3b0c2]">rejected</span>
                 </div>
               </div>
             </div>
@@ -467,7 +467,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         {/* ── Discogs ──────────────────────────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#2c2c42]">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8]">Discogs</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-[#b6c2d0]">Discogs</h3>
             {hasDiscogsOAuth && discogsConnectedAs && (
               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#22c55e22] text-[#22c55e]">Connected as {discogsConnectedAs}</span>
             )}
@@ -479,7 +479,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
             )}
 
             {discogsCollection && discogsDaysSince !== null && (
-              <p className={`text-[11px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#8394a8]'}`}>
+              <p className={`text-[11px] ${discogsDaysSince >= 30 ? 'text-[#f59e0b]' : 'text-[#b6c2d0]'}`}>
                 {discogsCollection.totalReleases} releases · synced {discogsDaysSince === 0 ? 'today' : `${discogsDaysSince}d ago`}
                 {discogsDaysSince >= 30 && ' · collection may be out of date'}
               </p>
@@ -500,7 +500,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                 type="button"
                 onClick={() => { window.location.href = '/api/discogs/connect' }}
                 disabled={!hasDiscogsConsumerKey}
-                className="px-3 py-2 text-xs font-medium rounded-md border border-[#363650] text-[#a6b5c8] hover:text-white hover:border-[#7c3aed] hover:bg-[#20202e] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="px-3 py-2 text-xs font-medium rounded-md border border-[#363650] text-[#ccd6e2] hover:text-white hover:border-[#7c3aed] hover:bg-[#20202e] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 {hasDiscogsOAuth ? 'Reconnect Discogs ↗' : 'Connect Discogs ↗'}
               </button>
@@ -509,7 +509,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                   type="button"
                   onClick={triggerSync}
                   disabled={discogsSyncPhase === 'syncing'}
-                  className="px-3 py-2 text-xs font-medium rounded-md border border-[#363650] text-[#a6b5c8] hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="px-3 py-2 text-xs font-medium rounded-md border border-[#363650] text-[#ccd6e2] hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   {discogsSyncPhase === 'syncing' ? 'Syncing…' : '↺ Sync Collection'}
                 </button>
@@ -520,27 +520,27 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
 {/* ── OpenAI / AI Features ─────────────────────────────────── */}
         <div id="settings-gig-finder" className="mt-5 pt-5 border-t border-[#2c2c42]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">OpenAI</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#b6c2d0] mb-3">OpenAI</h3>
 
           {!openAiSession ? (
             <div className="flex flex-col gap-4">
               {/* How to get a key */}
               <div className="rounded-lg bg-[#1c1c2e] border border-[#2c2c42] p-3 flex flex-col gap-2">
-                <p className="text-[11px] font-semibold text-[#a6b5c8]">How to get an API key</p>
-                <ol className="text-[11px] text-[#8394a8] leading-relaxed list-decimal list-inside flex flex-col gap-1">
+                <p className="text-[11px] font-semibold text-[#ccd6e2]">How to get an API key</p>
+                <ol className="text-[11px] text-[#b6c2d0] leading-relaxed list-decimal list-inside flex flex-col gap-1">
                   <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-[#a78bfa] hover:underline cursor-pointer">platform.openai.com/api-keys</a></li>
                   <li>Sign in or create a free account</li>
                   <li>Click <span className="text-[#e2e8f0]">Create new secret key</span></li>
                   <li>Copy the key (starts with <span className="font-mono text-[#e2e8f0]">sk-</span>) and paste it below</li>
                 </ol>
-                <p className="text-[10px] text-[#64748b] leading-relaxed">
+                <p className="text-[10px] text-[#9aa8ba] leading-relaxed">
                   Keys are stored locally on your device only — never sent to DJFriend servers. OpenAI charges per request; typical use costs a few cents per month.
                 </p>
               </div>
 
               {/* Key input */}
               <div>
-                <label className="text-[10px] text-[#8394a8] uppercase tracking-wider block mb-1.5">OpenAI API Key</label>
+                <label className="text-[10px] text-[#b6c2d0] uppercase tracking-wider block mb-1.5">OpenAI API Key</label>
                 <div className="flex gap-2">
                   <input
                     type="password"
@@ -549,7 +549,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                     onPaste={handleOpenAiKeyPaste}
                     placeholder="Paste your sk-… key to connect instantly"
                     autoComplete="off"
-                    className={`flex-1 px-3 py-1.5 text-xs rounded-md border bg-[#1c1c2e] text-[#e2e8f0] placeholder:text-[#5a6a80] focus:outline-none font-mono transition-colors ${openAiKeyError ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#363650] focus:border-[#7c3aed]'}`}
+                    className={`flex-1 px-3 py-1.5 text-xs rounded-md border bg-[#1c1c2e] text-[#e2e8f0] placeholder:text-[#8d9aab] focus:outline-none font-mono transition-colors ${openAiKeyError ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#363650] focus:border-[#7c3aed]'}`}
                   />
                   <button
                     type="button"
@@ -575,13 +575,13 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                 <button
                   type="button"
                   onClick={() => { clearOpenAiKey(); onOpenAiFeaturesChange?.(null); }}
-                  className="text-xs text-[#8394a8] hover:text-[#ef4444] transition-colors cursor-pointer"
+                  className="text-xs text-[#b6c2d0] hover:text-[#ef4444] transition-colors cursor-pointer"
                 >
                   Remove key
                 </button>
               </div>
               <div className="flex flex-col gap-2">
-                <p className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8] mb-1">Enable features</p>
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-[#b6c2d0] mb-1">Enable features</p>
                 {([
                   { key: 'enhancedAnalysis' as const, label: 'Enhanced Track Analysis', desc: 'AI transition explanations, set narrative, and track finder' },
                   { key: 'vinylAnalysis' as const, label: 'Vinyl Auto-Detection', desc: 'Automatically detect genre and BPM for Discogs vinyl records' },
@@ -601,7 +601,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                       </div>
                       <div>
                         <div className="text-sm font-medium text-[#e2e8f0]">{label}</div>
-                        <div className="text-[11px] text-[#8394a8] mt-0.5">{desc}</div>
+                        <div className="text-[11px] text-[#b6c2d0] mt-0.5">{desc}</div>
                       </div>
                     </button>
                   );
@@ -613,7 +613,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
 
 {/* ── Danger Zone (both platforms) ─────────────────────────── */}
         <div className="mt-5 pt-5 border-t border-[#2c2c42]">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8394a8] mb-3">Danger Zone</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#b6c2d0] mb-3">Danger Zone</h3>
           {!clearConfirm ? (
             <button
               onClick={() => setClearConfirm(true)}
@@ -633,7 +633,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
               </button>
               <button
                 onClick={() => setClearConfirm(false)}
-                className="text-xs text-[#8394a8] hover:text-[#a6b5c8] transition-colors cursor-pointer"
+                className="text-xs text-[#b6c2d0] hover:text-[#ccd6e2] transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -650,7 +650,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           <div className="flex justify-end gap-2 mt-6">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm text-[#8394a8] hover:text-[#a6b5c8] transition-colors cursor-pointer"
+              className="px-4 py-2 text-sm text-[#b6c2d0] hover:text-[#ccd6e2] transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -667,7 +667,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
           <div className="flex justify-end mt-6">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm text-[#8394a8] hover:text-[#a6b5c8] transition-colors cursor-pointer"
+              className="px-4 py-2 text-sm text-[#b6c2d0] hover:text-[#ccd6e2] transition-colors cursor-pointer"
             >
               Close
             </button>

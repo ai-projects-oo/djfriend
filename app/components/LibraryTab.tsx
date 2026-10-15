@@ -297,6 +297,7 @@ export default function LibraryTab({
     setVisibleCols(prev => { const n = new Set(prev); if (n.has(key)) { n.delete(key); } else { n.add(key); } return n; });
   };
 
+  const songsByFile = useMemo(() => new Map(library.map(s => [s.file, s])), [library]);
   const dupGroups = useMemo(() => {
     const groups: Record<string, Song[]> = {};
     for (const s of library) { const k = dupKey(s); (groups[k] ??= []).push(s); }
@@ -444,8 +445,8 @@ export default function LibraryTab({
   }, [onReanalyzed]);
 
   const handleDeleteSingle = useCallback(async (song: Song) => {
-    if (await removeTracksFromLibrary([song.file])) onRemoveTracks?.([song.file]);
-  }, [onRemoveTracks]);
+    if (await removeTracksFromLibrary([song.file], songsByFile)) onRemoveTracks?.([song.file]);
+  }, [onRemoveTracks, songsByFile]);
 
 
 
@@ -457,10 +458,12 @@ export default function LibraryTab({
     const files = [...(dupSelections[gk] ?? [])];
     if (!files.length) return;
     setDeleting(true);
-    try { await apiFetch("/api/remove-tracks", { method: "POST", body: JSON.stringify({ files }) }); onRemoveTracks?.(files); setDupSelections(prev => { const n = { ...prev }; delete n[gk]; return n; }); }
-    catch { /* non-fatal */ }
+    if (await removeTracksFromLibrary(files, songsByFile)) {
+      onRemoveTracks?.(files);
+      setDupSelections(prev => { const n = { ...prev }; delete n[gk]; return n; });
+    }
     setDeleting(false);
-  }, [dupSelections, onRemoveTracks]);
+  }, [dupSelections, onRemoveTracks, songsByFile]);
 
   const handleRowContextMenu = (e: React.MouseEvent, song: Song) => {
     e.preventDefault();

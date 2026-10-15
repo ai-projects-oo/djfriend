@@ -4706,7 +4706,7 @@ function AppInner() {
           onReanalyze={s => { void reanalyzeTrack(s).then(d => { if (d) updateTrack(s.file, d); }); }}
           onExportM3U={exportTrackM3U}
           onSendToGenerator={sendToGenerator}
-          onDelete={s => { void removeTracksFromLibrary([s.file]).then(ok => { if (ok) removeTracks([s.file]); }); }}
+          onDelete={s => { void removeTracksFromLibrary([s.file], songsByFile).then(ok => { if (ok) removeTracks([s.file]); }); }}
           playlistLibrary={playlistLib}
           lastPlaylist={lastPlaylist}
           onAddToPlaylist={addToPlaylist}

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { loadResults, saveResults, flushResults, forgetResults } from '../src/results-store'
+import { loadResults, saveResults, flushResults, forgetResults, resolveResultKeys } from '../src/results-store'
 
 interface Entry { bpm: number; title?: string }
 
@@ -159,5 +159,28 @@ describe('results-store — outside writes while changes are pending', () => {
     const future = new Date(Date.now() + 10_000)
     fs.utimesSync(file, future, future)
     expect(loadResults<Entry>(file)).toEqual({ a: { bpm: 10 }, n: { bpm: 5 } })
+  })
+})
+
+describe('resolveResultKeys (remove-tracks)', () => {
+  const results = {
+    '/Music/a/One.mp3': { file: 'One.mp3', filePath: '/Music/a/One.mp3' },
+    '/Music/b/Two.mp3': { file: 'Two.mp3', filePath: '/Music/b/Two.mp3' },
+    '/Music/c/Same.mp3': { file: 'Same.mp3', filePath: '/Music/c/Same.mp3' },
+    '/Music/d/Same.mp3': { file: 'Same.mp3', filePath: '/Music/d/Same.mp3' },
+    'sub/rel.mp3': { file: 'sub/rel.mp3', filePath: '/Songs/sub/rel.mp3' },
+  }
+  it('maps the UI id (basename) to the stored path key — the Apple Music case that failed before', () => {
+    expect(resolveResultKeys(results, ['One.mp3', 'Two.mp3'])).toEqual(['/Music/a/One.mp3', '/Music/b/Two.mp3'])
+  })
+  it('accepts keys and filePaths directly', () => {
+    expect(resolveResultKeys(results, ['sub/rel.mp3', '/Songs/sub/rel.mp3', '/Music/a/One.mp3'])).toEqual(['sub/rel.mp3', '/Music/a/One.mp3'])
+  })
+  it('never removes two different files that share a name', () => {
+    expect(resolveResultKeys(results, ['Same.mp3'])).toEqual([])
+    expect(resolveResultKeys(results, ['/Music/d/Same.mp3'])).toEqual(['/Music/d/Same.mp3'])
+  })
+  it('ignores unknown ids', () => {
+    expect(resolveResultKeys(results, ['nope.mp3'])).toEqual([])
   })
 })

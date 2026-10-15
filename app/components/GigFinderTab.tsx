@@ -10,6 +10,7 @@ import type {
   GigEvidenceFreshness,
 } from '../types'
 import { apiFetch } from '../services/apiFetch'
+import { reverseGeocode } from '../services/geocode'
 import { chatComplete } from '../services/openAiApi'
 import { getAccessToken } from '../services/openAiAuth'
 
@@ -528,11 +529,14 @@ function LocationMap({
       center: initCoords,
       zoom: 9,
       zoomControl: true,
-      attributionControl: false,
+      attributionControl: true,
     })
+    map.attributionControl.setPrefix(false)
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // OSM tile usage policy + ODbL: attribution must be visible on the map
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
     }).addTo(map)
 
     const marker = L.marker(initCoords, { icon, draggable: true }).addTo(map)
@@ -549,13 +553,9 @@ function LocationMap({
       circle.setLatLng([lat, lng])
       // Reverse geocode via Nominatim
       try {
-        const resp = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
-          { headers: { 'User-Agent': 'DJFriend/1.0' } }
-        )
-        const data = await resp.json() as { address?: { city?: string; town?: string; village?: string; country?: string } }
-        const city = data.address?.city ?? data.address?.town ?? data.address?.village ?? 'Unknown'
-        const country = data.address?.country ?? ''
+        const address = await reverseGeocode(lat, lng)
+        const city = address?.city ?? address?.town ?? address?.village ?? 'Unknown'
+        const country = address?.country ?? ''
         onLocationChange(`${city}, ${country}`, [lat, lng])
       } catch {
         onLocationChange(`${lat.toFixed(4)}, ${lng.toFixed(4)}`, [lat, lng])
@@ -567,13 +567,9 @@ function LocationMap({
       marker.setLatLng([lat, lng])
       circle.setLatLng([lat, lng])
       try {
-        const resp = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
-          { headers: { 'User-Agent': 'DJFriend/1.0' } }
-        )
-        const data = await resp.json() as { address?: { city?: string; town?: string; village?: string; country?: string } }
-        const city = data.address?.city ?? data.address?.town ?? data.address?.village ?? 'Unknown'
-        const country = data.address?.country ?? ''
+        const address = await reverseGeocode(lat, lng)
+        const city = address?.city ?? address?.town ?? address?.village ?? 'Unknown'
+        const country = address?.country ?? ''
         onLocationChange(`${city}, ${country}`, [lat, lng])
       } catch {
         onLocationChange(`${lat.toFixed(4)}, ${lng.toFixed(4)}`, [lat, lng])

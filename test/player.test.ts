@@ -37,8 +37,9 @@ beforeAll(() => {
 function Harness({ expose }: { expose: (p: Player) => void }) {
   const p = usePlayer(byFile)
   useEffect(() => expose(p))
-  return h(NowPlayingBar, { player: p, songsByFile: byFile })
+  return h(NowPlayingBar, { player: p, songsByFile: byFile, onTrackContextMenu: (_e: unknown, s: Song) => ctxSpy(s) })
 }
+const ctxSpy = vi.fn()
 
 beforeEach(() => {
   container = document.createElement('div')
@@ -128,5 +129,37 @@ describe('player', () => {
     expect(player.volume).toBe(0.4)
     act(() => player.playTracks(['a'], 0))
     expect(audioEl!.volume).toBe(0.4)
+  })
+})
+
+describe('player — right-click and resize', () => {
+  it('right-click on the player opens the track menu for the loaded track', () => {
+    ctxSpy.mockClear()
+    act(() => player.playTracks(['b'], 0))
+    act(() => { label('Player')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })) })
+    expect(ctxSpy).toHaveBeenCalledWith(expect.objectContaining({ file: 'b' }))
+  })
+
+  it('right-click inside the queue panel does not open the track menu', () => {
+    ctxSpy.mockClear()
+    act(() => player.playTracks(['a', 'b'], 0))
+    click(label('Queue')!)
+    act(() => { label('Play queue')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })) })
+    expect(ctxSpy).not.toHaveBeenCalled()
+  })
+
+  it('the resize handle enlarges the player up to 3× and remembers it; double-click resets', () => {
+    act(() => player.playTracks(['a'], 0))
+    const handle = label('Resize player')!
+    const art = () => label('Player')!.querySelector('div.rounded, img.rounded') as HTMLElement
+    expect(art().style.width).toBe('40px')
+    for (let i = 0; i < 20; i++) act(() => { handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })) })
+    expect(handle.getAttribute('aria-valuenow')).toBe('3')
+    expect(art().style.width).toBe('120px')
+    expect(localStorage.getItem('djfriend-player-scale')).toBe('3')
+    act(() => { handle.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })) })
+    expect(handle.getAttribute('aria-valuenow')).toBe('1')
+    expect(art().style.width).toBe('40px')
+    localStorage.removeItem('djfriend-player-scale')
   })
 })

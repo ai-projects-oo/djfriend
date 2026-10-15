@@ -63,6 +63,10 @@ import { materializeSmartPlaylists, evaluateSmart, playStatsByFile } from "./lib
 import SmartPlaylistEditor from "./components/SmartPlaylistEditor";
 import UndoToast from "./components/UndoToast";
 import NowPlayingBar from "./components/NowPlayingBar";
+import TrackContextMenu, { type TrackMenuState } from "./components/TrackContextMenu";
+import TrackInfoModal from "./components/TrackInfoModal";
+import { exportTrackM3U, reanalyzeTrack, removeTracksFromLibrary } from "./services/trackActions";
+import { patchTrackMeta } from "./services/trackMeta";
 import { usePlayer } from "./hooks/usePlayer";
 import { buildAppleMusicJob, type AppleMusicExportOptions } from "./lib/appleMusicExport";
 import AppleMusicExportDialog from "./components/AppleMusicExportDialog";
@@ -234,7 +238,7 @@ function AppInner() {
   const historyExportRef = useRef<HTMLDivElement | null>(null);
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string } | null>(null);
   const [mlWeights, setMlWeights] = useState<import('./lib/mlModel').ModelWeights | null>(null);
-  const [shareTelemetry, setShareTelemetry] = useState(true);
+  const [shareTelemetry, setShareTelemetry] = useState(false);
   const [tipConfig, setTipConfig] = useState<TipConfig>(DEFAULT_TIP_CONFIG);
   const [previewFile, setPreviewFile] = useState<string | null>(null);
   const [previewPlaying, setPreviewPlaying] = useState(false);
@@ -697,10 +701,32 @@ function AppInner() {
     else if (v.kind === "spotify") generateFrom(v.id);
   }, [generateFrom]);
 
+  const { expandToPlaylist } = playlistsApi;
   const showIn = useCallback((view: LibraryView, file: string) => {
+    setActiveTab("Library");
+    if (view.kind === "playlist") expandToPlaylist(view.id);
     setLibraryView(view);
     setReveal({ file, nonce: Date.now() });
+  }, [expandToPlaylist]);
+
+  // ── Track actions shared by the library table and the player's right-click menu ──
+  const updateTrack = useCallback((file: string, patch: Partial<Song>) => {
+    setLibrary(lib => lib.map(s => s.file === file ? { ...s, ...patch } : s));
+  }, [setLibrary]);
+  const removeTracks = useCallback((files: string[]) => {
+    setLibrary(lib => lib.filter(s => !files.includes(s.file)));
+  }, [setLibrary]);
+  const sendToGenerator = useCallback((files: string[]) => {
+    setLibrarySelection(new Set(files));
+    setPlaylistFilterIds(["__selection__"]);
+    setActiveTab("Set Generator");
   }, []);
+  const newPlaylistFromFiles = useCallback((files: string[]) => {
+    const id = newPlaylistFrom("Untitled Playlist", files);
+    setPlaylistToRename(id);
+  }, [newPlaylistFrom]);
+  const [playerMenu, setPlayerMenu] = useState<TrackMenuState | null>(null);
+  const [playerInfoSong, setPlayerInfoSong] = useState<Song | null>(null);
 
   const prepareMusicExport = useCallback(
     (opts: AppleMusicExportOptions) => buildAppleMusicJob(playlistLib, musicExport?.ids ?? [], songsByFile, opts),
@@ -1098,7 +1124,7 @@ function AppInner() {
           !!(d.rekordboxFolder && d.rekordboxFolder.trim()),
         );
         if ((d as { platform?: string }).platform) setIsMacOS((d as { platform?: string }).platform === 'darwin');
-        if ((d as { shareTelemetry?: boolean }).shareTelemetry !== undefined) setShareTelemetry((d as { shareTelemetry?: boolean }).shareTelemetry !== false);
+        if ((d as { shareTelemetry?: boolean }).shareTelemetry !== undefined) setShareTelemetry((d as { shareTelemetry?: boolean }).shareTelemetry === true);
         if ((d as { tipConfig?: TipConfig }).tipConfig) setTipConfig({ ...DEFAULT_TIP_CONFIG, ...(d as { tipConfig: TipConfig }).tipConfig });
       })
       .catch(() => {});
@@ -1165,7 +1191,9 @@ function AppInner() {
       for (let i = 1; i < n; i++) {
         const a = set[i - 1], b = set[i];
         if (!a.bpm || !b.bpm || !a.camelot || !b.camelot) continue;
-        vecs.push(transitionFeatures(a, b, b.targetEnergy, i / (n - 1)));
+        // Spotify's developer terms forbid using Spotify content to train ML models — drop Spotify-sourced genres
+        const own = (t: typeof a) => (t.genresFromSpotify ? { ...t, genres: [] } : t);
+        vecs.push(transitionFeatures(own(a), own(b), b.targetEnergy, i / (n - 1)));
       }
       return vecs;
     }
@@ -3933,24 +3961,11 @@ function AppInner() {
                 const p = playlistLib.playlists.find(x => x.id === activePlaylistId);
                 if (p) setSmartEditor({ playlist: p });
               } : undefined}
-              onNewPlaylistFromSelection={(files) => {
-                const id = newPlaylistFrom("Untitled Playlist", files);
-                setPlaylistToRename(id);
-              }}
-              onUpdateTrack={(file, patch) => {
-                setLibrary(lib => lib.map(s => s.file === file ? { ...s, ...patch } : s));
-              }}
-              onReanalyzed={(file, update) => {
-                setLibrary(lib => lib.map(s => s.file === file ? { ...s, ...update } : s));
-              }}
-              onRemoveTracks={(files) => {
-                setLibrary(lib => lib.filter(s => !files.includes(s.file)));
-              }}
-              onSendToGenerator={(files) => {
-                setLibrarySelection(new Set(files));
-                setPlaylistFilterIds(["__selection__"]);
-                setActiveTab("Set Generator");
-              }}
+              onNewPlaylistFromSelection={newPlaylistFromFiles}
+              onUpdateTrack={updateTrack}
+              onReanalyzed={updateTrack}
+              onRemoveTracks={removeTracks}
+              onSendToGenerator={sendToGenerator}
             />
           )}
           </div>
@@ -4676,7 +4691,36 @@ function AppInner() {
         />
       )}
 
-      {!previewTrack && <NowPlayingBar player={player} songsByFile={songsByFile} />}
+      {!previewTrack && (
+        <NowPlayingBar player={player} songsByFile={songsByFile}
+          onTrackContextMenu={(e, song) => { e.preventDefault(); setPlayerMenu({ x: e.clientX, y: e.clientY, song }); }} />
+      )}
+      {playerMenu && (
+        <TrackContextMenu
+          menu={playerMenu}
+          onClose={() => setPlayerMenu(null)}
+          onPlay={s => player.playTracks([s.file], 0)}
+          onPlayNext={player.playNext}
+          onPlayLater={player.playLater}
+          onGetInfo={setPlayerInfoSong}
+          onReanalyze={s => { void reanalyzeTrack(s).then(d => { if (d) updateTrack(s.file, d); }); }}
+          onExportM3U={exportTrackM3U}
+          onSendToGenerator={sendToGenerator}
+          onDelete={s => { void removeTracksFromLibrary([s.file]).then(ok => { if (ok) removeTracks([s.file]); }); }}
+          playlistLibrary={playlistLib}
+          lastPlaylist={lastPlaylist}
+          onAddToPlaylist={addToPlaylist}
+          onNewPlaylist={newPlaylistFromFiles}
+          containingSources={containingSources}
+          onShowIn={showIn}
+        />
+      )}
+      {playerInfoSong && (
+        <TrackInfoModal key={playerInfoSong.file} song={playerInfoSong} library={library}
+          onClose={() => setPlayerInfoSong(null)}
+          onSave={async (file, patch) => { await patchTrackMeta(file, patch); updateTrack(file, patch); }}
+          onNavigate={setPlayerInfoSong} />
+      )}
 
       {previewTrack && (
         <PlayerBar

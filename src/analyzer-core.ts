@@ -607,3 +607,16 @@ export async function analyzeAudioBuffer(buf: Buffer, bpmHint?: { min: number; m
     return null;
   }
 }
+
+/**
+ * Key + BPM from raw mono PCM captured live (e.g. a vinyl record played into the audio input).
+ * The audio is analysed in memory and never written to disk.
+ */
+export function analyzePcm(samples: Float32Array, sampleRate: number): { pitchClass: number; mode: number; keyConfidence?: number; keyVersion: number; bpm: number } | null {
+  if (samples.length < sampleRate * 5) return null;
+  const pcm = sampleRate !== 44100 ? resample(samples, sampleRate, 44100) : samples;
+  const key = detectKey(pcm, { segments: 1, segmentSeconds: pcm.length / 44100 });
+  if (!key) return null;
+  const bpm = detectBpm(pcm.subarray(0, Math.min(pcm.length, 30 * 44100)), 44100);
+  return { pitchClass: key.pitchClass, mode: key.mode, keyConfidence: key.confidence, keyVersion: KEY_DETECTION_VERSION, bpm };
+}

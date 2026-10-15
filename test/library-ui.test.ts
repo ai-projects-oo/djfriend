@@ -342,6 +342,10 @@ describe('LibraryTab playlist view', () => {
     rightClick(rowFor('Bravo'))
     click(menuItem('Add to Playlist')!)
     expect(document.querySelector('[role="menu"][aria-label="Add to Playlist"]')?.textContent).toContain('Gigs')
+    // Folders open their own flyout, like Apple Music
+    expect(menuItem('Warmup')).toBeUndefined()
+    click(menuItem('Gigs')!)
+    expect(document.querySelector('[role="menu"][aria-label="Gigs"]')?.textContent).toContain('Warmup')
     click(menuItem('Warmup')!)
     expect(onAdd).toHaveBeenCalledWith('p1', ['b.mp3'])
   })
@@ -365,17 +369,21 @@ describe('LibraryTab playlist view', () => {
     click(menuItem('Show in Playlist')!)
     const sub = document.querySelector('[role="menu"][aria-label="Show in Playlist"]')!
     expect(sub.textContent).toContain('Gigs')
-    expect(sub.textContent).toContain('Warmup')
     expect(sub.textContent).not.toContain('Other')
     expect(sub.textContent).toContain('Flying')
+    click(menuItem('Gigs')!)
+    expect(document.querySelector('[role="menu"][aria-label="Gigs"]')?.textContent).toContain('Warmup')
     click(menuItem('Warmup')!)
     expect(onShowIn).toHaveBeenCalledWith({ kind: 'playlist', id: 'p1' }, 'a.mp3')
   })
 
-  it('hides Show in Playlist when the track is in no playlist', () => {
+  it('shows Show in Playlist disabled when the track is in no playlist', () => {
     renderTable({ playlistLibrary: stored, onShowIn: () => {} })
     rightClick(rowFor('Bravo'))
-    expect(menuItem('Show in Playlist')).toBeUndefined()
+    const it = menuItem('Show in Playlist')!
+    expect(it.getAttribute('aria-disabled')).toBe('true')
+    expect(it.textContent).toContain('not in any playlist')
+    expect(document.querySelector('[role="menu"][aria-label="Show in Playlist"]')).toBeNull()
   })
 
   it('reveal selects the track and reports the selection', () => {

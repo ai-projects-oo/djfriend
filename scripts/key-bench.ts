@@ -33,6 +33,9 @@ function relation(a: string, b: string): string {
   if (la !== lb && (d === 3 || d === 9)) return 'parallel';
   return 'other';
 }
+const stored: Record<string, { camelot?: string; keyVersion?: number }> | null = process.env.KEY_BENCH_STORED
+  ? Object.fromEntries(Object.values(JSON.parse(fs.readFileSync(process.env.KEY_BENCH_STORED, 'utf-8')) as { filePath: string; camelot?: string; keyVersion?: number }[]).map(s => [s.filePath, s]))
+  : null;
 (async () => {
   const counts: Record<string, number> = { exact: 0, fifth: 0, relative: 0, parallel: 0, other: 0 };
   let done = 0, ms = 0;
@@ -41,8 +44,11 @@ function relation(a: string, b: string): string {
     let tag: string | undefined;
     try { const md = await mm.parseFile(f, { skipCovers: true, duration: false }); tag = md.common.key ?? undefined; } catch { continue; }
     const truth = tag ? tagToCamelot(tag) : null; if (!truth) continue;
-    const t = Date.now(); const r = await analyzeAudio(f); ms += Date.now() - t;
-    const got = r ? toCamelot(r.pitchClass, r.mode)?.camelot : undefined; if (!got) continue;
+    let got: string | undefined;
+    if (process.env.KEY_BENCH_SUBSET && stored && (!stored[f]?.camelot || stored[f].keyVersion)) continue;
+    if (stored && !process.env.KEY_BENCH_SUBSET) { const e = stored[f]; if (!e?.camelot || e.keyVersion) continue; got = e.camelot; }   // stored keys from the previous algorithm
+    else { const t = Date.now(); const r = await analyzeAudio(f); ms += Date.now() - t; got = r ? toCamelot(r.pitchClass, r.mode)?.camelot : undefined; }
+    if (!got) continue;
     const rel = relation(got, truth); counts[rel]++; done++;
     if (done % 25 === 0) console.log(`${done}/${N}`, JSON.stringify(counts));
   }

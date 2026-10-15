@@ -91,3 +91,19 @@ export function clearAiFields(t: VinylTrackEntry): VinylTrackEntry {
   delete next.aiFields;
   return next;
 }
+
+/**
+ * Merges a key/BPM measured from the record into a vinyl track. The key always replaces an AI guess;
+ * BPM fills in only when empty or AI-estimated — a hand-entered BPM is kept.
+ */
+export function applyVinylDetection(track: VinylTrackEntry, r: { camelot: string; bpm: number; keyConfidence?: number }): VinylTrackEntry {
+  const ai = new Set(track.aiFields ?? []);
+  const detected = new Set(track.detectedFields ?? []);
+  const next: VinylTrackEntry = { ...track, camelot: r.camelot, keyConfidence: r.keyConfidence };
+  ai.delete('camelot'); detected.add('camelot');
+  const bpmReplaceable = track.bpm == null || ai.has('bpm') || detected.has('bpm');
+  if (bpmReplaceable && r.bpm > 0) { next.bpm = Math.round(r.bpm * 10) / 10; ai.delete('bpm'); detected.add('bpm'); }
+  next.aiFields = ai.size ? [...ai] : undefined;
+  next.detectedFields = [...detected];
+  return next;
+}

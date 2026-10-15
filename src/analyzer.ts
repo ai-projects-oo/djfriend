@@ -10,6 +10,7 @@ import { dirname, join } from 'path';
 import { analyzeAudio as analyzeAudioDirect } from './analyzer-core.js';
 import { readSettings } from './settings.js';
 export type { LocalAudioFeatures } from './analyzer-core.js';
+export { analyzePcm } from './analyzer-core.js';
 
 type Result = Awaited<ReturnType<typeof analyzeAudioDirect>>;
 

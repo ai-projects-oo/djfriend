@@ -4,7 +4,7 @@ export interface SpotifyItem {
   artists: Array<{ id: string; name: string }>
 }
 
-export function stripMixedInKeyPrefix(str: string): string {
+export function stripKeyPrefix(str: string): string {
   return str.replace(/^[0-9]{1,2}[AB]\s*-\s*[0-9]+\s*-\s*/i, '').trim()
 }
 

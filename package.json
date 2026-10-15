@@ -48,7 +48,10 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "DJFriend listens to a record playing into your audio input to detect its key and BPM. Audio is analysed on this computer and never saved."
+      }
     },
     "files": [
       "dist/**",

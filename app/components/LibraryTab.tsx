@@ -1,15 +1,14 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import type { PlaylistLibrary, Song } from "../types";
 import { DRAG_TRACKS, type ContainingSource, type LibraryView } from "../lib/libraryView";
-import { flattenPlaylistTree, type PlaylistMenuEntry } from "../lib/playlists";
+import TrackContextMenu, { type TrackMenuState } from "./TrackContextMenu";
+import { exportTrackM3U, reanalyzeTrack, removeTracksFromLibrary } from "../services/trackActions";
 import LibraryStatsBar from "./LibraryStatsBar";
 import TrackInfoModal from "./TrackInfoModal";
 import { camelotColor } from "../lib/camelotColors";
 import WaveformBar from "./WaveformBar";
 import { apiFetch } from "../services/apiFetch";
-import { downloadM3U } from "../services/downloads";
 import { patchTrackMeta } from "../services/trackMeta";
-import type { SetTrack } from "../types";
 import { BEATPORT_UMBRELLAS } from "../lib/genreUtils";
 
 // BPM ranges by genre category — used as re-analyze hints
@@ -69,7 +68,6 @@ function shuffleOrder(files: string[]): string[] {
   return out;
 }
 
-function toSetTrack(s: Song): SetTrack { return { ...s, slot: 0, targetEnergy: s.energy, harmonicWarning: false }; }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,7 +99,6 @@ function loadFilters(): ColFilters {
   catch { return DEFAULT_FILTERS; }
 }
 
-interface ContextMenu { x: number; y: number; song: Song }
 
 interface Props {
   library: Song[];
@@ -212,148 +209,6 @@ function SortHeader({ col, label, sortKey, sortAsc, onSort }: { col: SortKey; la
   );
 }
 
-// ─── Context menu ─────────────────────────────────────────────────────────────
-
-const menuItemClass = "w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded text-[#a6b5c8] hover:bg-[#2c2c42] hover:text-[#e2e8f0]";
-
-/** Menu item that opens a flyout to the side (hover, click or →). */
-function Submenu({ label, openLeft, children }: { label: string; openLeft: boolean; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button type="button" role="menuitem" aria-haspopup="menu" aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
-        onKeyDown={e => { if (e.key === "ArrowRight" || e.key === "Enter") setOpen(true); if (e.key === "ArrowLeft") setOpen(false); }}
-        className={`${menuItemClass} flex items-center justify-between gap-4 ${open ? "bg-[#2c2c42] text-[#e2e8f0]" : ""}`}>
-        <span className="truncate">{label}</span><span aria-hidden className="text-[#64748b]">›</span>
-      </button>
-      {open && (
-        <div role="menu" aria-label={label}
-          className={`absolute -top-1 ${openLeft ? "right-full" : "left-full"} z-[101] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[220px] max-w-[320px] max-h-[60vh] overflow-y-auto`}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TreeEntries({ entries, onPick }: { entries: PlaylistMenuEntry[]; onPick: (id: string) => void }) {
-  return (
-    <>
-      {entries.map(e => e.kind === "folder" ? (
-        <div key={`f-${e.id}`} className="px-3 py-1 text-xs text-[#8394a8] truncate select-none" style={{ paddingLeft: 12 + e.depth * 14 }}>
-          <span aria-hidden>📁 </span>{e.name}
-        </div>
-      ) : (
-        <button key={`p-${e.id}`} type="button" role="menuitem" onClick={() => onPick(e.id)}
-          className={`${menuItemClass} truncate`} style={{ paddingLeft: 12 + e.depth * 14 }}>
-          <span aria-hidden className="text-[#7c3aed]">♫ </span>{e.name}
-        </button>
-      ))}
-    </>
-  );
-}
-
-function RowContextMenu({ menu, selection, onGetInfo, onPlay, onPlayNext, onPlayLater, onReanalyze, onSendToGenerator, onDelete, onExportM3U, onClose, playlistLibrary, lastPlaylist, onAddToPlaylist, onNewPlaylist, onRemoveFromView, containingSources, onShowIn }: {
-  menu: ContextMenu;
-  selection: Set<string>;
-  onGetInfo: (s: Song) => void;
-  onPlay: (s: Song) => void;
-  onPlayNext?: (files: string[]) => void;
-  onPlayLater?: (files: string[]) => void;
-  onReanalyze: (s: Song) => void;
-  onSendToGenerator?: (files: string[]) => void;
-  onDelete: (s: Song) => void;
-  onExportM3U: (s: Song) => void;
-  onClose: () => void;
-  playlistLibrary?: PlaylistLibrary;
-  lastPlaylist?: { id: string; name: string };
-  onAddToPlaylist?: (playlistId: string, files: string[]) => void;
-  onNewPlaylist?: (files: string[]) => void;
-  onRemoveFromView?: (files: string[]) => void;
-  containingSources?: (song: Song) => ContainingSource[];
-  onShowIn?: (view: LibraryView, file: string) => void;
-}) {
-  // Actions apply to the whole selection when the clicked row is part of it
-  const targets = selection.has(menu.song.file) && selection.size > 1 ? [...selection] : [menu.song.file];
-  const n = targets.length > 1 ? ` ${targets.length} tracks` : "";
-  const ref = useRef<HTMLDivElement>(null);
-  const openLeft = menu.x > window.innerWidth - 440;
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("mousedown", h);
-    document.addEventListener("keydown", k);
-    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k); };
-  }, [onClose]);
-
-  const item = (label: string, onClick: () => void, danger = false) => (
-    <button type="button" role="menuitem" className={danger ? "w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded text-[#ef4444]/80 hover:bg-[#ef4444]/10 hover:text-[#ef4444]" : menuItemClass} onClick={() => { onClick(); onClose(); }}>{label}</button>
-  );
-  const sep = () => <div className="my-1 border-t border-[#2c2c42]" />;
-
-  // Smart playlists get their tracks from rules, so they can't be added to
-  const addEntries = useMemo(() => (playlistLibrary ? flattenPlaylistTree(playlistLibrary, p => !p.smart) : []), [playlistLibrary]);
-  const inEntries = useMemo(
-    () => (playlistLibrary ? flattenPlaylistTree(playlistLibrary, p => p.tracks.includes(menu.song.file)) : []),
-    [playlistLibrary, menu.song.file],
-  );
-  const others = useMemo(() => containingSources?.(menu.song) ?? [], [containingSources, menu.song]);
-  const otherGroups = [...new Set(others.map(o => o.group))];
-  const pick = (fn: () => void) => () => { fn(); onClose(); };
-
-  return (
-    <div ref={ref} role="menu" className="fixed z-[100] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[200px]" style={{ top: menu.y, left: menu.x }}>
-      {onAddToPlaylist && lastPlaylist && item(`Add${n} to Last Playlist, ${lastPlaylist.name}`, () => onAddToPlaylist(lastPlaylist.id, targets))}
-      {(onAddToPlaylist || onNewPlaylist) && (
-        <Submenu label={`Add${n} to Playlist`} openLeft={openLeft}>
-          {onNewPlaylist && (
-            <button type="button" role="menuitem" className={menuItemClass} onClick={pick(() => onNewPlaylist(targets))}>New Playlist</button>
-          )}
-          {onAddToPlaylist && addEntries.length > 0 && (
-            <>
-              {onNewPlaylist && sep()}
-              <TreeEntries entries={addEntries} onPick={id => { onAddToPlaylist(id, targets); onClose(); }} />
-            </>
-          )}
-        </Submenu>
-      )}
-      {onRemoveFromView && item(`Remove${n} from Playlist`, () => onRemoveFromView(targets))}
-      {(onAddToPlaylist || onNewPlaylist || onRemoveFromView) && sep()}
-      {item("Play", () => onPlay(menu.song))}
-      {onPlayNext && item(`Play${n} Next`, () => onPlayNext(targets))}
-      {onPlayLater && item(`Play${n} Later`, () => onPlayLater(targets))}
-      {item("Get Info", () => onGetInfo(menu.song))}
-      {onShowIn && (inEntries.length > 0 || others.length > 0) && (
-        <Submenu label="Show in Playlist" openLeft={openLeft}>
-          <TreeEntries entries={inEntries} onPick={id => { onShowIn({ kind: "playlist", id }, menu.song.file); onClose(); }} />
-          {otherGroups.map(group => (
-            <div key={group}>
-              {inEntries.length > 0 && sep()}
-              <div className="px-3 pt-1 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-[#58656e]">{group}</div>
-              {others.filter(o => o.group === group).map(o => (
-                <button key={`${group}-${o.label}`} type="button" role="menuitem" className={`${menuItemClass} truncate`}
-                  onClick={pick(() => onShowIn(o.view, menu.song.file))}>
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          ))}
-        </Submenu>
-      )}
-      {sep()}
-      {item("Re-analyze Audio", () => onReanalyze(menu.song))}
-      {item("Export as M3U", () => onExportM3U(menu.song))}
-      {onSendToGenerator && selection.has(menu.song.file) && selection.size > 1
-        ? item(`Send ${selection.size} selected to Set Generator`, () => onSendToGenerator([...selection]))
-        : onSendToGenerator && item("Send to Set Generator", () => onSendToGenerator([menu.song.file]))}
-      {sep()}
-      {item("Delete from Library", () => onDelete(menu.song), true)}
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function LibraryTab({
@@ -405,7 +260,7 @@ export default function LibraryTab({
   const [bulkBpmMax, setBulkBpmMax]     = useState('');
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [infoSong, setInfoSong]         = useState<Song | null>(null);
-  const [contextMenu, setContextMenu]   = useState<ContextMenu | null>(null);
+  const [contextMenu, setContextMenu]   = useState<TrackMenuState | null>(null);
   const lastClickedIdx = useRef<number>(-1);
 
   const colMenuRef      = useRef<HTMLDivElement>(null);
@@ -583,20 +438,15 @@ export default function LibraryTab({
 
   const handleReanalyze = useCallback(async (song: Song) => {
     setReanalyzing(prev => new Set(prev).add(song.file));
-    try {
-      const res = await apiFetch("/api/reanalyze-track", { method: "POST", body: JSON.stringify({ filePath: song.filePath ?? song.file }) });
-      const data = await res.json() as { ok: boolean; bpm: number; key: string; camelot: string; energy: number };
-      if (data.ok) onReanalyzed?.(song.file, data);
-    } catch { /* non-fatal */ }
+    const data = await reanalyzeTrack(song);
+    if (data) onReanalyzed?.(song.file, data);
     setReanalyzing(prev => { const n = new Set(prev); n.delete(song.file); return n; });
   }, [onReanalyzed]);
 
   const handleDeleteSingle = useCallback(async (song: Song) => {
-    try { await apiFetch("/api/remove-tracks", { method: "POST", body: JSON.stringify({ files: [song.file] }) }); onRemoveTracks?.([song.file]); }
-    catch { /* non-fatal */ }
+    if (await removeTracksFromLibrary([song.file])) onRemoveTracks?.([song.file]);
   }, [onRemoveTracks]);
 
-  const handleExportM3U = useCallback((song: Song) => { downloadM3U([toSetTrack(song)], `${song.artist} - ${song.title}`); }, []);
 
 
   const toggleDupSelection = (gk: string, file: string) => {
@@ -614,9 +464,7 @@ export default function LibraryTab({
 
   const handleRowContextMenu = (e: React.MouseEvent, song: Song) => {
     e.preventDefault();
-    const x = Math.min(e.clientX, window.innerWidth - 200);
-    const y = Math.min(e.clientY, window.innerHeight - 200);
-    setContextMenu({ x, y, song });
+    setContextMenu({ x: e.clientX, y: e.clientY, song });
   };
 
   // Play from this row through the rest of the view (vinyl/streaming-only tracks are skipped by the player)
@@ -1153,7 +1001,7 @@ export default function LibraryTab({
 
       {/* Context menu */}
       {contextMenu && (
-        <RowContextMenu
+        <TrackContextMenu
           menu={contextMenu}
           selection={selected}
           onGetInfo={s => setInfoSong(s)}
@@ -1163,7 +1011,7 @@ export default function LibraryTab({
           onReanalyze={handleReanalyze}
           onSendToGenerator={onSendToGenerator}
           onDelete={handleDeleteSingle}
-          onExportM3U={handleExportM3U}
+          onExportM3U={exportTrackM3U}
           onClose={() => setContextMenu(null)}
           playlistLibrary={playlistLibrary}
           lastPlaylist={lastPlaylist}

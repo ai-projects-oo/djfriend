@@ -219,7 +219,7 @@ export default function App() {
 function AppInner() {
   const [activeTab, setActiveTab] = useState<
     "Set Generator" | "Library" | "Crates" | "History" | "Gig Finder"
-  >("Set Generator");
+  >("Library");
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
       const raw = localStorage.getItem("djfriend-history");
@@ -1765,7 +1765,7 @@ function AppInner() {
 
         {/* Tab nav */}
         <div className="px-2 flex gap-1">
-          {(["Set Generator", "Library", "History", "Crates", "Gig Finder"] as const).map((tab) => {
+          {(["Library", "Set Generator", "History", "Crates", "Gig Finder"] as const).map((tab) => {
             const isCratesLocked = tab === "Crates" && !hasDiscogsOAuth;
             const isLocked = isCratesLocked;
             return (

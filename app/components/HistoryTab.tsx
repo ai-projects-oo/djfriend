@@ -58,7 +58,7 @@ export default function HistoryTab({
 
   if (history.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-[#8394a8] gap-3">
+      <div className="flex flex-col items-center justify-center py-24 text-[#b6c2d0] gap-3">
         <span className="text-4xl">📋</span>
         <p className="text-sm">
           No playlists exported yet. Generate a set and click Export as M3U.
@@ -99,7 +99,7 @@ export default function HistoryTab({
               localStorage.removeItem("djfriend-imports");
             }
           }}
-          className="text-xs text-[#8394a8] hover:text-[#ef4444] transition-colors cursor-pointer"
+          className="text-xs text-[#b6c2d0] hover:text-[#ef4444] transition-colors cursor-pointer"
         >
           Clear all
         </button>
@@ -178,7 +178,7 @@ export default function HistoryTab({
                   <button
                     type="button"
                     onClick={() => handleRateEntry(entry.id, null)}
-                    className="ml-0.5 text-[#6b7a94] hover:text-[#ef4444] transition-colors cursor-pointer opacity-0 group-hover/stars:opacity-100 focus:outline-none"
+                    className="ml-0.5 text-[#a3b0c2] hover:text-[#ef4444] transition-colors cursor-pointer opacity-0 group-hover/stars:opacity-100 focus:outline-none"
                     title="Clear rating"
                     aria-label="Clear rating"
                   >
@@ -196,7 +196,7 @@ export default function HistoryTab({
                 placeholder="Add gig notes…"
                 defaultValue={entry.notes ?? ''}
                 onBlur={e => handleNoteEntry(entry.id, e.target.value)}
-                className="w-full bg-transparent resize-none text-xs text-[#a6b5c8] placeholder-[#363650] focus:outline-none focus:placeholder-[#8394a8] transition-colors py-1 border-b border-transparent focus:border-[#363650]"
+                className="w-full bg-transparent resize-none text-xs text-[#ccd6e2] placeholder-[#363650] focus:outline-none focus:placeholder-[#b6c2d0] transition-colors py-1 border-b border-transparent focus:border-[#363650]"
                 style={{ minHeight: 24, lineHeight: '1.5' }}
                 onInput={e => { const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }}
               />
@@ -207,7 +207,7 @@ export default function HistoryTab({
                 {prefTags.map((tag) => (
                   <span
                     key={tag}
-                    className="text-[11px] px-2 py-0.5 rounded-full bg-[#26263c] border border-[#363650] text-[#a6b5c8]"
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-[#26263c] border border-[#363650] text-[#ccd6e2]"
                   >
                     {tag}
                   </span>
@@ -257,21 +257,21 @@ export default function HistoryTab({
                 >
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] text-[#8394a8]">Harmonic</span>
+                      <span className="text-[10px] text-[#b6c2d0]">Harmonic</span>
                       <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.harmonicRate) * 100)}%</span>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] text-[#8394a8]">Energy</span>
+                      <span className="text-[10px] text-[#b6c2d0]">Energy</span>
                       <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round((1 - score.avgEnergyError) * 100)}%</span>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] text-[#8394a8]">BPM flow</span>
+                      <span className="text-[10px] text-[#b6c2d0]">BPM flow</span>
                       <span className="text-[10px] font-semibold text-[#e2e8f0]">{Math.round(score.bpmSmoothness * 100)}%</span>
                     </div>
                   </div>
                   <div className="w-px h-9 bg-[#2c2c42]" />
                   <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#8394a8]">Score</span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#b6c2d0]">Score</span>
                     <span className={`text-lg font-bold tabular-nums leading-none ${scoreColor.split(' ')[0]}`}>{score.total}</span>
                   </div>
                 </div>
@@ -288,8 +288,8 @@ export default function HistoryTab({
                 <span className="text-[#7c3aed] text-sm font-medium">
                   {entry.tracks.length} tracks
                 </span>
-                <span className="text-xs text-[#8394a8]">{label}</span>
-                <span className="text-[#8394a8] text-xs ml-auto">
+                <span className="text-xs text-[#b6c2d0]">{label}</span>
+                <span className="text-[#b6c2d0] text-xs ml-auto">
                   {isExpanded ? "▲" : "▼"}
                 </span>
               </button>
@@ -318,7 +318,7 @@ export default function HistoryTab({
                     )
                   }
                   disabled={entry.tracks.length === 0}
-                  className="flex items-center gap-1.5 px-4 py-3 text-xs text-[#a6b5c8] hover:text-[#e2e8f0] hover:bg-[#1c1c2e] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-4 py-3 text-xs text-[#ccd6e2] hover:text-[#e2e8f0] hover:bg-[#1c1c2e] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Export <span className="text-[9px]">▾</span>
                 </button>
@@ -326,7 +326,7 @@ export default function HistoryTab({
                   <div className="absolute right-0 bottom-full mb-1 z-10 min-w-[175px] rounded-md border border-[#363650] bg-[#20202e] shadow-lg overflow-hidden">
                     <button
                       onClick={() => { downloadM3U(entry.tracks, `${entry.name}.m3u`); setOpenHistoryExportId(null); }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                     >
                       <M3UIcon size={13} className="shrink-0 opacity-60" />
                       Export as M3U
@@ -337,7 +337,7 @@ export default function HistoryTab({
                         downloadRekordboxXml(entry.tracks, entry.name, `${entry.name}.xml`);
                         setOpenHistoryExportId(null);
                       }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
+                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
                     >
                       <RekordboxIcon size={13} className="shrink-0 opacity-60" />
                       Export to Rekordbox
@@ -349,7 +349,7 @@ export default function HistoryTab({
                           void startSpotifyExport(entry.tracks, entry.name);
                           setOpenHistoryExportId(null);
                         }}
-                        className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
+                        className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-xs text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer border-t border-[#2c2c42]"
                       >
                         <SpotifyIcon size={13} className="shrink-0 text-[#1db954]" />
                         Export to Spotify
@@ -365,22 +365,22 @@ export default function HistoryTab({
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-[#1c1c2e]">
-                      <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#8394a8] uppercase tracking-wider w-10">
+                      <th className="py-2 pl-5 pr-2 text-left text-[10px] font-semibold text-[#b6c2d0] uppercase tracking-wider w-10">
                         #
                       </th>
-                      <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#8394a8] uppercase tracking-wider">
+                      <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#b6c2d0] uppercase tracking-wider">
                         Track
                       </th>
-                      <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#8394a8] uppercase tracking-wider">
+                      <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#b6c2d0] uppercase tracking-wider">
                         BPM
                       </th>
-                      <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#8394a8] uppercase tracking-wider">
+                      <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#b6c2d0] uppercase tracking-wider">
                         Key
                       </th>
-                      <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#8394a8] uppercase tracking-wider">
+                      <th className="py-2 px-2 text-left text-[10px] font-semibold text-[#b6c2d0] uppercase tracking-wider">
                         Energy
                       </th>
-                      <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#8394a8] uppercase tracking-wider hidden xl:table-cell">
+                      <th className="py-2 px-2 pr-5 text-left text-[10px] font-semibold text-[#b6c2d0] uppercase tracking-wider hidden xl:table-cell">
                         Genre
                       </th>
                     </tr>
@@ -392,7 +392,7 @@ export default function HistoryTab({
                         className="group border-t border-[#2c2c42] hover:bg-[#1c1c2e]"
                       >
                         <td className="py-2.5 pl-5 pr-2 w-10">
-                          <span className="group-hover:hidden text-xs text-[#8394a8] tabular-nums">
+                          <span className="group-hover:hidden text-xs text-[#b6c2d0] tabular-nums">
                             {idx + 1}
                           </span>
                           <button
@@ -427,11 +427,11 @@ export default function HistoryTab({
                           <div className="text-sm text-[#e2e8f0] truncate max-w-xs">
                             {track.title}
                           </div>
-                          <div className="text-[11px] text-[#8394a8] truncate">
+                          <div className="text-[11px] text-[#b6c2d0] truncate">
                             {track.artist}
                           </div>
                         </td>
-                        <td className="py-2.5 px-2 text-sm text-[#a6b5c8] tabular-nums">
+                        <td className="py-2.5 px-2 text-sm text-[#ccd6e2] tabular-nums">
                           {Math.round(track.bpm)}
                         </td>
                         <td className="py-2.5 px-2">
@@ -443,23 +443,23 @@ export default function HistoryTab({
                               {track.camelot}
                             </span>
                           ) : (
-                            <span className="text-[#8394a8] text-sm">—</span>
+                            <span className="text-[#b6c2d0] text-sm">—</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-2 text-sm text-[#a6b5c8] tabular-nums">
+                        <td className="py-2.5 px-2 text-sm text-[#ccd6e2] tabular-nums">
                           {Math.round(track.energy * 100)}%
                         </td>
                         <td className="py-2.5 px-2 pr-5 hidden xl:table-cell">
                           {track.genres && track.genres.length > 0 ? (
                             <span
-                              className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#8394a8]'}`}
+                              className={`text-[10px] truncate max-w-[140px] block ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#b6c2d0]'}`}
                               title={track.genres.join(', ') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '')}
                             >
                               {track.genres.slice(0, 2).join(' · ')}
                               {track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}
                             </span>
                           ) : (
-                            <span className="text-[10px] text-[#6b7a94]">—</span>
+                            <span className="text-[10px] text-[#a3b0c2]">—</span>
                           )}
                         </td>
                       </tr>

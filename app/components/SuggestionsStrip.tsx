@@ -29,8 +29,8 @@ export default function SuggestionsStrip({ suggestions, setDuration, actualDurat
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[#64748b]">{expanded ? '▾' : '▸'}</span>
-          <span className="text-xs font-medium text-[#8394a8]">
+          <span className="text-[10px] text-[#9aa8ba]">{expanded ? '▾' : '▸'}</span>
+          <span className="text-xs font-medium text-[#b6c2d0]">
             {isEmpty
               ? setDuration === null
                 ? 'All tracks are in your set'
@@ -46,7 +46,7 @@ export default function SuggestionsStrip({ suggestions, setDuration, actualDurat
             <button
               type="button"
               onClick={() => onExtend(15)}
-              className="px-2 py-0.5 text-[10px] rounded border border-[#363650] text-[#8394a8] hover:text-[#a78bfa] hover:border-[#7c3aed] transition-colors cursor-pointer"
+              className="px-2 py-0.5 text-[10px] rounded border border-[#363650] text-[#b6c2d0] hover:text-[#a78bfa] hover:border-[#7c3aed] transition-colors cursor-pointer"
               title="Extend target by 15 minutes"
             >
               +15m
@@ -54,7 +54,7 @@ export default function SuggestionsStrip({ suggestions, setDuration, actualDurat
             <button
               type="button"
               onClick={() => onExtend(30)}
-              className="px-2 py-0.5 text-[10px] rounded border border-[#363650] text-[#8394a8] hover:text-[#a78bfa] hover:border-[#7c3aed] transition-colors cursor-pointer"
+              className="px-2 py-0.5 text-[10px] rounded border border-[#363650] text-[#b6c2d0] hover:text-[#a78bfa] hover:border-[#7c3aed] transition-colors cursor-pointer"
               title="Extend target by 30 minutes"
             >
               +30m
@@ -92,7 +92,7 @@ export default function SuggestionsStrip({ suggestions, setDuration, actualDurat
                 {/* Track info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-[#e2e8f0] truncate leading-tight">{track.title}</p>
-                  <p className="text-[10px] text-[#8394a8] truncate leading-tight">{track.artist}</p>
+                  <p className="text-[10px] text-[#b6c2d0] truncate leading-tight">{track.artist}</p>
                 </div>
 
                 {/* Metadata chips */}
@@ -103,7 +103,7 @@ export default function SuggestionsStrip({ suggestions, setDuration, actualDurat
                   >
                     {track.camelot}
                   </span>
-                  <span className="text-[10px] text-[#64748b] tabular-nums w-8 text-right">
+                  <span className="text-[10px] text-[#9aa8ba] tabular-nums w-8 text-right">
                     {track.bpm > 0 ? Math.round(track.bpm) : '—'}
                   </span>
                 </div>
@@ -114,7 +114,7 @@ export default function SuggestionsStrip({ suggestions, setDuration, actualDurat
                     className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 hidden sm:block ${
                       topReason.quality === 'good' ? 'text-[#22c55e] bg-[#22c55e11]' :
                       topReason.quality === 'ok'   ? 'text-[#f59e0b] bg-[#f59e0b11]' :
-                      'text-[#64748b] bg-[#2c2c42]'
+                      'text-[#9aa8ba] bg-[#2c2c42]'
                     }`}
                     title={topReason.text}
                   >
@@ -126,7 +126,7 @@ export default function SuggestionsStrip({ suggestions, setDuration, actualDurat
                 <button
                   type="button"
                   onClick={() => onAdd(track)}
-                  className="px-3 py-1 text-[10px] font-medium rounded border border-[#363650] text-[#8394a8] hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
+                  className="px-3 py-1 text-[10px] font-medium rounded border border-[#363650] text-[#b6c2d0] hover:text-white hover:bg-[#7c3aed] hover:border-[#7c3aed] transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
                   aria-label={`Add ${track.title} to set`}
                 >
                   Add
@@ -138,7 +138,7 @@ export default function SuggestionsStrip({ suggestions, setDuration, actualDurat
       )}
 
       {expanded && isEmpty && (
-        <div className="border-t border-[#2c2c42] px-4 py-3 text-[11px] text-[#6b7a94]">
+        <div className="border-t border-[#2c2c42] px-4 py-3 text-[11px] text-[#a3b0c2]">
           {setDuration === null
             ? 'All matching tracks are already in your set.'
             : 'No more tracks available in this source.'}

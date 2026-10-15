@@ -69,16 +69,16 @@ export default function PlayerBar({ track, audioRef, playing, onToggle, onClose 
       {/* Track info */}
       <div className="flex-shrink-0 min-w-0 w-48">
         <div className="text-sm font-medium text-[#e2e8f0] truncate leading-tight">{track.title}</div>
-        <div className="text-[11px] text-[#64748b] truncate mt-0.5">
+        <div className="text-[11px] text-[#9aa8ba] truncate mt-0.5">
           {track.artist ?? ""}
-          {track.bpm && <span className="ml-2 text-[#6b7a94]">{Math.round(track.bpm)} BPM</span>}
-          {track.camelot && <span className="ml-2 text-[#6b7a94]">{track.camelot}</span>}
+          {track.bpm && <span className="ml-2 text-[#a3b0c2]">{Math.round(track.bpm)} BPM</span>}
+          {track.camelot && <span className="ml-2 text-[#a3b0c2]">{track.camelot}</span>}
         </div>
       </div>
 
       {/* Progress */}
       <div className="flex-1 flex items-center gap-3 min-w-0">
-        <span className="flex-shrink-0 text-[11px] text-[#64748b] tabular-nums w-8 text-right">{fmt(currentTime)}</span>
+        <span className="flex-shrink-0 text-[11px] text-[#9aa8ba] tabular-nums w-8 text-right">{fmt(currentTime)}</span>
         <div
           ref={barRef}
           onClick={seek}
@@ -89,13 +89,13 @@ export default function PlayerBar({ track, audioRef, playing, onToggle, onClose 
             style={{ width: `${progress * 100}%` }}
           />
         </div>
-        <span className="flex-shrink-0 text-[11px] text-[#6b7a94] tabular-nums w-8">{fmt(duration)}</span>
+        <span className="flex-shrink-0 text-[11px] text-[#a3b0c2] tabular-nums w-8">{fmt(duration)}</span>
       </div>
 
       {/* Close */}
       <button
         onClick={onClose}
-        className="flex-shrink-0 text-[#6b7a94] hover:text-[#a6b5c8] transition-colors cursor-pointer"
+        className="flex-shrink-0 text-[#a3b0c2] hover:text-[#ccd6e2] transition-colors cursor-pointer"
         aria-label="Close player"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

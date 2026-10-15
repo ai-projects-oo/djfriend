@@ -5,7 +5,7 @@ import { buildPlaylistTree, filterPlaylistTree, type PlaylistTree } from "../lib
 
 export interface TrackMenuState { x: number; y: number; song: Song }
 
-const menuItemClass = "w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded text-[#a6b5c8] hover:bg-[#2c2c42] hover:text-[#e2e8f0]";
+const menuItemClass = "w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer rounded text-[#ccd6e2] hover:bg-[#2c2c42] hover:text-[#e2e8f0]";
 const panelClass = "fixed z-[101] bg-[#20202e] border border-[#363650] rounded-xl shadow-2xl py-1 min-w-[220px] max-w-[320px] max-h-[60vh] overflow-y-auto";
 const MARGIN = 8;
 
@@ -47,7 +47,7 @@ function Submenu({ label, icon, children }: { label: string; icon?: React.ReactN
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={e => { if (e.key === "ArrowRight" || e.key === "Enter") { e.preventDefault(); show(); } if (e.key === "ArrowLeft") setOpen(false); }}
         className={`${menuItemClass} flex items-center justify-between gap-4 ${open ? "bg-[#2c2c42] text-[#e2e8f0]" : ""}`}>
-        <span className="truncate">{icon}{label}</span><span aria-hidden className="text-[#64748b]">›</span>
+        <span className="truncate">{icon}{label}</span><span aria-hidden className="text-[#9aa8ba]">›</span>
       </button>
       {open && (
         <div ref={panelRef} role="menu" aria-label={label} className={panelClass}
@@ -167,7 +167,7 @@ export default function TrackContextMenu({
           {otherGroups.map(group => (
             <div key={group}>
               {(hasIn || group !== otherGroups[0]) && sep()}
-              <div className="px-3 pt-1 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-[#58656e]">{group}</div>
+              <div className="px-3 pt-1 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-[#8d9aab]">{group}</div>
               {others.filter(o => o.group === group).map(o => (
                 <button key={`${group}-${o.label}`} type="button" role="menuitem" className={`${menuItemClass} truncate`}
                   onClick={pick(() => onShowIn(o.view, menu.song.file))}>
@@ -178,7 +178,7 @@ export default function TrackContextMenu({
           ))}
         </Submenu>
       ) : (
-        <div role="menuitem" aria-disabled="true" className="px-3 py-1.5 text-xs text-[#4b5563] cursor-default select-none">Show in Playlist — not in any playlist</div>
+        <div role="menuitem" aria-disabled="true" className="px-3 py-1.5 text-xs text-[#8090a6] cursor-default select-none">Show in Playlist — not in any playlist</div>
       ))}
       {sep()}
       {item("Re-analyze Audio", () => onReanalyze(menu.song))}

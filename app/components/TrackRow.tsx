@@ -275,7 +275,7 @@ async function handleReanalyze() {
         <td className="py-3 pl-4 pr-2 w-10">
           <div className="relative flex items-center justify-start min-w-[20px]">
             <span
-              className="group-hover:hidden text-[#8394a8] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
+              className="group-hover:hidden text-[#b6c2d0] text-sm tabular-nums cursor-grab active:cursor-grabbing select-none"
               title="Drag to reorder"
             >
               {index + 1}
@@ -328,7 +328,7 @@ async function handleReanalyze() {
                     </p>
                     <ul className="flex flex-col gap-1">
                       {fitInfo.reasons.map((r, i) => (
-                        <li key={i} className="text-[11px] text-[#a6b5c8] flex items-start gap-1.5">
+                        <li key={i} className="text-[11px] text-[#ccd6e2] flex items-start gap-1.5">
                           <span className="flex-shrink-0 mt-0.5"
                             style={{ color: fitInfo.level === 'bad' ? '#ef4444' : '#f59e0b' }}
                           >·</span>
@@ -358,7 +358,7 @@ async function handleReanalyze() {
                   </span>
                 )}
               </div>
-              <div className="text-xs text-[#8394a8] truncate">{track.artist}</div>
+              <div className="text-xs text-[#b6c2d0] truncate">{track.artist}</div>
               {tc.ai && track.selectionReason && track.selectionReason.length > 0 && (() => {
                 const qualityOrder = { good: 0, bonus: 1, ok: 2, info: 3, bad: 4 };
                 const top2 = [...track.selectionReason]
@@ -380,7 +380,7 @@ async function handleReanalyze() {
               })()}
               {tc.ai && showReasonTooltip && track.selectionReason && track.selectionReason.length > 0 && (
                 <div className={`absolute left-0 ${openDown ? 'top-full mt-1' : 'bottom-full mb-1'} z-50 min-w-[220px] max-w-[300px] rounded-lg bg-[#2c2c42] border border-[#363650] px-3 py-2.5 shadow-xl pointer-events-none`}>
-                  <div className="text-[9px] uppercase tracking-widest text-[#6b7a94] mb-2">Why this track</div>
+                  <div className="text-[9px] uppercase tracking-widest text-[#a3b0c2] mb-2">Why this track</div>
                   <ul className="flex flex-col gap-1.5">
                     {track.selectionReason.map((r, i) => {
                       const dot = r.quality === 'good' ? '#22c55e' : r.quality === 'ok' ? '#f59e0b' : r.quality === 'bad' ? '#ef4444' : r.quality === 'bonus' ? '#a78bfa' : '#8394a8';
@@ -401,7 +401,7 @@ async function handleReanalyze() {
 
         {/* Duration — optional */}
         {visibleColumns.has('time') && (
-          <td className="py-3 px-2 text-[#a6b5c8] text-xs tabular-nums whitespace-nowrap text-right">
+          <td className="py-3 px-2 text-[#ccd6e2] text-xs tabular-nums whitespace-nowrap text-right">
             {track.duration != null ? formatDuration(track.duration) : '—'}
           </td>
         )}
@@ -409,7 +409,7 @@ async function handleReanalyze() {
         {/* BPM — click to edit */}
         <td className="py-3 px-2 text-xs tabular-nums whitespace-nowrap text-right">
           <span
-            className="text-[#a6b5c8] hover:text-[#a78bfa] hover:underline cursor-pointer transition-colors"
+            className="text-[#ccd6e2] hover:text-[#a78bfa] hover:underline cursor-pointer transition-colors"
             title="Click to edit BPM"
             onClick={() => { if (!editing) openEdit(); setTimeout(() => bpmInputRef.current?.focus(), 50); }}
           >
@@ -437,7 +437,7 @@ async function handleReanalyze() {
             ) : (
               <button
                 onClick={openEdit}
-                className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold border border-dashed border-[#363650] text-[#6b7a94] hover:border-[#7c3aed] hover:text-[#7c3aed] transition-colors cursor-pointer"
+                className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold border border-dashed border-[#363650] text-[#a3b0c2] hover:border-[#7c3aed] hover:text-[#7c3aed] transition-colors cursor-pointer"
                 title="Key unknown — click to edit"
               >
                 ?
@@ -445,11 +445,11 @@ async function handleReanalyze() {
             )}
             {tc.info && showKeyTooltip && track.camelot && (
               <div className={`absolute left-full ${openDown ? 'top-0' : 'bottom-0'} ml-2 z-50 rounded-md bg-[#2c2c42] border border-[#363650] px-3 py-2.5 text-xs text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-1.5 min-w-[160px]`}>
-                <div className="text-[9px] uppercase tracking-widest text-[#6b7a94] mb-0.5">Next key options</div>
+                <div className="text-[9px] uppercase tracking-widest text-[#a3b0c2] mb-0.5">Next key options</div>
                 {compatibleKeys.length > 0 && (
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-[#8394a8]">Compatible</span>
-                    <span className="font-mono text-[#a6b5c8]">{compatibleKeys.join('  ')}</span>
+                    <span className="text-[#b6c2d0]">Compatible</span>
+                    <span className="font-mono text-[#ccd6e2]">{compatibleKeys.join('  ')}</span>
                   </div>
                 )}
                 {boostKeys.length > 0 && (
@@ -513,7 +513,7 @@ async function handleReanalyze() {
             {tc.info && showEnergyTooltip && (
               <div className={`absolute ${openDown ? 'top-full mt-1' : 'bottom-full mb-2'} left-1/2 -translate-x-1/2 z-50 rounded bg-[#2c2c42] border border-[#363650] px-2 py-1 text-[11px] text-[#e2e8f0] shadow-lg pointer-events-none whitespace-nowrap flex flex-col gap-0.5`}>
                 <span>Energy <span style={{ color: barColor }}>{Math.round(track.energy * 100)}</span></span>
-                <span className="text-[#8394a8]">Target {Math.round(track.targetEnergy * 100)}</span>
+                <span className="text-[#b6c2d0]">Target {Math.round(track.targetEnergy * 100)}</span>
               </div>
             )}
           </div>
@@ -535,13 +535,13 @@ async function handleReanalyze() {
               />
             ) : (
               <span
-                className={`text-[10px] truncate max-w-[140px] block cursor-text hover:text-[#a6b5c8] ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#8394a8]'}`}
+                className={`text-[10px] truncate max-w-[140px] block cursor-text hover:text-[#ccd6e2] ${track.genresFromSpotify ? 'text-[#3d3d5c] italic' : 'text-[#b6c2d0]'}`}
                 title={(track.genres.length > 0 ? track.genres.join(', ') : '—') + (track.genresFromSpotify ? ' (from Spotify, may be inaccurate)' : '') + ' · click to edit'}
                 onClick={() => { setEditGenre(track.genres.join(', ')); setInlineGenreEdit(true); }}
               >
                 {track.genres.length > 0
                   ? <>{track.genres.slice(0, 2).join(' · ')}{track.genresFromSpotify && <span className="ml-0.5 opacity-50">~</span>}</>
-                  : <span className="text-[#6b7a94]">—</span>}
+                  : <span className="text-[#a3b0c2]">—</span>}
               </span>
             )}
           </td>
@@ -549,8 +549,8 @@ async function handleReanalyze() {
 
         {/* Year — optional */}
         {visibleColumns.has('year') && (
-          <td className="py-3 px-2 text-[#8394a8] text-xs tabular-nums">
-            {track.year ?? <span className="text-[#6b7a94]">—</span>}
+          <td className="py-3 px-2 text-[#b6c2d0] text-xs tabular-nums">
+            {track.year ?? <span className="text-[#a3b0c2]">—</span>}
           </td>
         )}
 
@@ -558,11 +558,11 @@ async function handleReanalyze() {
         {visibleColumns.has('comment') && (
           <td className="py-3 px-2 max-w-[180px]">
             {track.comment ? (
-              <span className="text-[10px] text-[#8394a8] truncate block" title={track.comment}>
+              <span className="text-[10px] text-[#b6c2d0] truncate block" title={track.comment}>
                 {track.comment}
               </span>
             ) : (
-              <span className="text-[10px] text-[#6b7a94]">—</span>
+              <span className="text-[10px] text-[#a3b0c2]">—</span>
             )}
           </td>
         )}
@@ -570,8 +570,8 @@ async function handleReanalyze() {
         {/* Date Added — optional */}
         {visibleColumns.has('dateAdded') && (
           <td className="py-3 px-2 whitespace-nowrap">
-            <span className="text-[10px] text-[#8394a8] tabular-nums">
-              {track.dateAdded != null ? fmtDate(track.dateAdded) : <span className="text-[#6b7a94]">—</span>}
+            <span className="text-[10px] text-[#b6c2d0] tabular-nums">
+              {track.dateAdded != null ? fmtDate(track.dateAdded) : <span className="text-[#a3b0c2]">—</span>}
             </span>
           </td>
         )}
@@ -579,8 +579,8 @@ async function handleReanalyze() {
         {/* Vibe Tags — optional */}
         {visibleColumns.has('vibeTags') && (
           <td className="py-3 px-2 max-w-[140px]">
-            <span className="text-[10px] text-[#8394a8] truncate block">
-              {track.semanticTags?.vibeTags.join(', ') || <span className="text-[#6b7a94]">—</span>}
+            <span className="text-[10px] text-[#b6c2d0] truncate block">
+              {track.semanticTags?.vibeTags.join(', ') || <span className="text-[#a3b0c2]">—</span>}
             </span>
           </td>
         )}
@@ -588,8 +588,8 @@ async function handleReanalyze() {
         {/* Mood Tags — optional */}
         {visibleColumns.has('moodTags') && (
           <td className="py-3 px-2 max-w-[140px]">
-            <span className="text-[10px] text-[#8394a8] truncate block">
-              {track.semanticTags?.moodTags.join(', ') || <span className="text-[#6b7a94]">—</span>}
+            <span className="text-[10px] text-[#b6c2d0] truncate block">
+              {track.semanticTags?.moodTags.join(', ') || <span className="text-[#a3b0c2]">—</span>}
             </span>
           </td>
         )}
@@ -597,8 +597,8 @@ async function handleReanalyze() {
         {/* Vocal Type — optional */}
         {visibleColumns.has('vocalType') && (
           <td className="py-3 px-2 whitespace-nowrap">
-            <span className="text-[10px] text-[#8394a8]">
-              {track.semanticTags?.vocalType ?? <span className="text-[#6b7a94]">—</span>}
+            <span className="text-[10px] text-[#b6c2d0]">
+              {track.semanticTags?.vocalType ?? <span className="text-[#a3b0c2]">—</span>}
             </span>
           </td>
         )}
@@ -609,7 +609,7 @@ async function handleReanalyze() {
             {track.waveform && track.waveform.length > 0 ? (
               <WaveformBar waveform={track.waveform} frequencyWaveform={track.frequencyWaveform} vocalTimeline={track.vocalTimeline} height={20} className="opacity-70 group-hover:opacity-100 transition-opacity" />
             ) : (
-              <span className="text-[10px] text-[#6b7a94]">—</span>
+              <span className="text-[10px] text-[#a3b0c2]">—</span>
             )}
           </td>
         )}
@@ -655,7 +655,7 @@ async function handleReanalyze() {
               ))}
             </div>
           ) : (
-            <span className="text-[10px] text-[#6b7a94]">—</span>
+            <span className="text-[10px] text-[#a3b0c2]">—</span>
           )}
         </td>
 
@@ -665,14 +665,14 @@ async function handleReanalyze() {
             {/* Active state indicators (small dots) */}
             {track.locked && <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] flex-shrink-0" title="Locked" />}
             {(showTags || editing) && <span className="w-1.5 h-1.5 rounded-full bg-[#7c3aed] flex-shrink-0" title="Panel open" />}
-            {reanalyzing && <span className="text-[10px] text-[#8394a8] animate-pulse">…</span>}
+            {reanalyzing && <span className="text-[10px] text-[#b6c2d0] animate-pulse">…</span>}
             {reanalyzeError && <span className="text-[10px] text-[#ef4444] max-w-[120px] truncate" title={reanalyzeError}>⚠ {reanalyzeError}</span>}
 
             <button
               onClick={() => setMenuOpen(o => !o)}
               title="Track actions"
               aria-label="Track actions"
-              className={`px-2 py-1 rounded-md border transition-colors cursor-pointer ${menuOpen ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'border-[#363650] bg-[#20202e] text-[#8394a8] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
+              className={`px-2 py-1 rounded-md border transition-colors cursor-pointer ${menuOpen ? 'border-[#7c3aed] bg-[#7c3aed22] text-[#a78bfa]' : 'border-[#363650] bg-[#20202e] text-[#b6c2d0] hover:border-[#7c3aed] hover:text-[#e2e8f0]'}`}
             >
               <MoreVertical size={14} />
             </button>
@@ -683,7 +683,7 @@ async function handleReanalyze() {
                 {/* ── Lock ── */}
                 <button
                   onClick={() => { onToggleLock(); setMenuOpen(false); }}
-                  className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${track.locked ? 'text-[#fbbf24] hover:bg-[#f59e0b0d]' : 'text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0]'}`}
+                  className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${track.locked ? 'text-[#fbbf24] hover:bg-[#f59e0b0d]' : 'text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0]'}`}
                 >
                   <span className="w-3.5 text-center">{track.locked ? '🔒' : '🔓'}</span>
                   {track.locked ? 'Unlock track' : 'Lock track'}
@@ -695,7 +695,7 @@ async function handleReanalyze() {
                 {isElectron && isMacOS && (
                   <button
                     onClick={() => { setMenuOpen(false); void fetch('/api/play-in-music', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath, artist: track.artist, title: track.title }) }); }}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     <Play size={13} className="w-3.5 flex-shrink-0" />
                     Play in Apple Music
@@ -708,7 +708,7 @@ async function handleReanalyze() {
                     target="_blank"
                     rel="noreferrer"
                     onClick={() => setMenuOpen(false)}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#1db954] transition-colors cursor-pointer"
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#1db954] transition-colors cursor-pointer"
                   >
                     <ExternalLink size={13} className="w-3.5 flex-shrink-0" />
                     Open in Spotify
@@ -720,7 +720,7 @@ async function handleReanalyze() {
                 {/* ── Edit / Swap / File ops ── */}
                 <button
                   onClick={() => { if (editing) cancelEdit(); else openEdit(); setMenuOpen(false); }}
-                  className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${editing ? 'text-[#a78bfa] bg-[#7c3aed0d]' : 'text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0]'}`}
+                  className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${editing ? 'text-[#a78bfa] bg-[#7c3aed0d]' : 'text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0]'}`}
                 >
                   <Pencil size={13} className="w-3.5 flex-shrink-0" />
                   {editing ? 'Close editor' : 'Edit tags'}
@@ -728,7 +728,7 @@ async function handleReanalyze() {
 
                 <button
                   onClick={() => { onSwap(); setMenuOpen(false); }}
-                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                 >
                   <RefreshCcw size={13} className="w-3.5 flex-shrink-0" />
                   Swap track
@@ -738,7 +738,7 @@ async function handleReanalyze() {
                   <button
                     onClick={() => void handleReanalyze()}
                     disabled={reanalyzing}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <RotateCcw size={13} className="w-3.5 flex-shrink-0" />
                     {reanalyzing ? 'Reanalyzing…' : 'Re-analyze'}
@@ -748,7 +748,7 @@ async function handleReanalyze() {
                 {track.filePath && (
                   <button
                     onClick={() => { setMenuOpen(false); void fetch('/api/reveal-in-finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: track.filePath }) }); }}
-                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0] transition-colors cursor-pointer"
                   >
                     <FolderOpen size={13} className="w-3.5 flex-shrink-0" />
                     Reveal in Finder
@@ -763,7 +763,7 @@ async function handleReanalyze() {
                 {track.semanticTags && (
                   <button
                     onClick={() => { setShowTags(s => !s); setMenuOpen(false); }}
-                    className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${showTags ? 'text-[#a78bfa] bg-[#7c3aed0d]' : 'text-[#a6b5c8] hover:bg-[#26263c] hover:text-[#e2e8f0]'}`}
+                    className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${showTags ? 'text-[#a78bfa] bg-[#7c3aed0d]' : 'text-[#ccd6e2] hover:bg-[#26263c] hover:text-[#e2e8f0]'}`}
                   >
                     <span className="w-3.5 text-center text-[11px]">✦</span>
                     {showTags ? 'Hide AI tags' : 'Show AI tags'}
@@ -793,30 +793,30 @@ async function handleReanalyze() {
             <div className="flex flex-wrap gap-x-4 gap-y-2">
               {track.semanticTags.vibeTags.length > 0 && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] uppercase tracking-widest text-[#6b7a94]">Vibe</span>
+                  <span className="text-[9px] uppercase tracking-widest text-[#a3b0c2]">Vibe</span>
                   <div className="flex gap-1 flex-wrap">{track.semanticTags.vibeTags.map(t => <TagPill key={t} label={t} type="vibe" />)}</div>
                 </div>
               )}
               {track.semanticTags.moodTags.length > 0 && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] uppercase tracking-widest text-[#6b7a94]">Mood</span>
+                  <span className="text-[9px] uppercase tracking-widest text-[#a3b0c2]">Mood</span>
                   <div className="flex gap-1 flex-wrap">{track.semanticTags.moodTags.map(t => <TagPill key={t} label={t} type="mood" />)}</div>
                 </div>
               )}
               {track.semanticTags.venueTags.length > 0 && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] uppercase tracking-widest text-[#6b7a94]">Venue</span>
+                  <span className="text-[9px] uppercase tracking-widest text-[#a3b0c2]">Venue</span>
                   <div className="flex gap-1 flex-wrap">{track.semanticTags.venueTags.map(t => <TagPill key={t} label={t} type="venue" />)}</div>
                 </div>
               )}
               {track.semanticTags.timeOfNightTags.length > 0 && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] uppercase tracking-widest text-[#6b7a94]">Time</span>
+                  <span className="text-[9px] uppercase tracking-widest text-[#a3b0c2]">Time</span>
                   <div className="flex gap-1 flex-wrap">{track.semanticTags.timeOfNightTags.map(t => <TagPill key={t} label={t} type="time" />)}</div>
                 </div>
               )}
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] uppercase tracking-widest text-[#6b7a94]">Vocal</span>
+                <span className="text-[9px] uppercase tracking-widest text-[#a3b0c2]">Vocal</span>
                 <TagPill label={track.semanticTags.vocalType} type="vocal" />
               </div>
             </div>
@@ -830,7 +830,7 @@ async function handleReanalyze() {
           <td colSpan={totalCols} className="px-4 py-3">
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex flex-col gap-1 min-w-[160px]">
-                <label className="text-[10px] text-[#8394a8] uppercase tracking-wider">Title</label>
+                <label className="text-[10px] text-[#b6c2d0] uppercase tracking-wider">Title</label>
                 <input
                   value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
@@ -838,7 +838,7 @@ async function handleReanalyze() {
                 />
               </div>
               <div className="flex flex-col gap-1 min-w-[140px]">
-                <label className="text-[10px] text-[#8394a8] uppercase tracking-wider">Artist</label>
+                <label className="text-[10px] text-[#b6c2d0] uppercase tracking-wider">Artist</label>
                 <input
                   value={editArtist}
                   onChange={e => setEditArtist(e.target.value)}
@@ -846,7 +846,7 @@ async function handleReanalyze() {
                 />
               </div>
               <div className="flex flex-col gap-1 min-w-[160px]">
-                <label className="text-[10px] text-[#8394a8] uppercase tracking-wider">Genre <span className="normal-case text-[#6b7a94]">(comma-separated)</span></label>
+                <label className="text-[10px] text-[#b6c2d0] uppercase tracking-wider">Genre <span className="normal-case text-[#a3b0c2]">(comma-separated)</span></label>
                 <input
                   value={editGenre}
                   onChange={e => setEditGenre(e.target.value)}
@@ -855,7 +855,7 @@ async function handleReanalyze() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] text-[#8394a8] uppercase tracking-wider">BPM</label>
+                <label className="text-[10px] text-[#b6c2d0] uppercase tracking-wider">BPM</label>
                 <div className="flex items-center gap-1">
                   <input
                     ref={bpmInputRef}
@@ -865,17 +865,17 @@ async function handleReanalyze() {
                     className="bg-[#26263c] border border-[#363650] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] w-16"
                   />
                   <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v * 2))); }}
-                    className="px-1.5 py-1 text-[10px] rounded border border-[#363650] text-[#a6b5c8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">
+                    className="px-1.5 py-1 text-[10px] rounded border border-[#363650] text-[#ccd6e2] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">
                     ×2
                   </button>
                   <button type="button" onClick={() => { const v = parseFloat(editBpm); if (!isNaN(v) && v > 0) setEditBpm(String(Math.round(v / 2))); }}
-                    className="px-1.5 py-1 text-[10px] rounded border border-[#363650] text-[#a6b5c8] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">
+                    className="px-1.5 py-1 text-[10px] rounded border border-[#363650] text-[#ccd6e2] hover:text-[#e2e8f0] hover:border-[#7c3aed] transition-colors cursor-pointer tabular-nums">
                     ÷2
                   </button>
                 </div>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] text-[#8394a8] uppercase tracking-wider">Key {editCamelot && <span className="font-mono normal-case text-[#a78bfa]">{editCamelot.toUpperCase()}</span>}</label>
+                <label className="text-[10px] text-[#b6c2d0] uppercase tracking-wider">Key {editCamelot && <span className="font-mono normal-case text-[#a78bfa]">{editCamelot.toUpperCase()}</span>}</label>
                 <div className="flex flex-col gap-0.5">
                   {(['B', 'A'] as const).map(letter => (
                     <div key={letter} className="flex gap-0.5">
@@ -901,7 +901,7 @@ async function handleReanalyze() {
                           </button>
                         );
                       })}
-                      <span className="text-[9px] text-[#6b7a94] ml-0.5 self-center">{letter}</span>
+                      <span className="text-[9px] text-[#a3b0c2] ml-0.5 self-center">{letter}</span>
                     </div>
                   ))}
                 </div>
@@ -918,7 +918,7 @@ async function handleReanalyze() {
                 <button
                   onClick={cancelEdit}
                   disabled={saving}
-                  className="flex items-center gap-1 px-3 py-1 rounded-md border border-[#363650] text-[#a6b5c8] text-xs hover:text-[#e2e8f0] hover:border-[#8394a8] disabled:opacity-50 transition-colors cursor-pointer"
+                  className="flex items-center gap-1 px-3 py-1 rounded-md border border-[#363650] text-[#ccd6e2] text-xs hover:text-[#e2e8f0] hover:border-[#8394a8] disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   <X size={12} />
                   Cancel

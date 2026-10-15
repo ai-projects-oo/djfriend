@@ -33,10 +33,10 @@ export const theme = {
 
   text: {
     primary:   '#e2e8f0',
-    secondary: '#94a3b8',
-    muted:     '#64748b',
-    subtle:    '#475569',
-    dim:       '#334155',
+    secondary: '#b8c4d2',
+    muted:     '#9aa8ba',
+    subtle:    '#8090a6',
+    dim:       '#64748b',
   },
 
   status: {

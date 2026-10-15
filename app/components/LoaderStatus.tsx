@@ -34,12 +34,12 @@ export default function LoaderStatus({ label, detail }: LoaderStatusProps) {
 
   return (
     <p
-      className="text-xs text-[#8394a8] h-4 transition-opacity ease-in-out"
+      className="text-xs text-[#b6c2d0] h-4 transition-opacity ease-in-out"
       style={{ opacity: visible ? 1 : 0, transitionDuration: `${STATUS_FADE_MS}ms` }}
       aria-live="polite"
     >
       {shown}
-      {detail && shown === label && <span className="text-[#58656e]"> · {detail}</span>}
+      {detail && shown === label && <span className="text-[#8d9aab]"> · {detail}</span>}
     </p>
   );
 }

@@ -65,11 +65,11 @@ export default function SmartPlaylistEditor({ initial, playlists, countMatches, 
             <input aria-label="Value" type="number" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })} className={`${inputClass} w-20${bad}`} />
             {r.op === "between" && (
               <>
-                <span className="text-[10px] text-[#64748b]">and</span>
+                <span className="text-[10px] text-[#9aa8ba]">and</span>
                 <input aria-label="Upper value" type="number" value={r.value2 ?? ""} onChange={e => updateRule(r.id, { value2: e.target.value })} className={`${inputClass} w-20${bad}`} />
               </>
             )}
-            {SMART_FIELDS.find(f => f.field === r.field)?.unit && <span className="text-[10px] text-[#64748b]">{SMART_FIELDS.find(f => f.field === r.field)!.unit}</span>}
+            {SMART_FIELDS.find(f => f.field === r.field)?.unit && <span className="text-[10px] text-[#9aa8ba]">{SMART_FIELDS.find(f => f.field === r.field)!.unit}</span>}
           </span>
         );
       case "key":
@@ -113,7 +113,7 @@ export default function SmartPlaylistEditor({ initial, playlists, countMatches, 
             className="flex-1 bg-transparent border-b border-[#363650] focus:border-[#7c3aed] text-sm font-semibold text-[#e2e8f0] outline-none pb-1" />
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-[#a6b5c8]">
+        <div className="flex items-center gap-2 text-xs text-[#ccd6e2]">
           Match
           <select aria-label="Match all or any" value={match} onChange={e => setMatch(e.target.value as SmartCriteria["match"])} className={selectClass}>
             <option value="all">all</option>
@@ -136,16 +136,16 @@ export default function SmartPlaylistEditor({ initial, playlists, countMatches, 
                 {valueInput(r)}
                 <span className="ml-auto flex gap-1">
                   <button type="button" aria-label="Remove rule" title="Remove rule" disabled={rules.length === 1} onClick={() => removeRule(r.id)}
-                    className="w-6 h-6 rounded border border-[#363650] text-[#8394a8] hover:text-[#ef4444] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed">−</button>
+                    className="w-6 h-6 rounded border border-[#363650] text-[#b6c2d0] hover:text-[#ef4444] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed">−</button>
                   <button type="button" aria-label="Add rule" title="Add rule" onClick={() => addRuleAfter(r.id)}
-                    className="w-6 h-6 rounded border border-[#363650] text-[#8394a8] hover:text-[#a78bfa] cursor-pointer">+</button>
+                    className="w-6 h-6 rounded border border-[#363650] text-[#b6c2d0] hover:text-[#a78bfa] cursor-pointer">+</button>
                 </span>
               </div>
             );
           })}
         </div>
 
-        <label className="flex items-center gap-2 text-xs text-[#a6b5c8] flex-wrap">
+        <label className="flex items-center gap-2 text-xs text-[#ccd6e2] flex-wrap">
           <input type="checkbox" checked={limitOn} onChange={e => setLimitOn(e.target.checked)} className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer" />
           Limit to
           <input aria-label="Limit count" type="number" min={1} value={limitCount} disabled={!limitOn} onChange={e => setLimitCount(e.target.value)} className={`${inputClass} w-16 disabled:opacity-40`} />
@@ -158,9 +158,9 @@ export default function SmartPlaylistEditor({ initial, playlists, countMatches, 
         <div className="flex items-center gap-3 pt-1 border-t border-[#2c2c42]">
           <span className="text-xs text-[#a78bfa] tabular-nums" aria-live="polite">{count} track{count === 1 ? "" : "s"} match</span>
           {invalid.size > 0 && <span className="text-[10px] text-[#ef4444]">Fill in the highlighted rule{invalid.size === 1 ? "" : "s"}</span>}
-          <span className="text-[10px] text-[#58656e]">Updates automatically as your library changes.</span>
+          <span className="text-[10px] text-[#8d9aab]">Updates automatically as your library changes.</span>
           <span className="ml-auto flex gap-2">
-            <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#8292a4] hover:text-[#a6b5c8] cursor-pointer">Cancel</button>
+            <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs rounded-md border border-[#363650] text-[#b6c2d0] hover:text-[#ccd6e2] cursor-pointer">Cancel</button>
             <button type="button" disabled={!canSave} onClick={() => onSave(name.trim(), criteria)}
               className="px-3 py-1.5 text-xs rounded-md bg-[#7c3aed] text-white hover:bg-[#6d28d9] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
               {initial ? "Save" : "Create"}

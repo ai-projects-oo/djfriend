@@ -30,7 +30,7 @@ export default function VenuePlannerPanel({ onApply, venue, phase, onVenueChange
       {/* Selectors */}
       <div className="flex gap-2">
         <div className="flex-1 flex flex-col gap-1">
-          <span className="text-[9px] uppercase tracking-widest text-[#8394a8]">Venue</span>
+          <span className="text-[9px] uppercase tracking-widest text-[#b6c2d0]">Venue</span>
           <select
             value={venue}
             onChange={e => { onVenueChange(e.target.value as VenueType); setApplied(false); }}
@@ -40,7 +40,7 @@ export default function VenuePlannerPanel({ onApply, venue, phase, onVenueChange
           </select>
         </div>
         <div className="flex-1 flex flex-col gap-1">
-          <span className="text-[9px] uppercase tracking-widest text-[#8394a8]">Phase</span>
+          <span className="text-[9px] uppercase tracking-widest text-[#b6c2d0]">Phase</span>
           <select
             value={phase}
             onChange={e => { onPhaseChange(e.target.value as SetPhase); setApplied(false); }}
@@ -58,16 +58,16 @@ export default function VenuePlannerPanel({ onApply, venue, phase, onVenueChange
         <MiniCurve points={plan.curve} />
 
         {/* BPM row */}
-        <div className="flex items-center gap-2 text-[10px] text-[#8394a8]">
-          <span className="text-[#64748b]">BPM</span>
-          <span className="font-semibold text-[#a6b5c8]">{plan.bpmMin}–{plan.bpmMax}</span>
-          <span className="text-[#6b7a94]">·</span>
-          <span className="text-[#64748b]">target</span>
-          <span className="font-semibold text-[#a6b5c8]">{plan.bpmTarget}</span>
+        <div className="flex items-center gap-2 text-[10px] text-[#b6c2d0]">
+          <span className="text-[#9aa8ba]">BPM</span>
+          <span className="font-semibold text-[#ccd6e2]">{plan.bpmMin}–{plan.bpmMax}</span>
+          <span className="text-[#a3b0c2]">·</span>
+          <span className="text-[#9aa8ba]">target</span>
+          <span className="font-semibold text-[#ccd6e2]">{plan.bpmTarget}</span>
         </div>
 
         {/* Weights row */}
-        <div className="flex items-center gap-2 text-[10px] text-[#64748b] flex-wrap">
+        <div className="flex items-center gap-2 text-[10px] text-[#9aa8ba] flex-wrap">
           <WeightChip label="Harmonic" value={plan.scoringWeights.harmonicWeight} />
           <WeightChip label="Energy"   value={plan.scoringWeights.energyWeight} />
           <WeightChip label="BPM"      value={plan.scoringWeights.bpmWeight} />
@@ -75,7 +75,7 @@ export default function VenuePlannerPanel({ onApply, venue, phase, onVenueChange
         </div>
 
         {/* Reasoning */}
-        <p className="text-[10px] text-[#8394a8] italic leading-snug">{plan.reasoning}</p>
+        <p className="text-[10px] text-[#b6c2d0] italic leading-snug">{plan.reasoning}</p>
       </div>
 
       {/* Apply button */}

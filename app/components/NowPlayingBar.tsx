@@ -24,10 +24,10 @@ function AlbumArt({ filePath, size = 40 }: { filePath?: string; size?: number })
   }, [filePath]);
   return src
     ? <img src={src} alt="" className="rounded object-cover flex-shrink-0" style={{ width: size, height: size }} />
-    : <div className="rounded bg-[#2c2c42] flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}><span className="text-sm text-[#424f63]">♪</span></div>;
+    : <div className="rounded bg-[#2c2c42] flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}><span className="text-sm text-[#7d8ba0]">♪</span></div>;
 }
 
-const iconBtn = "w-8 h-8 flex items-center justify-center rounded-md text-[#8394a8] hover:text-[#e2e8f0] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors";
+const iconBtn = "w-8 h-8 flex items-center justify-center rounded-md text-[#b6c2d0] hover:text-[#e2e8f0] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors";
 
 // ─── Queue panel ─────────────────────────────────────────────────────────────
 
@@ -53,14 +53,14 @@ function QueuePanel({ player, songsByFile, onClose }: { player: Player; songsByF
         className={`group flex items-center gap-2.5 px-3 py-1.5 rounded-md ${isCurrent ? "bg-[#7c3aed]/15" : "hover:bg-[#26263c] cursor-grab"}`}>
         <AlbumArt filePath={s?.filePath} size={28} />
         <div className="min-w-0 flex-1">
-          <p className={`text-xs truncate ${isCurrent ? "text-white font-medium" : "text-[#cbd5e1]"}`}>{s?.title ?? file}</p>
-          <p className="text-[10px] text-[#8394a8] truncate">{s?.artist}</p>
+          <p className={`text-xs truncate ${isCurrent ? "text-white font-medium" : "text-[#e2e8f0]"}`}>{s?.title ?? file}</p>
+          <p className="text-[10px] text-[#b6c2d0] truncate">{s?.artist}</p>
         </div>
-        {s && s.bpm > 0 && <span className="text-[10px] text-[#64748b] tabular-nums">{Math.round(s.bpm)}</span>}
+        {s && s.bpm > 0 && <span className="text-[10px] text-[#9aa8ba] tabular-nums">{Math.round(s.bpm)}</span>}
         {s?.camelot && <span className="text-[10px] font-semibold" style={{ color: camelotColor(s.camelot) }}>{s.camelot}</span>}
         {!isCurrent && (
           <button type="button" onClick={() => player.removeAt(i)} aria-label={`Remove ${s?.title ?? "track"} from queue`}
-            className="opacity-0 group-hover:opacity-100 text-[#64748b] hover:text-[#ef4444] text-xs cursor-pointer">✕</button>
+            className="opacity-0 group-hover:opacity-100 text-[#9aa8ba] hover:text-[#ef4444] text-xs cursor-pointer">✕</button>
         )}
       </div>
     );
@@ -71,18 +71,18 @@ function QueuePanel({ player, songsByFile, onClose }: { player: Player; songsByF
     <div ref={ref} role="dialog" aria-label="Play queue" onContextMenu={e => e.stopPropagation()}
       className="absolute bottom-full right-3 mb-2 w-96 max-h-[60vh] overflow-y-auto rounded-xl border border-[#363650] bg-[#20202e] shadow-2xl p-2 z-[90]">
       <div className="flex items-center justify-between px-2 py-1">
-        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Now Playing</span>
-        <button type="button" onClick={onClose} aria-label="Close queue" className="text-[#64748b] hover:text-[#e2e8f0] text-xs cursor-pointer">✕</button>
+        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#b6c2d0]">Now Playing</span>
+        <button type="button" onClick={onClose} aria-label="Close queue" className="text-[#9aa8ba] hover:text-[#e2e8f0] text-xs cursor-pointer">✕</button>
       </div>
       {queue.index >= 0 && row(queue.items[queue.index], queue.index, true)}
       <div className="flex items-center justify-between px-2 pt-3 pb-1">
-        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Up Next · {upcoming.length}</span>
+        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#b6c2d0]">Up Next · {upcoming.length}</span>
         {upcoming.length > 0 && (
-          <button type="button" onClick={player.clearUpNext} className="text-[10px] text-[#64748b] hover:text-[#a78bfa] cursor-pointer">Clear</button>
+          <button type="button" onClick={player.clearUpNext} className="text-[10px] text-[#9aa8ba] hover:text-[#a78bfa] cursor-pointer">Clear</button>
         )}
       </div>
       {upcoming.length === 0
-        ? <p className="px-3 py-2 text-[11px] text-[#58656e]">Nothing queued. Right-click tracks → Play Next / Play Later.</p>
+        ? <p className="px-3 py-2 text-[11px] text-[#8d9aab]">Nothing queued. Right-click tracks → Play Next / Play Later.</p>
         : upcoming.map((f, j) => row(f, queue.index + 1 + j, false))}
     </div>
   );
@@ -163,7 +163,7 @@ export default function NowPlayingBar({ player, songsByFile, onTrackContextMenu 
         <AlbumArt key={s?.filePath} filePath={s?.filePath} size={art} />
         <div className="min-w-0">
           <p className="font-medium text-[#e2e8f0] truncate" style={{ fontSize: 14 * Math.min(scale, 1.8) }}>{s?.title ?? "—"}</p>
-          <div className="flex items-center gap-1.5 text-[11px] text-[#8394a8] min-w-0">
+          <div className="flex items-center gap-1.5 text-[11px] text-[#b6c2d0] min-w-0">
             <span className="truncate">{s?.artist}</span>
             {s?.camelot && s.camelot !== "Unknown" && (
               <span className="text-[9px] font-semibold px-1 rounded flex-shrink-0" style={{ backgroundColor: cc + "26", color: cc, border: `1px solid ${cc}55` }}>{s.camelot}</span>
@@ -204,7 +204,7 @@ export default function NowPlayingBar({ player, songsByFile, onTrackContextMenu 
 
       {/* Progress */}
       <div className="flex-1 min-w-0 flex items-center gap-2">
-        <span className="text-[10px] text-[#64748b] tabular-nums w-8 text-right flex-shrink-0">{fmt(player.time)}</span>
+        <span className="text-[10px] text-[#9aa8ba] tabular-nums w-8 text-right flex-shrink-0">{fmt(player.time)}</span>
         {s?.waveform && s.waveform.length > 0 ? (
           <WaveformSeeker
             waveform={s.waveform}
@@ -220,12 +220,12 @@ export default function NowPlayingBar({ player, songsByFile, onTrackContextMenu 
           <input type="range" min={0} max={dur || 1} step={0.5} value={Math.min(player.time, dur || 1)} aria-label="Seek"
             onChange={e => player.seek(Number(e.target.value))} className="flex-1 h-1 accent-[#7c3aed] cursor-pointer" />
         )}
-        <span className="text-[10px] text-[#64748b] tabular-nums w-8 flex-shrink-0">{fmt(dur)}</span>
+        <span className="text-[10px] text-[#9aa8ba] tabular-nums w-8 flex-shrink-0">{fmt(dur)}</span>
       </div>
 
       {/* Volume + queue */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#64748b]" aria-hidden><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#9aa8ba]" aria-hidden><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
         <input type="range" min={0} max={1} step={0.01} value={player.volume} aria-label="Volume"
           onChange={e => player.setVolume(Number(e.target.value))} className="w-20 h-1 accent-[#7c3aed] cursor-pointer" />
         <button type="button" onClick={() => setQueueOpen(o => !o)} aria-expanded={queueOpen} aria-label="Queue" title="Queue"

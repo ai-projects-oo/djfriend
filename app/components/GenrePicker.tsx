@@ -47,7 +47,7 @@ export default function GenrePicker({ labels, selected, countFor, onToggle, onCl
         className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all cursor-pointer border flex items-center gap-1 ${n < THIN && !active ? "opacity-45" : ""}`}
         style={{ backgroundColor: active ? "#7c3aed" : "transparent", color: active ? "#fff" : "#a78bfa", borderColor: active ? "#7c3aed" : "#5a24a8" }}>
         {label}
-        <span className={`text-[9px] tabular-nums ${active ? "text-white/70" : "text-[#64748b]"}`}>{n}</span>
+        <span className={`text-[9px] tabular-nums ${active ? "text-white/70" : "text-[#9aa8ba]"}`}>{n}</span>
       </button>
     );
   };
@@ -59,11 +59,11 @@ export default function GenrePicker({ labels, selected, countFor, onToggle, onCl
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Genre</span>
+        <span className="text-[10px] uppercase tracking-widest font-semibold text-[#b6c2d0]">Genre</span>
         <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Find genre…" aria-label="Find genre"
-          className="flex-1 min-w-0 bg-[#16161e] border border-[#2c2c42] rounded-md px-2 py-0.5 text-[11px] text-[#e2e8f0] placeholder-[#424f63] focus:outline-none focus:border-[#7c3aed]" />
+          className="flex-1 min-w-0 bg-[#16161e] border border-[#2c2c42] rounded-md px-2 py-0.5 text-[11px] text-[#e2e8f0] placeholder-[#7d8ba0] focus:outline-none focus:border-[#7c3aed]" />
         {selected.length > 0 && (
-          <button type="button" onClick={onClear} className="text-[10px] text-[#8292a4] hover:text-[#adb6c0] cursor-pointer">clear</button>
+          <button type="button" onClick={onClear} className="text-[10px] text-[#b6c2d0] hover:text-[#ccd5df] cursor-pointer">clear</button>
         )}
       </div>
 
@@ -75,13 +75,13 @@ export default function GenrePicker({ labels, selected, countFor, onToggle, onCl
               {l}<span aria-hidden className="text-white/70">×</span>
             </button>
           ))}
-          <span className="text-[10px] text-[#64748b]">{countFor(selected)} tracks</span>
+          <span className="text-[10px] text-[#9aa8ba]">{countFor(selected)} tracks</span>
         </div>
       )}
 
       {q ? (
         <div className="flex flex-wrap gap-1.5">
-          {matches.length ? matches.map(chip) : <span className="text-[11px] text-[#64748b]">No genre matches “{query}”</span>}
+          {matches.length ? matches.map(chip) : <span className="text-[11px] text-[#9aa8ba]">No genre matches “{query}”</span>}
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
@@ -94,13 +94,13 @@ export default function GenrePicker({ labels, selected, countFor, onToggle, onCl
               <div key={f.family}>
                 <div className="flex items-center gap-1.5">
                   <button type="button" onClick={() => toggleOpen(f.family)} aria-expanded={isOpen} aria-label={`${isOpen ? "Collapse" : "Expand"} ${f.family}`}
-                    className="w-4 text-[9px] text-[#64748b] hover:text-[#e2e8f0] cursor-pointer">{isOpen ? "▾" : "▸"}</button>
+                    className="w-4 text-[9px] text-[#9aa8ba] hover:text-[#e2e8f0] cursor-pointer">{isOpen ? "▾" : "▸"}</button>
                   <button type="button" onClick={() => toggleFamily(f.labels)} aria-pressed={allOn}
                     title={allOn ? `Deselect all ${f.family}` : `Select all ${f.family}`}
-                    className={`text-xs font-semibold cursor-pointer transition-colors ${allOn ? "text-white" : someOn ? "text-[#c4b5fd]" : "text-[#a6b5c8] hover:text-white"}`}>
+                    className={`text-xs font-semibold cursor-pointer transition-colors ${allOn ? "text-white" : someOn ? "text-[#c4b5fd]" : "text-[#ccd6e2] hover:text-white"}`}>
                     {f.family}
                   </button>
-                  <span className="text-[10px] text-[#58656e] tabular-nums">{countFor(values)}</span>
+                  <span className="text-[10px] text-[#8d9aab] tabular-nums">{countFor(values)}</span>
                   {someOn && <span className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]" aria-label="Some selected" />}
                 </div>
                 {isOpen && <div className="flex flex-wrap gap-1.5 pl-5 pt-1.5 pb-0.5">{f.labels.map(chip)}</div>}

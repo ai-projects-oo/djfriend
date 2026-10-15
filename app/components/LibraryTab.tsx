@@ -194,7 +194,7 @@ function AlbumArt({ filePath }: { filePath?: string }) {
   }, [filePath, failed]);
 
   if (!src || failed) {
-    return <div className="w-8 h-8 rounded bg-[#2c2c42] flex items-center justify-center flex-shrink-0"><span className="text-[10px] text-[#424f63]">♪</span></div>;
+    return <div className="w-8 h-8 rounded bg-[#2c2c42] flex items-center justify-center flex-shrink-0"><span className="text-[10px] text-[#7d8ba0]">♪</span></div>;
   }
   return <img src={src} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />;
 }
@@ -203,7 +203,7 @@ function AlbumArt({ filePath }: { filePath?: string }) {
 
 function SortHeader({ col, label, sortKey, sortAsc, onSort }: { col: SortKey; label: string; sortKey: SortKey; sortAsc: boolean; onSort: (k: SortKey) => void }) {
   return (
-    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b] cursor-pointer hover:text-[#a6b5c8] select-none transition-colors whitespace-nowrap" onClick={() => onSort(col)}>
+    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba] cursor-pointer hover:text-[#ccd6e2] select-none transition-colors whitespace-nowrap" onClick={() => onSort(col)}>
       {label}{sortKey === col ? (sortAsc ? " ↑" : " ↓") : ""}
     </th>
   );
@@ -486,7 +486,7 @@ export default function LibraryTab({
               strokeDasharray="138.2" strokeDashoffset="103.7"
               style={{ transformOrigin: "26px 26px", animation: "spin 1.1s linear infinite" }} />
           </svg>
-          <p className="text-sm text-[#64748b]">Loading library…</p>
+          <p className="text-sm text-[#9aa8ba]">Loading library…</p>
         </div>
       </div>
     );
@@ -496,7 +496,7 @@ export default function LibraryTab({
     return (
       <div className="h-full flex flex-col items-center justify-center gap-2">
         <span className="text-3xl">🎵</span>
-        <p className="text-sm text-[#64748b]">No library loaded yet.</p>
+        <p className="text-sm text-[#9aa8ba]">No library loaded yet.</p>
       </div>
     );
   }
@@ -531,8 +531,8 @@ export default function LibraryTab({
                       {group.map(s => (
                         <label key={s.file} className="flex items-center gap-3 cursor-pointer group/dup">
                           <input type="checkbox" checked={sel.has(s.file)} onChange={() => toggleDupSelection(gk, s.file)} className="w-3.5 h-3.5 accent-[#ef4444] cursor-pointer flex-shrink-0" />
-                          <span className={`text-[10px] font-mono truncate flex-1 transition-colors ${sel.has(s.file) ? "text-[#ef4444]/70 line-through" : "text-[#64748b] group-hover/dup:text-[#a6b5c8]"}`} title={s.filePath ?? s.file}>{s.filePath ?? s.file}</span>
-                          <span className="text-[10px] text-[#424f63] whitespace-nowrap">{s.bpm} BPM · {s.duration != null ? fmt(s.duration) : "—"}</span>
+                          <span className={`text-[10px] font-mono truncate flex-1 transition-colors ${sel.has(s.file) ? "text-[#ef4444]/70 line-through" : "text-[#9aa8ba] group-hover/dup:text-[#ccd6e2]"}`} title={s.filePath ?? s.file}>{s.filePath ?? s.file}</span>
+                          <span className="text-[10px] text-[#7d8ba0] whitespace-nowrap">{s.bpm} BPM · {s.duration != null ? fmt(s.duration) : "—"}</span>
                         </label>
                       ))}
                     </div>
@@ -567,7 +567,7 @@ export default function LibraryTab({
             )}
             {onRemoveFromView && (
               <button type="button" onClick={() => { onRemoveFromView([...selected]); setSelected(new Set()); }}
-                className="text-xs px-2.5 py-1 rounded-md border border-[#2c2c42] text-[#8394a8] hover:text-[#ef4444] hover:border-[#ef4444]/40 transition-colors cursor-pointer">
+                className="text-xs px-2.5 py-1 rounded-md border border-[#2c2c42] text-[#b6c2d0] hover:text-[#ef4444] hover:border-[#ef4444]/40 transition-colors cursor-pointer">
                 Remove from Playlist
               </button>
             )}
@@ -595,7 +595,7 @@ export default function LibraryTab({
                 }
                 setBulkProgress(null);
               }}
-              className="text-xs px-2.5 py-1 rounded-md border border-[#2c2c42] text-[#8394a8] hover:text-[#a6b5c8] hover:border-[#424f63] transition-colors cursor-pointer disabled:opacity-50"
+              className="text-xs px-2.5 py-1 rounded-md border border-[#2c2c42] text-[#b6c2d0] hover:text-[#ccd6e2] hover:border-[#424f63] transition-colors cursor-pointer disabled:opacity-50"
             >
               {bulkProgress ? `Re-analyzing ${bulkProgress.done}/${bulkProgress.total}…` : 'Re-analyze'}
             </button>
@@ -610,7 +610,7 @@ export default function LibraryTab({
                 }
                 setBulkBpmOpen(o => !o);
               }}
-              className={`text-xs px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${bulkBpmOpen ? 'border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10' : 'border-[#2c2c42] text-[#8394a8] hover:text-[#a6b5c8] hover:border-[#424f63]'}`}
+              className={`text-xs px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${bulkBpmOpen ? 'border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10' : 'border-[#2c2c42] text-[#b6c2d0] hover:text-[#ccd6e2] hover:border-[#424f63]'}`}
             >
               Re-analyze BPM range…
             </button>
@@ -628,11 +628,11 @@ export default function LibraryTab({
                     } catch { /* ignore */ }
                   }
                 }}
-                className="text-xs px-2.5 py-1 rounded-md border border-[#2c2c42] text-[#8394a8] hover:text-[#a78bfa] hover:border-[#7c3aed]/40 transition-colors cursor-pointer disabled:opacity-50 tabular-nums">
+                className="text-xs px-2.5 py-1 rounded-md border border-[#2c2c42] text-[#b6c2d0] hover:text-[#a78bfa] hover:border-[#7c3aed]/40 transition-colors cursor-pointer disabled:opacity-50 tabular-nums">
                 {mult === 2 ? '×2 BPM' : '÷2 BPM'}
               </button>
             ))}
-            <button type="button" onClick={() => { setSelected(new Set()); setBulkBpmOpen(false); }} className="ml-auto text-[10px] text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer">Clear</button>
+            <button type="button" onClick={() => { setSelected(new Set()); setBulkBpmOpen(false); }} className="ml-auto text-[10px] text-[#b6c2d0] hover:text-[#ccd6e2] transition-colors cursor-pointer">Clear</button>
           </div>
           {bulkBpmOpen && (
             <div className="flex flex-col gap-2 pt-2 border-t border-[#7c3aed]/20">
@@ -646,7 +646,7 @@ export default function LibraryTab({
                     className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer
                       ${bulkBpmMin === String(range.min) && bulkBpmMax === String(range.max)
                         ? 'border-[#7c3aed] text-[#a78bfa] bg-[#7c3aed]/15'
-                        : 'border-[#363650] text-[#64748b] hover:text-[#a6b5c8] hover:border-[#424f63]'}`}
+                        : 'border-[#363650] text-[#9aa8ba] hover:text-[#ccd6e2] hover:border-[#424f63]'}`}
                   >
                     {label} <span className="opacity-50">{range.min}–{range.max}</span>
                   </button>
@@ -654,10 +654,10 @@ export default function LibraryTab({
               </div>
               {/* Manual inputs + run */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] text-[#8394a8]">BPM range</span>
+                <span className="text-[10px] text-[#b6c2d0]">BPM range</span>
                 <input type="number" placeholder="Min" value={bulkBpmMin} onChange={e => setBulkBpmMin(e.target.value)}
                   className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#1c1c2e] border border-[#363650] focus:outline-none focus:border-[#7c3aed] text-center" />
-                <span className="text-[#64748b] text-xs">–</span>
+                <span className="text-[#9aa8ba] text-xs">–</span>
                 <input type="number" placeholder="Max" value={bulkBpmMax} onChange={e => setBulkBpmMax(e.target.value)}
                   className="w-16 rounded px-2 py-1 text-xs text-[#e2e8f0] bg-[#1c1c2e] border border-[#363650] focus:outline-none focus:border-[#7c3aed] text-center" />
                 <button
@@ -698,7 +698,7 @@ export default function LibraryTab({
       {viewTitle && (
         <div className="flex-shrink-0 flex items-baseline gap-3 px-4 pt-3">
           <h2 className="text-lg font-semibold text-[#e2e8f0] truncate">{viewTitle}</h2>
-          <span className="text-xs text-[#64748b] whitespace-nowrap">
+          <span className="text-xs text-[#9aa8ba] whitespace-nowrap">
             {songs.length} track{songs.length === 1 ? "" : "s"}
             {songs.length > 0 && ` · ${fmt(songs.reduce((t, s) => t + (s.duration ?? 0), 0))}`}
           </span>
@@ -717,13 +717,13 @@ export default function LibraryTab({
             )}
             {onReorder && !canReorder && songs.length > 1 && (
               <button type="button" onClick={() => { setSortKey("order"); setSortAsc(true); setSearch(""); setFilters(DEFAULT_FILTERS); }}
-                className="text-[10px] text-[#64748b] hover:text-[#a78bfa] cursor-pointer">
+                className="text-[10px] text-[#9aa8ba] hover:text-[#a78bfa] cursor-pointer">
                 Sort by # to reorder
               </button>
             )}
             {onEditRules && (
               <button type="button" onClick={onEditRules}
-                className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:text-[#e2e8f0] hover:border-[#7c3aed] cursor-pointer">
+                className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#ccd6e2] hover:text-[#e2e8f0] hover:border-[#7c3aed] cursor-pointer">
                 ⚙ Edit Rules
               </button>
             )}
@@ -732,7 +732,7 @@ export default function LibraryTab({
                 <button type="button" onClick={() => onPlay(rows.map(r => r.file), 0)} aria-label={`Play ${viewTitle ?? "all"}`}
                   className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#e2e8f0] hover:border-[#7c3aed] cursor-pointer">▶ Play</button>
                 <button type="button" onClick={() => onPlay(shuffleOrder(rows.map(r => r.file)), 0)} aria-label={`Shuffle ${viewTitle ?? "all"}`}
-                  className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#a6b5c8] hover:border-[#7c3aed] cursor-pointer">⤮ Shuffle</button>
+                  className="px-2.5 py-1 text-xs rounded-md border border-[#363650] text-[#ccd6e2] hover:border-[#7c3aed] cursor-pointer">⤮ Shuffle</button>
               </>
             )}
             {onGenerateSet && songs.length > 0 && (
@@ -748,32 +748,32 @@ export default function LibraryTab({
       {/* Search + filter + columns */}
       <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2">
         <input type="text" placeholder="Search title or artist…" value={search} onChange={e => setSearch(e.target.value)}
-          className="flex-1 bg-[#20202e] border border-[#2c2c42] rounded-lg px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#3e4f65] focus:outline-none focus:border-[#7c3aed] transition-colors" />
-        {(search || activeFilters) && <span className="text-[10px] text-[#64748b] whitespace-nowrap">{rows.length} / {songs.length}</span>}
+          className="flex-1 bg-[#20202e] border border-[#2c2c42] rounded-lg px-3 py-1.5 text-sm text-[#e2e8f0] placeholder-[#6b7a94] focus:outline-none focus:border-[#7c3aed] transition-colors" />
+        {(search || activeFilters) && <span className="text-[10px] text-[#9aa8ba] whitespace-nowrap">{rows.length} / {songs.length}</span>}
         <button type="button" onClick={() => { setEditMode(o => { if (o) setSelected(new Set()); return !o; }); }}
-          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${editMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#8292a4] hover:text-[#a6b5c8]"}`}>
+          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${editMode ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#b6c2d0] hover:text-[#ccd6e2]"}`}>
           Edit
         </button>
         <button type="button" onClick={() => setFiltersOpen(o => !o)}
-          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${activeFilters ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#8292a4] hover:text-[#a6b5c8]"}`}>
+          className={`px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer flex-shrink-0 ${activeFilters ? "border-[#7c3aed]/60 text-[#a78bfa] bg-[#7c3aed]/10" : "border-[#2c2c42] text-[#b6c2d0] hover:text-[#ccd6e2]"}`}>
           Filter{activeFilters ? " ●" : ""}
         </button>
         {onNewPlaylistFromSelection && (
           <button type="button" disabled={selected.size === 0}
             onClick={() => { onNewPlaylistFromSelection(rows.filter(r => selected.has(r.file)).map(r => r.file)); setSelected(new Set()); }}
             title={selected.size === 0 ? "Select tracks first (click, ⌘-click or ⇧-click rows)" : `New playlist from ${selected.size} selected`}
-            className="px-3 py-1.5 text-xs border border-[#2c2c42] rounded-lg text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
+            className="px-3 py-1.5 text-xs border border-[#2c2c42] rounded-lg text-[#b6c2d0] hover:text-[#ccd6e2] transition-colors cursor-pointer flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
             New Playlist
           </button>
         )}
         <div className="relative flex-shrink-0" ref={colMenuRef}>
-          <button type="button" onClick={() => setColMenuOpen(o => !o)} className="px-3 py-1.5 text-xs border border-[#2c2c42] rounded-lg text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer">Columns</button>
+          <button type="button" onClick={() => setColMenuOpen(o => !o)} className="px-3 py-1.5 text-xs border border-[#2c2c42] rounded-lg text-[#b6c2d0] hover:text-[#ccd6e2] transition-colors cursor-pointer">Columns</button>
           {colMenuOpen && (
             <div className="absolute right-0 top-full mt-1 bg-[#20202e] border border-[#363650] rounded-xl shadow-xl z-50 py-1 min-w-[150px]">
               {OPTIONAL_COLS.map(col => (
                 <label key={col.key} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#26263c] cursor-pointer">
                   <input type="checkbox" checked={visibleCols.has(col.key)} onChange={() => toggleCol(col.key)} className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer" />
-                  <span className="text-xs text-[#a6b5c8] flex items-center gap-1.5">{col.label}{col.ai && <AiBadge />}</span>
+                  <span className="text-xs text-[#ccd6e2] flex items-center gap-1.5">{col.label}{col.ai && <AiBadge />}</span>
                 </label>
               ))}
             </div>
@@ -785,41 +785,41 @@ export default function LibraryTab({
       {filtersOpen && (
         <div className="flex-shrink-0 mx-4 rounded-xl border border-[#2c2c42] bg-[#20202e] px-4 py-3 flex flex-wrap gap-4">
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">BPM</span>
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]">BPM</span>
             <div className="flex items-center gap-1">
               <input type="number" placeholder="Min" value={filters.bpmMin} onChange={e => setFilters(f => ({ ...f, bpmMin: e.target.value }))} className="w-16 bg-[#1c1c2e] border border-[#2c2c42] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed]" />
-              <span className="text-[10px] text-[#424f63]">–</span>
+              <span className="text-[10px] text-[#7d8ba0]">–</span>
               <input type="number" placeholder="Max" value={filters.bpmMax} onChange={e => setFilters(f => ({ ...f, bpmMax: e.target.value }))} className="w-16 bg-[#1c1c2e] border border-[#2c2c42] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed]" />
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Key</span>
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]">Key</span>
             <select value={filters.key} onChange={e => setFilters(f => ({ ...f, key: e.target.value }))} className="bg-[#1c1c2e] border border-[#2c2c42] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed] cursor-pointer">
               <option value="">Any</option>
               {uniqueKeys.map(k => <option key={k} value={k}>{k}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Energy {filters.energyMin}–{filters.energyMax}</span>
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]">Energy {filters.energyMin}–{filters.energyMax}</span>
             <div className="flex items-center gap-2">
               <input type="range" min={0} max={100} value={filters.energyMin} onChange={e => setFilters(f => ({ ...f, energyMin: Math.min(Number(e.target.value), f.energyMax) }))} className="w-20 accent-[#7c3aed] cursor-pointer" />
               <input type="range" min={0} max={100} value={filters.energyMax} onChange={e => setFilters(f => ({ ...f, energyMax: Math.max(Number(e.target.value), f.energyMin) }))} className="w-20 accent-[#7c3aed] cursor-pointer" />
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Genre</span>
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]">Genre</span>
             <input type="text" placeholder="contains…" value={filters.genre} onChange={e => setFilters(f => ({ ...f, genre: e.target.value }))} className="w-28 bg-[#1c1c2e] border border-[#2c2c42] rounded px-2 py-1 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#7c3aed]" />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Show</span>
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]">Show</span>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={filters.missingOnly} onChange={e => setFilters(f => ({ ...f, missingOnly: e.target.checked }))} className="w-3.5 h-3.5 accent-[#7c3aed] cursor-pointer" />
-              <span className="text-xs text-[#a6b5c8]">Missing data only</span>
+              <span className="text-xs text-[#ccd6e2]">Missing data only</span>
             </label>
           </div>
           {activeFilters && (
             <div className="flex flex-col justify-end">
-              <button type="button" onClick={() => setFilters(DEFAULT_FILTERS)} className="text-[10px] text-[#8292a4] hover:text-[#a6b5c8] transition-colors cursor-pointer">Clear filters</button>
+              <button type="button" onClick={() => setFilters(DEFAULT_FILTERS)} className="text-[10px] text-[#b6c2d0] hover:text-[#ccd6e2] transition-colors cursor-pointer">Clear filters</button>
             </div>
           )}
         </div>
@@ -844,10 +844,10 @@ export default function LibraryTab({
               {visibleCols.has("year")      && <SortHeader col="year"      label="Year"       {...sh} />}
               {visibleCols.has("comment")   && <SortHeader col="comment"   label="Comment"    {...sh} />}
               {visibleCols.has("dateAdded") && <SortHeader col="dateAdded" label="Date Added" {...sh} />}
-              {visibleCols.has("vibeTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Vibe <AiBadge /></span></th>}
-              {visibleCols.has("moodTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Mood <AiBadge /></span></th>}
-              {visibleCols.has("vocalType") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]"><span className="flex items-center gap-1">Vocal <AiBadge /></span></th>}
-              {visibleCols.has("playlists") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">Playlists</th>}
+              {visibleCols.has("vibeTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]"><span className="flex items-center gap-1">Vibe <AiBadge /></span></th>}
+              {visibleCols.has("moodTags")  && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]"><span className="flex items-center gap-1">Mood <AiBadge /></span></th>}
+              {visibleCols.has("vocalType") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]"><span className="flex items-center gap-1">Vocal <AiBadge /></span></th>}
+              {visibleCols.has("playlists") && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]">Playlists</th>}
               <th className="px-3 py-2 w-8" />
             </tr>
           </thead>
@@ -880,7 +880,7 @@ export default function LibraryTab({
                 >
                   {ordered && (
                     <td className="px-2 py-1.5 w-10 text-right">
-                      <span className={`text-xs tabular-nums ${canReorder ? "text-[#64748b] cursor-grab" : "text-[#424f63]"}`} title={canReorder ? "Drag to reorder" : undefined}>
+                      <span className={`text-xs tabular-nums ${canReorder ? "text-[#9aa8ba] cursor-grab" : "text-[#7d8ba0]"}`} title={canReorder ? "Drag to reorder" : undefined}>
                         {(orderIndex.get(song.file) ?? 0) + 1}
                       </span>
                     </td>
@@ -897,9 +897,9 @@ export default function LibraryTab({
                   {/* Title + waveform + missing chips */}
                   <td className="px-3 py-1.5 max-w-[200px]" onClick={e => e.stopPropagation()}>
                     {inlineEdit?.file === song.file && inlineEdit.field === 'title' ? (
-                      <input autoFocus defaultValue={song.title} onBlur={e => { void handleSave(song.file, { title: e.target.value.trim() || song.title }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-sm text-[#cbd5e1] outline-none pb-0.5" />
+                      <input autoFocus defaultValue={song.title} onBlur={e => { void handleSave(song.file, { title: e.target.value.trim() || song.title }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-sm text-[#e2e8f0] outline-none pb-0.5" />
                     ) : (
-                      <span className="text-sm text-[#cbd5e1] block truncate cursor-text hover:text-white transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'title' })}>{song.title || "—"}</span>
+                      <span className="text-sm text-[#e2e8f0] block truncate cursor-text hover:text-white transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'title' })}>{song.title || "—"}</span>
                     )}
                     {song.waveform && song.waveform.length > 0 && (
                       <WaveformBar waveform={song.waveform} frequencyWaveform={song.frequencyWaveform} vocalTimeline={song.vocalTimeline} height={18} className="mt-0.5 opacity-60 group-hover:opacity-90 transition-opacity" />
@@ -912,13 +912,13 @@ export default function LibraryTab({
                   </td>
                   <td className="px-3 py-1.5 max-w-[160px]" onClick={e => e.stopPropagation()}>
                     {inlineEdit?.file === song.file && inlineEdit.field === 'artist' ? (
-                      <input autoFocus defaultValue={song.artist} onBlur={e => { void handleSave(song.file, { artist: e.target.value.trim() || song.artist }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-sm text-[#a6b5c8] outline-none pb-0.5" />
+                      <input autoFocus defaultValue={song.artist} onBlur={e => { void handleSave(song.file, { artist: e.target.value.trim() || song.artist }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-sm text-[#ccd6e2] outline-none pb-0.5" />
                     ) : (
-                      <span className="text-sm text-[#a6b5c8] block truncate cursor-text hover:text-[#cbd5e1] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'artist' })}>{song.artist || "—"}</span>
+                      <span className="text-sm text-[#ccd6e2] block truncate cursor-text hover:text-[#e2e8f0] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'artist' })}>{song.artist || "—"}</span>
                     )}
                   </td>
                   <td className="px-3 py-1.5 whitespace-nowrap">
-                    <span className={`text-xs tabular-nums font-medium ${song.bpm === 0 ? "text-[#ef4444]/70" : "text-[#a6b5c8]"}`}>{song.bpm === 0 ? "—" : Math.round(song.bpm)}</span>
+                    <span className={`text-xs tabular-nums font-medium ${song.bpm === 0 ? "text-[#ef4444]/70" : "text-[#ccd6e2]"}`}>{song.bpm === 0 ? "—" : Math.round(song.bpm)}</span>
                   </td>
                   <td className="px-3 py-1.5 whitespace-nowrap">
                     {song.camelot && song.camelot !== "Unknown"
@@ -930,38 +930,38 @@ export default function LibraryTab({
                       <div className="w-12 h-1.5 bg-[#2c2c42] rounded-full overflow-hidden">
                         <div className="h-full rounded-full" style={{ width: `${Math.round(song.energy * 100)}%`, backgroundColor: energyColor(song.energy) }} />
                       </div>
-                      <span className="text-[10px] text-[#64748b] tabular-nums w-6">{Math.round(song.energy * 100)}</span>
+                      <span className="text-[10px] text-[#9aa8ba] tabular-nums w-6">{Math.round(song.energy * 100)}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-1.5 max-w-[180px]"><span className="text-xs text-[#8394a8] block truncate">{song.genres.join(", ") || "—"}</span></td>
-                  {visibleCols.has("duration")  && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#64748b] tabular-nums">{song.duration != null ? fmt(song.duration) : "—"}</span></td>}
+                  <td className="px-3 py-1.5 max-w-[180px]"><span className="text-xs text-[#b6c2d0] block truncate">{song.genres.join(", ") || "—"}</span></td>
+                  {visibleCols.has("duration")  && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#9aa8ba] tabular-nums">{song.duration != null ? fmt(song.duration) : "—"}</span></td>}
                   {visibleCols.has("year") && (
                     <td className="px-3 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       {inlineEdit?.file === song.file && inlineEdit.field === 'year' ? (
-                        <input autoFocus type="number" defaultValue={song.year ?? ''} onBlur={e => { const y = parseInt(e.target.value); void handleSave(song.file, { year: y > 0 ? y : undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-16 bg-transparent border-b border-[#7c3aed] text-xs text-[#64748b] outline-none tabular-nums pb-0.5" />
+                        <input autoFocus type="number" defaultValue={song.year ?? ''} onBlur={e => { const y = parseInt(e.target.value); void handleSave(song.file, { year: y > 0 ? y : undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-16 bg-transparent border-b border-[#7c3aed] text-xs text-[#9aa8ba] outline-none tabular-nums pb-0.5" />
                       ) : (
-                        <span className="text-xs text-[#64748b] tabular-nums cursor-text hover:text-[#a6b5c8] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'year' })}>{song.year ?? "—"}</span>
+                        <span className="text-xs text-[#9aa8ba] tabular-nums cursor-text hover:text-[#ccd6e2] transition-colors" onClick={() => setInlineEdit({ file: song.file, field: 'year' })}>{song.year ?? "—"}</span>
                       )}
                     </td>
                   )}
                   {visibleCols.has("comment") && (
                     <td className="px-3 py-1.5 max-w-[200px]" onClick={e => e.stopPropagation()}>
                       {inlineEdit?.file === song.file && inlineEdit.field === 'comment' ? (
-                        <input autoFocus defaultValue={song.comment ?? ''} onBlur={e => { void handleSave(song.file, { comment: e.target.value.trim() || undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-xs text-[#64748b] outline-none pb-0.5" />
+                        <input autoFocus defaultValue={song.comment ?? ''} onBlur={e => { void handleSave(song.file, { comment: e.target.value.trim() || undefined }); setInlineEdit(null); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setInlineEdit(null); }} className="w-full bg-transparent border-b border-[#7c3aed] text-xs text-[#9aa8ba] outline-none pb-0.5" />
                       ) : (
-                        <span className="text-xs text-[#64748b] block truncate cursor-text hover:text-[#a6b5c8] transition-colors" title={song.comment} onClick={() => setInlineEdit({ file: song.file, field: 'comment' })}>{song.comment || "—"}</span>
+                        <span className="text-xs text-[#9aa8ba] block truncate cursor-text hover:text-[#ccd6e2] transition-colors" title={song.comment} onClick={() => setInlineEdit({ file: song.file, field: 'comment' })}>{song.comment || "—"}</span>
                       )}
                     </td>
                   )}
-                  {visibleCols.has("dateAdded") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#64748b] tabular-nums">{song.dateAdded != null ? fmtDate(song.dateAdded) : "—"}</span></td>}
-                  {visibleCols.has("vibeTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#8394a8] block truncate">{song.semanticTags?.vibeTags.join(", ") || "—"}</span></td>}
-                  {visibleCols.has("moodTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#8394a8] block truncate">{song.semanticTags?.moodTags.join(", ") || "—"}</span></td>}
-                  {visibleCols.has("vocalType") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-[10px] text-[#8394a8]">{song.semanticTags?.vocalType ?? "—"}</span></td>}
+                  {visibleCols.has("dateAdded") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-xs text-[#9aa8ba] tabular-nums">{song.dateAdded != null ? fmtDate(song.dateAdded) : "—"}</span></td>}
+                  {visibleCols.has("vibeTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#b6c2d0] block truncate">{song.semanticTags?.vibeTags.join(", ") || "—"}</span></td>}
+                  {visibleCols.has("moodTags")  && <td className="px-3 py-1.5 max-w-[140px]"><span className="text-[10px] text-[#b6c2d0] block truncate">{song.semanticTags?.moodTags.join(", ") || "—"}</span></td>}
+                  {visibleCols.has("vocalType") && <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-[10px] text-[#b6c2d0]">{song.semanticTags?.vocalType ?? "—"}</span></td>}
                   {visibleCols.has("playlists") && (() => {
                     const names = playlistNamesFor?.(song.file) ?? [];
                     return (
                       <td className="px-3 py-1.5 whitespace-nowrap">
-                        <span className={`text-xs tabular-nums ${names.length ? "text-[#a78bfa]" : "text-[#424f63]"}`} title={names.length ? names.join("\n") : "Not in any playlist"}>
+                        <span className={`text-xs tabular-nums ${names.length ? "text-[#a78bfa]" : "text-[#7d8ba0]"}`} title={names.length ? names.join("\n") : "Not in any playlist"}>
                           {names.length || "—"}
                         </span>
                       </td>
@@ -973,7 +973,7 @@ export default function LibraryTab({
                       type="button"
                       disabled={analyzing}
                       onClick={e => { e.stopPropagation(); handleReanalyze(song); }}
-                      className={`transition-opacity text-[#64748b] hover:text-[#a6b5c8] cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${isMissing || analyzing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                      className={`transition-opacity text-[#9aa8ba] hover:text-[#ccd6e2] cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${isMissing || analyzing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                       title={isMissing ? `Re-analyze to fix: ${missingFields.join(", ")}` : "Re-analyze audio"}
                     >
                       <span
@@ -987,7 +987,7 @@ export default function LibraryTab({
             })}
             {vBotPad > 0 && <tr style={{ height: vBotPad }}><td colSpan={99} /></tr>}
             {rows.length === 0 && (
-              <tr><td colSpan={99} className="px-4 py-12 text-center text-sm text-[#64748b]">
+              <tr><td colSpan={99} className="px-4 py-12 text-center text-sm text-[#9aa8ba]">
                 {songs.length === 0
                   ? (onReorder ? "This playlist is empty — drag tracks onto it in the sidebar, or right-click tracks → Add to playlist." : "No tracks here.")
                   : "No tracks match your search or filters."}

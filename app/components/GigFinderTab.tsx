@@ -19,7 +19,7 @@ import { getAccessToken } from '../services/openAiAuth'
 function scoreColor(score: number): string {
   if (score >= 90) return 'text-green-400'
   if (score >= 80) return 'text-yellow-400'
-  return 'text-[#a6b5c8]'
+  return 'text-[#ccd6e2]'
 }
 
 function scoreBg(score: number): string {
@@ -32,7 +32,7 @@ function tierBadge(tier: GigOpportunityTier): { label: string; cls: string } {
   switch (tier) {
     case 'HIGH_CONFIDENCE': return { label: 'High Confidence', cls: 'bg-green-900/50 text-green-300 border-green-700/50' }
     case 'POTENTIAL': return { label: 'Potential', cls: 'bg-blue-900/50 text-blue-300 border-blue-700/50' }
-    case 'WEAK': return { label: 'Weak', cls: 'bg-[#2c2c42] text-[#a6b5c8] border-[#363650]' }
+    case 'WEAK': return { label: 'Weak', cls: 'bg-[#2c2c42] text-[#ccd6e2] border-[#363650]' }
     case 'REJECT': return { label: 'Reject', cls: 'bg-red-900/50 text-red-300 border-red-700/50' }
   }
 }
@@ -132,10 +132,10 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
               {locInfo.emoji} {locInfo.label}
             </span>
           </div>
-          <p className="text-xs text-[#a6b5c8]">
+          <p className="text-xs text-[#ccd6e2]">
             {lead.city}, {lead.country}
             {lead.distanceKm !== undefined && (
-              <span className="ml-2 text-[#8394a8]">~{Math.round(lead.distanceKm)} km</span>
+              <span className="ml-2 text-[#b6c2d0]">~{Math.round(lead.distanceKm)} km</span>
             )}
           </p>
           {(lead.contact.website ?? lead.evidence[0]?.sourceUrl) && (
@@ -166,12 +166,12 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
               {g}
             </span>
           ))}
-          <span className="text-[10px] text-[#8394a8]">{lead.genre.confidence}% confident</span>
+          <span className="text-[10px] text-[#b6c2d0]">{lead.genre.confidence}% confident</span>
         </div>
       )}
 
       {/* Score breakdown */}
-      <div className="flex gap-3 text-[10px] text-[#a6b5c8] mb-3 flex-wrap">
+      <div className="flex gap-3 text-[10px] text-[#ccd6e2] mb-3 flex-wrap">
         <span>Opp <span className={scoreColor(lead.scores.opportunity)}>{Math.round(lead.scores.opportunity)}</span></span>
         <span>Contact <span className={scoreColor(lead.scores.contactability)}>{Math.round(lead.scores.contactability)}</span></span>
         <span>Value <span className={scoreColor(lead.scores.potentialValue)}>{Math.round(lead.scores.potentialValue)}</span></span>
@@ -179,7 +179,7 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
       </div>
 
       {/* Opportunity description */}
-      <p className="text-xs text-[#a6b5c8] mb-3 leading-relaxed">{lead.opportunityDescription}</p>
+      <p className="text-xs text-[#ccd6e2] mb-3 leading-relaxed">{lead.opportunityDescription}</p>
 
       {/* Expand button */}
       <button
@@ -203,7 +203,7 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
               {(showWhyItFits || lead.whyItFits.length <= 3) && (
                 <ul className="space-y-1">
                   {lead.whyItFits.map((item, i) => (
-                    <li key={i} className="text-xs text-[#a6b5c8] flex gap-1.5">
+                    <li key={i} className="text-xs text-[#ccd6e2] flex gap-1.5">
                       <span className="text-[#7c3aed] shrink-0">•</span>
                       {item}
                     </li>
@@ -211,7 +211,7 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
                 </ul>
               )}
               {!showWhyItFits && lead.whyItFits.length > 3 && (
-                <button onClick={() => setShowWhyItFits(true)} className="text-[10px] text-[#8394a8] hover:text-[#a6b5c8] cursor-pointer">
+                <button onClick={() => setShowWhyItFits(true)} className="text-[10px] text-[#b6c2d0] hover:text-[#ccd6e2] cursor-pointer">
                   +{lead.whyItFits.length - 3} more…
                 </button>
               )}
@@ -220,24 +220,24 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
 
           {/* Contact box */}
           <div className="bg-[#1c1c2e] rounded-lg border border-[#2c2c42] p-3">
-            <div className="text-[10px] uppercase tracking-widest text-[#8394a8] font-semibold mb-2">Contact</div>
+            <div className="text-[10px] uppercase tracking-widest text-[#b6c2d0] font-semibold mb-2">Contact</div>
             {lead.contact.name ? (
               <p className="text-sm font-medium text-[#e2e8f0] mb-0.5">{lead.contact.name}</p>
             ) : (
-              <p className="text-sm text-[#8394a8] italic mb-0.5">No contact found</p>
+              <p className="text-sm text-[#b6c2d0] italic mb-0.5">No contact found</p>
             )}
-            {lead.contact.role && <p className="text-xs text-[#a6b5c8] mb-2">{lead.contact.role}</p>}
+            {lead.contact.role && <p className="text-xs text-[#ccd6e2] mb-2">{lead.contact.role}</p>}
 
             {/* Confidence bar */}
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] text-[#8394a8]">Confidence</span>
+              <span className="text-[10px] text-[#b6c2d0]">Confidence</span>
               <div className="flex-1 h-1 bg-[#2c2c42] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[#7c3aed] rounded-full"
                   style={{ width: `${lead.contact.confidence}%` }}
                 />
               </div>
-              <span className="text-[10px] text-[#a6b5c8]">{lead.contact.confidence}%</span>
+              <span className="text-[10px] text-[#ccd6e2]">{lead.contact.confidence}%</span>
             </div>
 
             {/* Contact chips */}
@@ -250,26 +250,26 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
               )}
               {lead.contact.email && (
                 <a href={`mailto:${lead.contact.email}`}
-                  className="text-[10px] bg-[#2c2c42] text-[#a6b5c8] border border-[#363650] px-2 py-0.5 rounded">
+                  className="text-[10px] bg-[#2c2c42] text-[#ccd6e2] border border-[#363650] px-2 py-0.5 rounded">
                   ✉ {lead.contact.email}
                 </a>
               )}
               {lead.contact.phone && (
-                <span className="text-[10px] bg-[#2c2c42] text-[#a6b5c8] border border-[#363650] px-2 py-0.5 rounded">
+                <span className="text-[10px] bg-[#2c2c42] text-[#ccd6e2] border border-[#363650] px-2 py-0.5 rounded">
                   📞 {lead.contact.phone}
                 </span>
               )}
               {lead.contact.website && (
                 <a href={lead.contact.website} target="_blank" rel="noreferrer"
-                  className="text-[10px] bg-[#2c2c42] text-[#a6b5c8] border border-[#363650] px-2 py-0.5 rounded truncate max-w-[160px]">
+                  className="text-[10px] bg-[#2c2c42] text-[#ccd6e2] border border-[#363650] px-2 py-0.5 rounded truncate max-w-[160px]">
                   🌐 {lead.contact.website}
                 </a>
               )}
             </div>
 
             {lead.contact.bestChannel && (
-              <p className="text-[10px] text-[#8394a8] mt-2">
-                Best channel: <span className="text-[#a6b5c8]">{lead.contact.bestChannel}</span>
+              <p className="text-[10px] text-[#b6c2d0] mt-2">
+                Best channel: <span className="text-[#ccd6e2]">{lead.contact.bestChannel}</span>
                 {lead.contact.bestChannelReason && ` — ${lead.contact.bestChannelReason}`}
               </p>
             )}
@@ -280,7 +280,7 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
             <div>
               <button
                 onClick={() => setShowEvidence(s => !s)}
-                className="text-[10px] uppercase tracking-widest text-[#8394a8] font-semibold mb-2 cursor-pointer hover:text-[#a6b5c8]"
+                className="text-[10px] uppercase tracking-widest text-[#b6c2d0] font-semibold mb-2 cursor-pointer hover:text-[#ccd6e2]"
               >
                 Evidence ({lead.evidence.length}) {showEvidence ? '▲' : '▼'}
               </button>
@@ -297,9 +297,9 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
                           </a>
                           <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${fb.cls}`}>{fb.label}</span>
                         </div>
-                        <p className="text-[10px] text-[#a6b5c8] leading-relaxed">{ev.summary}</p>
+                        <p className="text-[10px] text-[#ccd6e2] leading-relaxed">{ev.summary}</p>
                         {ev.publishedAt && (
-                          <p className="text-[9px] text-[#8394a8] mt-1">{new Date(ev.publishedAt).toLocaleDateString()}</p>
+                          <p className="text-[9px] text-[#b6c2d0] mt-1">{new Date(ev.publishedAt).toLocaleDateString()}</p>
                         )}
                       </div>
                     )
@@ -311,14 +311,14 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
 
           {/* Notes */}
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-[#8394a8] font-semibold mb-1.5">Notes</div>
+            <div className="text-[10px] uppercase tracking-widest text-[#b6c2d0] font-semibold mb-1.5">Notes</div>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
               onBlur={handleNotesSave}
               placeholder="Add notes…"
               rows={2}
-              className="w-full bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#8394a8] focus:outline-none focus:border-[#7c3aed] transition-colors resize-none"
+              className="w-full bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#b6c2d0] focus:outline-none focus:border-[#7c3aed] transition-colors resize-none"
             />
           </div>
         </div>
@@ -335,11 +335,11 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
       {aiDraft && (
         <div className="mt-3 flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-widest text-[#8394a8] font-semibold">Booking Pitch Draft</span>
+            <span className="text-[10px] uppercase tracking-widest text-[#b6c2d0] font-semibold">Booking Pitch Draft</span>
             <button type="button" onClick={() => void navigator.clipboard.writeText(aiDraft)}
-              className="text-[10px] text-[#8394a8] hover:text-[#a6b5c8] transition-colors cursor-pointer">Copy</button>
+              className="text-[10px] text-[#b6c2d0] hover:text-[#ccd6e2] transition-colors cursor-pointer">Copy</button>
           </div>
-          <pre className="whitespace-pre-wrap font-sans text-xs text-[#a6b5c8] bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-3 py-2 leading-relaxed">{aiDraft}</pre>
+          <pre className="whitespace-pre-wrap font-sans text-xs text-[#ccd6e2] bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-3 py-2 leading-relaxed">{aiDraft}</pre>
         </div>
       )}
 
@@ -350,7 +350,7 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
         <select
           value={lead.status}
           onChange={e => handleStatusChange(e.target.value as GigLeadStatus)}
-          className="text-xs bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-2 py-1 text-[#a6b5c8] focus:outline-none focus:border-[#7c3aed] cursor-pointer"
+          className="text-xs bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-2 py-1 text-[#ccd6e2] focus:outline-none focus:border-[#7c3aed] cursor-pointer"
         >
           {LEAD_STATUSES.map(s => (
             <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
@@ -361,17 +361,17 @@ function LeadCard({ lead, onUpdate }: { lead: GigLead; onUpdate: (id: string, up
             <>
               <button type="button" onClick={() => void handleAiSummary()} disabled={aiLoading !== null}
                 title="AI: summarize this lead in 2 sentences"
-                className="text-[10px] text-[#8394a8] hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer">
+                className="text-[10px] text-[#b6c2d0] hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer">
                 {aiLoading === 'summary' ? '…' : '✦ Summarize'}
               </button>
               <button type="button" onClick={() => void handleAiDraft()} disabled={aiLoading !== null}
                 title="AI: draft a booking pitch email"
-                className="text-[10px] text-[#8394a8] hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer">
+                className="text-[10px] text-[#b6c2d0] hover:text-[#a78bfa] disabled:opacity-40 transition-colors cursor-pointer">
                 {aiLoading === 'draft' ? '…' : '✍ Draft email'}
               </button>
             </>
           )}
-          <span className="text-[10px] text-[#8394a8]">
+          <span className="text-[10px] text-[#b6c2d0]">
             Found {new Date(lead.discoveredAt).toLocaleDateString()}
           </span>
         </div>
@@ -412,13 +412,13 @@ function TagSelector({
   const activeCls = variant === 'avoid'
     ? 'bg-red-900/60 border-red-700/60 text-red-300'
     : 'bg-[#7c3aed]/20 border-[#7c3aed]/60 text-[#a78bfa]'
-  const inactiveCls = 'bg-[#1c1c2e] border-[#2c2c42] text-[#8394a8] hover:border-[#363650] hover:text-[#a6b5c8]'
+  const inactiveCls = 'bg-[#1c1c2e] border-[#2c2c42] text-[#b6c2d0] hover:border-[#363650] hover:text-[#ccd6e2]'
   const customTags = selected.filter(t => !options.includes(t))
   return (
     <div>
-      <span className="text-[10px] uppercase tracking-widest text-[#8394a8] font-semibold block mb-2">
+      <span className="text-[10px] uppercase tracking-widest text-[#b6c2d0] font-semibold block mb-2">
         {label}
-        {allowCustom && selected.length === 0 && <span className="ml-2 normal-case tracking-normal text-[#424f63]">(empty = accept all)</span>}
+        {allowCustom && selected.length === 0 && <span className="ml-2 normal-case tracking-normal text-[#7d8ba0]">(empty = accept all)</span>}
       </span>
       <div className="flex flex-wrap gap-1.5">
         {options.map(tag => (
@@ -443,7 +443,7 @@ function TagSelector({
         {allowCustom && !addingCustom && (
           <button
             onClick={() => setAddingCustom(true)}
-            className="text-[11px] px-2.5 py-1 rounded-full border border-dashed border-[#424f63] text-[#8394a8] hover:text-[#a6b5c8] hover:border-[#8394a8] transition-colors cursor-pointer"
+            className="text-[11px] px-2.5 py-1 rounded-full border border-dashed border-[#424f63] text-[#b6c2d0] hover:text-[#ccd6e2] hover:border-[#8394a8] transition-colors cursor-pointer"
           >
             + Add custom
           </button>
@@ -459,7 +459,7 @@ function TagSelector({
               else if (e.key === 'Escape') { setCustomValue(''); setAddingCustom(false) }
             }}
             placeholder="e.g. natural wine bar"
-            className="text-[11px] px-2.5 py-1 rounded-full border border-[#7c3aed]/60 bg-[#1c1c2e] text-[#e2e8f0] placeholder-[#8394a8] focus:outline-none min-w-[140px]"
+            className="text-[11px] px-2.5 py-1 rounded-full border border-[#7c3aed]/60 bg-[#1c1c2e] text-[#e2e8f0] placeholder-[#b6c2d0] focus:outline-none min-w-[140px]"
           />
         )}
       </div>
@@ -600,9 +600,9 @@ function LocationMap({
         style={{ height: 200, borderRadius: 10, overflow: 'hidden', border: '1px solid #2c2c42' }}
       />
       <div className="flex items-center justify-between mt-2 px-0.5">
-        <span className="text-[10px] text-[#8394a8] truncate max-w-[60%]">{location}</span>
+        <span className="text-[10px] text-[#b6c2d0] truncate max-w-[60%]">{location}</span>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[#8394a8]">Radius</span>
+          <span className="text-[10px] text-[#b6c2d0]">Radius</span>
           <input
             type="range"
             min={0}
@@ -666,8 +666,8 @@ function ProfileModal({
     onClose()
   }
 
-  const labelCls = 'text-[10px] uppercase tracking-widest text-[#8394a8] font-semibold block mb-1'
-  const inputCls = 'w-full bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#8394a8] focus:outline-none focus:border-[#7c3aed] transition-colors'
+  const labelCls = 'text-[10px] uppercase tracking-widest text-[#b6c2d0] font-semibold block mb-1'
+  const inputCls = 'w-full bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#b6c2d0] focus:outline-none focus:border-[#7c3aed] transition-colors'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
@@ -676,7 +676,7 @@ function ProfileModal({
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-[#e2e8f0]">Profile</h2>
-          <button onClick={onClose} className="text-[#8394a8] hover:text-[#a6b5c8] cursor-pointer text-lg leading-none">✕</button>
+          <button onClick={onClose} className="text-[#b6c2d0] hover:text-[#ccd6e2] cursor-pointer text-lg leading-none">✕</button>
         </div>
 
         {/* DJ Name */}
@@ -757,7 +757,7 @@ function ProfileModal({
             onChange={e => setDraft(d => ({ ...d, minimumLeadScore: Number(e.target.value) }))}
             className="w-full accent-[#7c3aed]"
           />
-          <div className="flex justify-between text-[9px] text-[#6b7a94] mt-0.5">
+          <div className="flex justify-between text-[9px] text-[#a3b0c2] mt-0.5">
             <span>50 — more results</span>
             <span>95 — very strict</span>
           </div>
@@ -766,7 +766,7 @@ function ProfileModal({
         {/* Seed Instagram handles — the co-mention proxy for follower graph */}
         <div>
           <label className={labelCls}>Known Instagram handles (comma or space separated)</label>
-          <p className="text-[10px] text-[#8394a8] mb-1.5 leading-relaxed">
+          <p className="text-[10px] text-[#b6c2d0] mb-1.5 leading-relaxed">
             Handles of venues you already know from the scene. The finder searches pages that mention them and pulls out other handles co-mentioned nearby — the scene finds itself.
           </p>
           <input
@@ -796,7 +796,7 @@ function ProfileModal({
         <div className="flex gap-2 justify-end pt-1">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs text-[#a6b5c8] border border-[#2c2c42] rounded-lg hover:border-[#363650] transition-colors cursor-pointer"
+            className="px-4 py-2 text-xs text-[#ccd6e2] border border-[#2c2c42] rounded-lg hover:border-[#363650] transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -822,8 +822,8 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (lead: GigLead) => void; onCl
   const [instagram, setInstagram] = useState('')
   const [notes, setNotes] = useState('')
 
-  const labelCls = 'text-[10px] uppercase tracking-widest text-[#8394a8] font-semibold block mb-1'
-  const inputCls = 'w-full bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#8394a8] focus:outline-none focus:border-[#7c3aed] transition-colors'
+  const labelCls = 'text-[10px] uppercase tracking-widest text-[#b6c2d0] font-semibold block mb-1'
+  const inputCls = 'w-full bg-[#1c1c2e] border border-[#2c2c42] rounded-lg px-3 py-2 text-xs text-[#e2e8f0] placeholder-[#b6c2d0] focus:outline-none focus:border-[#7c3aed] transition-colors'
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -860,7 +860,7 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (lead: GigLead) => void; onCl
       <div className="bg-[#12121a] border border-[#2c2c42] rounded-xl w-full max-w-md p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-[#e2e8f0]">Add Lead</h2>
-          <button onClick={onClose} className="text-[#8394a8] hover:text-[#a6b5c8] cursor-pointer text-lg leading-none">✕</button>
+          <button onClick={onClose} className="text-[#b6c2d0] hover:text-[#ccd6e2] cursor-pointer text-lg leading-none">✕</button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -891,7 +891,7 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (lead: GigLead) => void; onCl
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs text-[#a6b5c8] border border-[#2c2c42] rounded-lg hover:border-[#363650] transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs text-[#ccd6e2] border border-[#2c2c42] rounded-lg hover:border-[#363650] transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -970,7 +970,7 @@ export default function GigFinderTab() {
         <div className="flex items-center gap-3">
           <h1 className="text-sm font-semibold text-[#e2e8f0]">Gig Finder</h1>
           {leads.length > 0 && (
-            <span className="text-[10px] bg-[#363650] text-[#a6b5c8] px-1.5 py-0.5 rounded-full">
+            <span className="text-[10px] bg-[#363650] text-[#ccd6e2] px-1.5 py-0.5 rounded-full">
               {leads.length} leads
             </span>
           )}
@@ -979,7 +979,7 @@ export default function GigFinderTab() {
           {profile && (
             <button
               onClick={() => setShowProfileModal(true)}
-              className="text-xs px-3 py-1.5 border border-[#2c2c42] text-[#a6b5c8] rounded-lg hover:border-[#363650] hover:text-[#e2e8f0] transition-colors cursor-pointer"
+              className="text-xs px-3 py-1.5 border border-[#2c2c42] text-[#ccd6e2] rounded-lg hover:border-[#363650] hover:text-[#e2e8f0] transition-colors cursor-pointer"
             >
               Edit Profile
             </button>
@@ -1006,12 +1006,12 @@ export default function GigFinderTab() {
       {/* Profile summary strip */}
       {profile && (
         <div className="px-4 py-2 border-b border-[#2c2c42] bg-[#1c1c2e] flex-shrink-0">
-          <div className="flex items-center gap-4 text-[10px] text-[#8394a8] flex-wrap">
-            <span>DJ: <span className="text-[#a6b5c8]">{profile.djName}</span></span>
-            <span>Base: <span className="text-[#a6b5c8]">{profile.baseLocation}</span></span>
-            <span>Radius: <span className="text-[#a6b5c8]">{profile.searchRadiusKm}km</span></span>
-            <span>Min score: <span className="text-[#a6b5c8]">{profile.minimumLeadScore}</span></span>
-            <span className="text-[#6b7a94]">|</span>
+          <div className="flex items-center gap-4 text-[10px] text-[#b6c2d0] flex-wrap">
+            <span>DJ: <span className="text-[#ccd6e2]">{profile.djName}</span></span>
+            <span>Base: <span className="text-[#ccd6e2]">{profile.baseLocation}</span></span>
+            <span>Radius: <span className="text-[#ccd6e2]">{profile.searchRadiusKm}km</span></span>
+            <span>Min score: <span className="text-[#ccd6e2]">{profile.minimumLeadScore}</span></span>
+            <span className="text-[#a3b0c2]">|</span>
             {profile.primaryGenres.slice(0, 4).map(g => (
               <span key={g} className="text-[#7c3aed]">{g}</span>
             ))}
@@ -1023,7 +1023,7 @@ export default function GigFinderTab() {
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {/* Controls */}
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[10px] text-[#8394a8]">
+          <span className="text-[10px] text-[#b6c2d0]">
             {visibleLeads.length} lead{visibleLeads.length !== 1 ? 's' : ''}
             {!showRejected && leads.some(l => l.opportunityTier === 'REJECT' || l.status === 'REJECTED') && (
               <span> (rejected hidden)</span>
@@ -1036,15 +1036,15 @@ export default function GigFinderTab() {
               onChange={e => setShowRejected(e.target.checked)}
               className="rounded"
             />
-            <span className="text-[10px] text-[#8394a8]">Show rejected</span>
+            <span className="text-[10px] text-[#b6c2d0]">Show rejected</span>
           </label>
         </div>
 
         {visibleLeads.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="text-4xl mb-3">🎯</div>
-            <p className="text-sm text-[#8394a8] mb-1">No leads yet</p>
-            <p className="text-xs text-[#6b7a94]">Add your first lead with the "Add Lead" button above.</p>
+            <p className="text-sm text-[#b6c2d0] mb-1">No leads yet</p>
+            <p className="text-xs text-[#a3b0c2]">Add your first lead with the "Add Lead" button above.</p>
           </div>
         )}
 

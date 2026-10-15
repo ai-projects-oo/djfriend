@@ -67,7 +67,7 @@ export default function CalendarPicker({ value, clearLabel = 'Clear', onConfirm 
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 mb-1">
         {DAY_HEADERS.map(d => (
-          <span key={d} className="text-[9px] text-center text-[#4b5568] font-medium">{d}</span>
+          <span key={d} className="text-[9px] text-center text-[#8090a6] font-medium">{d}</span>
         ))}
       </div>
 
@@ -100,7 +100,7 @@ export default function CalendarPicker({ value, clearLabel = 'Clear', onConfirm 
         <button
           type="button"
           onClick={() => onConfirm(undefined)}
-          className="text-[10px] text-[#4b5568] hover:text-[#a78bfa] cursor-pointer transition-colors"
+          className="text-[10px] text-[#8090a6] hover:text-[#a78bfa] cursor-pointer transition-colors"
         >
           {clearLabel}
         </button>

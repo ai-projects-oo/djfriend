@@ -128,9 +128,9 @@ export default function OnboardingModal({
             <img src="/icon.png" alt="" width={32} height={32} className="rounded-md" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             <span className="text-2xl font-bold tracking-tight text-[#e2e8f0]">DJFriend</span>
           </div>
-          <p className="text-[#8394a8] text-sm leading-relaxed">
+          <p className="text-[#b6c2d0] text-sm leading-relaxed">
             Generate perfect DJ sets from your music library.<br/>
-            <span className="text-[#64748b]">Start by loading your tracks.</span>
+            <span className="text-[#9aa8ba]">Start by loading your tracks.</span>
           </p>
         </div>
 
@@ -165,7 +165,7 @@ export default function OnboardingModal({
                 >
                   {opt.title}
                 </div>
-                <div className="text-[11px] text-[#6b7a94] leading-snug mt-0.5">
+                <div className="text-[11px] text-[#a3b0c2] leading-snug mt-0.5">
                   {opt.description}
                 </div>
               </div>
@@ -179,12 +179,12 @@ export default function OnboardingModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-[11px] text-[#6b7a94] px-1">
+        <div className="flex items-center justify-between text-[11px] text-[#a3b0c2] px-1">
           <div className="flex items-center gap-2">
             {!hasSpotifyCredentials && (
               <button
                 onClick={() => onOpenSettings()}
-                className="hover:text-[#8394a8] transition-colors cursor-pointer"
+                className="hover:text-[#b6c2d0] transition-colors cursor-pointer"
               >
                 Connect Spotify →
               </button>
@@ -192,7 +192,7 @@ export default function OnboardingModal({
           </div>
           <button
             onClick={onDismiss}
-            className="hover:text-[#8394a8] transition-colors cursor-pointer"
+            className="hover:text-[#b6c2d0] transition-colors cursor-pointer"
           >
             Skip for now →
           </button>

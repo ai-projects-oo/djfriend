@@ -74,8 +74,8 @@ export default function LibraryStatsBar({ songs, onScrollToMissing }: Props) {
 function Stat({ label, value, dim }: { label: string; value: string | number; dim?: boolean }) {
   return (
     <div className="flex items-baseline gap-1.5">
-      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#64748b]">{label}</span>
-      <span className={`text-[11px] font-semibold tabular-nums ${dim ? "text-[#f59e0b]" : "text-[#a6b5c8]"}`}>{value}</span>
+      <span className="text-[10px] uppercase tracking-widest font-semibold text-[#9aa8ba]">{label}</span>
+      <span className={`text-[11px] font-semibold tabular-nums ${dim ? "text-[#f59e0b]" : "text-[#ccd6e2]"}`}>{value}</span>
     </div>
   );
 }

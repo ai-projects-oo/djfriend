@@ -67,6 +67,9 @@ function isCamelotClockwise(from, to) {
 
 // ── Feature extraction (mirrors app/lib/mlFeatures.ts) ───────────────────────
 
+// Spotify's developer terms forbid training ML models on Spotify content — never use Spotify-sourced genres
+const ownGenres = t => (t.genresFromSpotify ? [] : (t.genres ?? []));
+
 function transitionFeatures(a, b, targetEnergy, setPosition) {
   const bpmA = a.bpm || 128, bpmB = b.bpm || 128;
   const harmony    = camelotHarmonyScore(a.camelot, b.camelot);
@@ -83,9 +86,9 @@ function transitionFeatures(a, b, targetEnergy, setPosition) {
   const pB = parseCamelot(b.camelot);
   const tA = ((pA?.num ?? 1) - 1) / 12;
   const tB = ((pB?.num ?? 1) - 1) / 12;
-  const setA = new Set((a.genres ?? []).map(g => g.toLowerCase()));
-  const overlap = (b.genres ?? []).filter(g => setA.has(g.toLowerCase())).length;
-  const genreOvlp = Math.min(1, overlap / Math.max(1, Math.max((a.genres ?? []).length, (b.genres ?? []).length)));
+  const setA = new Set(ownGenres(a).map(g => g.toLowerCase()));
+  const overlap = ownGenres(b).filter(g => setA.has(g.toLowerCase())).length;
+  const genreOvlp = Math.min(1, overlap / Math.max(1, Math.max(ownGenres(a).length, ownGenres(b).length)));
 
   return [
     bpmRatio, bpmDelta,

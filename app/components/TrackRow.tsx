@@ -56,10 +56,10 @@ function camelotStep(num: number, delta: number): number {
 
 function getCompatibleKeys(camelot: string): {
   standard: string[];   // ±1 same letter + relative major/minor
-  boost: string[];      // MixedInKey diagonal: ±1 with letter switch
+  boost: string[];      // diagonal: ±1 with letter switch
   relax: string[];      // Major→Minor diagonal
-  surge: string[];      // MixedInKey +2 clockwise: energy surge
-  powerShift: string[]; // MixedInKey −5 (≡ +7 clockwise): dramatic lift
+  surge: string[];      // +2 clockwise: energy surge
+  powerShift: string[]; // −5 (≡ +7 clockwise): dramatic lift
 } {
   const parsed = parseCamelot(camelot);
   if (!parsed) return { standard: [], boost: [], relax: [], surge: [], powerShift: [] };

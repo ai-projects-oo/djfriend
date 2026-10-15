@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { stripMixedInKeyPrefix, stripFeatured, pickConfidentMatch, pickTitleOnlyMatch } from './spotify-text.js';
+import { stripKeyPrefix, stripFeatured, pickConfidentMatch, pickTitleOnlyMatch } from './spotify-text.js';
 import type { SpotifyItem } from './spotify-text.js';
 
 interface SearchResult {
@@ -37,7 +37,7 @@ export async function searchTrack(
   title: string,
   token: string
 ): Promise<SearchResult | null> {
-  const rawTitle = stripMixedInKeyPrefix(title);
+  const rawTitle = stripKeyPrefix(title);
 
   // Strip parentheticals and brackets for a cleaner title
   const cleanTitle = stripFeatured(rawTitle.replace(/\s*\([^)]*\)/g, '').replace(/\s*\[[^\]]*\]/g, '')).trim();

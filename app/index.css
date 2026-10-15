@@ -113,3 +113,11 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--dj-brand);
 }
+
+/* OpenStreetMap attribution (required by the OSM tile policy) — dark palette */
+.leaflet-container .leaflet-control-attribution {
+  background: rgba(13, 13, 20, 0.75);
+  color: #8394a8;
+  font-size: 10px;
+}
+.leaflet-container .leaflet-control-attribution a { color: #a78bfa; }

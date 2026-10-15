@@ -149,8 +149,8 @@ async function getSpotifyUserId(token: string): Promise<string> {
   return data.id;
 }
 
-/** Strip Mixed In Key prefix like "6A - 4 - " or "11B - 7 - " from titles. */
-function stripMixedInKeyPrefix(str: string): string {
+/** Strip a DJ-tool key/energy prefix like "6A - 4 - " or "11B - 7 - " from titles. */
+function stripKeyPrefix(str: string): string {
   return str.replace(/^[0-9]{1,2}[AB]\s*-\s*[0-9]+\s*-\s*/i, '').trim();
 }
 
@@ -161,7 +161,7 @@ function stripFeatured(str: string): string {
 
 function cleanSearchStr(str: string): string {
   return stripFeatured(
-    stripMixedInKeyPrefix(str).replace(/\s*\([^)]*\)/g, '').replace(/\s*\[[^\]]*\]/g, ''),
+    stripKeyPrefix(str).replace(/\s*\([^)]*\)/g, '').replace(/\s*\[[^\]]*\]/g, ''),
   ).trim();
 }
 
@@ -196,7 +196,7 @@ function isConfidentMatch(
   origTitle: string, origArtist: string,
   spotTitle: string, spotArtists: string,
 ): boolean {
-  return hasWordOverlap(stripMixedInKeyPrefix(origTitle), spotTitle) && hasWordOverlap(origArtist, spotArtists);
+  return hasWordOverlap(stripKeyPrefix(origTitle), spotTitle) && hasWordOverlap(origArtist, spotArtists);
 }
 
 interface SpotifyTrackResult {
@@ -207,7 +207,7 @@ interface SpotifyTrackResult {
 
 /** 'exact' = full titles match after normalization; 'partial' = version/edit differs */
 function matchConfidence(origTitle: string, spotTitle: string): 'exact' | 'partial' {
-  return normalizeStr(stripMixedInKeyPrefix(origTitle)) === normalizeStr(spotTitle) ? 'exact' : 'partial';
+  return normalizeStr(stripKeyPrefix(origTitle)) === normalizeStr(spotTitle) ? 'exact' : 'partial';
 }
 
 export interface SpotifyMatchResult {
@@ -233,7 +233,7 @@ async function searchSpotify(q: string, token: string): Promise<SpotifyTrackResu
 
 /** Score a candidate against the original title/artist. Higher = better match. */
 function scoreMatch(origTitle: string, origArtist: string, result: SpotifyTrackResult): number {
-  const cleanOrig = normalizeStr(stripMixedInKeyPrefix(origTitle));
+  const cleanOrig = normalizeStr(stripKeyPrefix(origTitle));
   const cleanSpot = normalizeStr(result.name);
   let score = 0;
   if (cleanOrig === cleanSpot) score += 2;
@@ -254,7 +254,7 @@ function pickBest(
 }
 
 async function searchTrack(artist: string, title: string, token: string): Promise<SpotifyTrackResult | null> {
-  const rawTitle = stripMixedInKeyPrefix(title);
+  const rawTitle = stripKeyPrefix(title);
   const cleanTitle = cleanSearchStr(title);
   const cleanArtist = cleanSearchStr(artist);
   const queryArtist = sanitizeForQuery(cleanArtist);

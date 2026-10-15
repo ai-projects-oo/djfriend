@@ -8,7 +8,7 @@ import Busboy from 'busboy'
 import * as mm from 'music-metadata'
 import NodeID3 from 'node-id3'
 import { scanFolder } from './scanner.js'
-import { analyzeAudio } from './analyzer.js'
+import { analyzeAudio, analyzePcm } from './analyzer.js'
 import { toCamelot } from './camelot.js'
 import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
 import { readSettings, writeSettings, getSettingsDir } from './settings.js'
@@ -175,6 +175,8 @@ export interface AppSong {
   bpm: number
   key: string
   camelot: string
+  keyConfidence?: number
+  keyVersion?: number
   energy: number
   genres: string[]
   genresFromSpotify?: boolean
@@ -347,6 +349,14 @@ interface AppleMusicTrack { filePath: string; file: string; artist: string | nul
  * others spread linearly by rank.  This is purely audio-based — no filename tags
  * are used.  Values update in-place on the resultsJson map.
  */
+/** Key-detection metadata to store alongside key/camelot (absent for Spotify-sourced keys). */
+function keyMeta(f: { keyConfidence?: number; keyVersion?: number }): Pick<AppSong, 'keyConfidence' | 'keyVersion'> {
+  return {
+    ...(f.keyConfidence != null ? { keyConfidence: f.keyConfidence } : {}),
+    ...(f.keyVersion != null ? { keyVersion: f.keyVersion } : {}),
+  }
+}
+
 function normalizeLibraryEnergy(resultsJson: Record<string, AppSong>): void {
   const entries = Object.entries(resultsJson).filter(([, s]) => typeof s.energy === 'number')
   if (entries.length < 2) return
@@ -534,7 +544,7 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
         ...(t.dateAdded != null ? { dateAdded: t.dateAdded } : {}),
         spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle,
         bpm: normalizeBpm(features.bpm, features.energy, genres, features.tagBpm),
-        key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy,
+        key: keyInfo.keyName, camelot: keyInfo.camelot, ...keyMeta(features), energy: features.energy,
         genres,
         ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}),
         ...(features.year != null ? { year: features.year } : {}),
@@ -1025,7 +1035,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const s = readSettings()
       res.setHeader('Content-Type', 'application/json')
       const defaultTip = { help: true, info: true, ai: true }
-      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry !== false, tipConfig: s.tipConfig ?? defaultTip, hasDiscogsOAuth: !!(s.discogsAccessToken && s.discogsUsername), discogsUsername: s.discogsUsername ?? '', hasDiscogsConsumerKey: !!(s.discogsConsumerKey && s.discogsConsumerSecret), openAiClientId: s.openAiClientId ?? '', platform: process.platform }))
+      res.end(JSON.stringify({ hasSecret: !!s.spotifyClientSecret, spotifyClientId: s.spotifyClientId ?? '', musicFolder: s.musicFolder ?? '', rekordboxFolder: s.rekordboxFolder ?? '', analysisMode: s.analysisMode ?? 'normal', energyCheckThreshold: s.energyCheckThreshold ?? 0.12, shareTelemetry: s.shareTelemetry === true, tipConfig: s.tipConfig ?? defaultTip, hasDiscogsOAuth: !!(s.discogsAccessToken && s.discogsUsername), discogsUsername: s.discogsUsername ?? '', hasDiscogsConsumerKey: !!(s.discogsConsumerKey && s.discogsConsumerSecret), openAiClientId: s.openAiClientId ?? '', platform: process.platform }))
       return
     }
     if (req.method === 'POST') {
@@ -1521,23 +1531,11 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { writeEvent({ type: 'error', message: err instanceof Error ? err.message : 'Import failed.' }); res.end() }
   })
 
-  // Reverse Camelot lookup: "7A" → { keyName, camelot }
-  const KEY_NAMES_LOCAL = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B']
-  const CAMELOT_MAJOR_LOCAL = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B']
-  const CAMELOT_MINOR_LOCAL = ['5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A']
-  const camelotToKey: Record<string, { keyName: string; camelot: string }> = {}
-  for (let i = 0; i < 12; i++) {
-    const maj = CAMELOT_MAJOR_LOCAL[i]; camelotToKey[maj.toLowerCase()] = { camelot: maj, keyName: `${KEY_NAMES_LOCAL[i]} Major` }
-    const min = CAMELOT_MINOR_LOCAL[i]; camelotToKey[min.toLowerCase()] = { camelot: min, keyName: `${KEY_NAMES_LOCAL[i]} Minor` }
-  }
-  // Parse MixedInKey prefix: "7A - 6 - Title" → { camelot:"7A", energy:0.6, cleanTitle:"Title" }
-  function parseMIKPrefix(title: string): { camelot: string; keyName: string; energy: number; cleanTitle: string } | null {
-    const m = title.match(/^([0-9]{1,2}[AB])\s*-\s*([0-9]+)\s*-\s*(.+)$/i)
-    if (!m) return null
-    const info = camelotToKey[m[1].toLowerCase()]
-    if (!info) return null
-    const energy = Math.min(1, Math.max(0, parseInt(m[2], 10) / 10))
-    return { ...info, energy, cleanTitle: m[3].trim() }
+  // Strip a "7A - 6 - " key/energy prefix that DJ tools write into titles. Only the clean title is
+  // used (for search); the prefix's key/energy values are ignored — keys come from our own analysis.
+  function stripKeyPrefix(title: string): string {
+    const m = title.match(/^[0-9]{1,2}[AB]\s*-\s*[0-9]+\s*-\s*(.+)$/i)
+    return m ? m[1].trim() : title
   }
 
   // Web-friendly M3U import: takes artist+title metadata, extracts MIK prefix then enriches via Spotify
@@ -1569,9 +1567,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
         const cacheKey = `m3u:${track.artist}:${track.title}`
         if (existing[cacheKey]) { resultsJson[cacheKey] = existing[cacheKey]; continue }
         try {
-          // Extract Camelot key + energy from MixedInKey prefix if present
-          const mik = parseMIKPrefix(track.title)
-          const searchTitle = mik ? mik.cleanTitle : track.title
+          const searchTitle = stripKeyPrefix(track.title)
 
           const match = await searchTrack(track.artist || null, searchTitle, token)
 
@@ -1581,9 +1577,10 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
             try { finalGenres = await getArtistGenres(match.artistId, token) } catch { /* ignore */ }
           }
 
-          const camelot = mik?.camelot ?? ''
-          const keyName = mik?.keyName ?? ''
-          const energy = mik ? mik.energy : 0.5
+          // No audio for M3U entries: key unknown until the file is analysed
+          const camelot = ''
+          const keyName = ''
+          const energy = 0.5
 
           resultsJson[cacheKey] = {
             filePath: cacheKey,
@@ -1687,7 +1684,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           const camelot = keyInfo.camelot
           const resolvedYear = finalFeatures.year ?? localYear
           const resolvedComment = finalFeatures.comment ?? localComment
-          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizedBpm, key: keyInfo.keyName, camelot, energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(resolvedYear != null ? { year: resolvedYear } : {}), ...(resolvedComment ? { comment: resolvedComment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}), ...(finalFeatures.waveform ? { waveform: finalFeatures.waveform } : {}), ...(finalFeatures.frequencyWaveform ? { frequencyWaveform: finalFeatures.frequencyWaveform } : {}), semanticTags: deriveSemanticTags({ bpm: normalizedBpm, camelot, energy: finalFeatures.energy, genres, ...finalFeatures.spectral }) }
+          resultsJson[filePath] = { filePath, file, artist: localArtist ?? 'Unknown artist', title: localTitle, ...(localDuration != null ? { duration: localDuration } : {}), spotifyArtist: match?.spotifyArtist, spotifyTitle: match?.spotifyTitle, bpm: normalizedBpm, key: keyInfo.keyName, camelot, ...keyMeta(finalFeatures), energy: finalFeatures.energy, genres, ...(localGenres.length === 0 && spotifyGenres.length > 0 ? { genresFromSpotify: true } : {}), ...(resolvedYear != null ? { year: resolvedYear } : {}), ...(resolvedComment ? { comment: resolvedComment } : {}), ...(finalFeatures.energyProfile ? { energyProfile: finalFeatures.energyProfile } : {}), ...(finalFeatures.waveform ? { waveform: finalFeatures.waveform } : {}), ...(finalFeatures.frequencyWaveform ? { frequencyWaveform: finalFeatures.frequencyWaveform } : {}), semanticTags: deriveSemanticTags({ bpm: normalizedBpm, camelot, energy: finalFeatures.energy, genres, ...finalFeatures.spectral }) }
         } catch { /* skip */ }
       }
       for (const song of Object.values(resultsJson)) {
@@ -1956,6 +1953,31 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'BPM lookup failed' })) }
   })
 
+  // Key/BPM from live-captured audio (e.g. a vinyl record played into the audio input).
+  // Body: raw mono Float32 PCM (little-endian); ?sampleRate=. Analysed in memory, never stored.
+  const MAX_PCM_BYTES = 90 * 48000 * 4   // 90 s at 48 kHz
+  middlewares.use('/api/analyze-pcm', async (req, res, next) => {
+    if (req.method !== 'POST') { next(); return }
+    res.setHeader('Content-Type', 'application/json')
+    const url = new URL(req.url ?? '', 'http://localhost')
+    const sampleRate = Number(url.searchParams.get('sampleRate'))
+    if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid sampleRate' })); return }
+    const chunks: Buffer[] = []
+    let size = 0
+    let tooBig = false
+    req.on('data', (c: Buffer) => { size += c.length; if (size > MAX_PCM_BYTES) tooBig = true; else chunks.push(c) })
+    req.on('end', () => {
+      if (tooBig) { res.statusCode = 413; res.end(JSON.stringify({ error: 'Recording too long' })); return }
+      const buf = Buffer.concat(chunks)
+      const n = Math.floor(buf.length / 4)
+      const samples = new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + n * 4))   // copy → 4-byte aligned
+      const r = analyzePcm(samples, sampleRate)
+      const keyInfo = r ? toCamelot(r.pitchClass, r.mode) : null
+      if (!r || !keyInfo) { res.statusCode = 422; res.end(JSON.stringify({ error: 'Could not detect a key — is the record playing and the input level up?' })); return }
+      res.end(JSON.stringify({ ok: true, camelot: keyInfo.camelot, key: keyInfo.keyName, keyConfidence: r.keyConfidence, keyVersion: r.keyVersion, bpm: r.bpm }))
+    })
+  })
+
   middlewares.use('/api/reanalyze-track', async (req, res, next) => {
     if (req.method !== 'POST') { next(); return }
     res.setHeader('Content-Type', 'application/json')
@@ -2004,7 +2026,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       const bpm = normalizeBpm(features.bpm, features.energy, cachedGenres, features.tagBpm)
       const semanticTags = deriveSemanticTags({ bpm, camelot: keyInfo.camelot, energy: features.energy, genres: cachedGenres, ...features.spectral })
       const patch: Partial<AppSong> = {
-        bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, semanticTags,
+        bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, ...keyMeta(features), energy: features.energy, semanticTags,
         ...(features.waveform ? { waveform: features.waveform } : {}),
         ...(features.frequencyWaveform ? { frequencyWaveform: features.frequencyWaveform } : {}),
         ...(features.vocalTimeline ? { vocalTimeline: features.vocalTimeline } : {}),
@@ -2013,7 +2035,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
       if (songsFolder) patchResultsFile(path.join(songsFolder, 'results.json'), path.relative(songsFolder, absolutePath).replace(/\\/g, '/'), patch)
       patchResultsFile(APPLE_RESULTS_PATH, absolutePath, patch)
 
-      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, energy: features.energy, waveform: features.waveform, frequencyWaveform: features.frequencyWaveform, vocalTimeline: features.vocalTimeline }))
+      res.end(JSON.stringify({ ok: true, bpm, key: keyInfo.keyName, camelot: keyInfo.camelot, ...keyMeta(features), energy: features.energy, waveform: features.waveform, frequencyWaveform: features.frequencyWaveform, vocalTimeline: features.vocalTimeline }))
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Reanalysis failed' })) }
   })
 
@@ -2055,6 +2077,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
           song.bpm = bpm
           song.key = keyInfo.keyName
           song.camelot = keyInfo.camelot
+          Object.assign(song, keyMeta(features))
           song.energy = features.energy
           if (features.energyProfile) (song as unknown as Record<string, unknown>).energyProfile = features.energyProfile
           if (features.waveform) (song as unknown as Record<string, unknown>).waveform = features.waveform

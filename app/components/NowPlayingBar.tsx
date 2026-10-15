@@ -68,7 +68,7 @@ function QueuePanel({ player, songsByFile, onClose }: { player: Player; songsByF
 
   const upcoming = queue.items.slice(queue.index + 1);
   return (
-    <div ref={ref} role="dialog" aria-label="Play queue"
+    <div ref={ref} role="dialog" aria-label="Play queue" onContextMenu={e => e.stopPropagation()}
       className="absolute bottom-full right-3 mb-2 w-96 max-h-[60vh] overflow-y-auto rounded-xl border border-[#363650] bg-[#20202e] shadow-2xl p-2 z-[90]">
       <div className="flex items-center justify-between px-2 py-1">
         <span className="text-[10px] uppercase tracking-widest font-semibold text-[#8394a8]">Now Playing</span>
@@ -88,23 +88,81 @@ function QueuePanel({ player, songsByFile, onClose }: { player: Player; songsByF
   );
 }
 
+// ─── Resizable height ────────────────────────────────────────────────────────
+
+const MIN_SCALE = 1;
+const MAX_SCALE = 3;
+const BASE_H = 56;   // px the bar grows per +1× of scale while dragging
+const SCALE_KEY = "djfriend-player-scale";
+const clampScale = (v: number) => Math.round(Math.max(MIN_SCALE, Math.min(MAX_SCALE, v)) * 100) / 100;
+
+function loadScale(): number {
+  try { const v = Number(localStorage.getItem(SCALE_KEY)); return Number.isFinite(v) && v > 0 ? clampScale(v) : 1; }
+  catch { return 1; }
+}
+
+/** Drag the top edge up to enlarge the player (album art, waveform and text) up to 3×. */
+function usePlayerScale() {
+  const [scale, setScaleState] = useState(loadScale);
+  const setScale = (v: number) => {
+    const c = clampScale(v);
+    setScaleState(c);
+    try { localStorage.setItem(SCALE_KEY, String(c)); } catch { /* non-fatal */ }
+  };
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startY = e.clientY, startScale = scale;
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => setScaleState(clampScale(startScale + (startY - ev.clientY) / BASE_H));
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      setScale(startScale + (startY - ev.clientY) / BASE_H);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  };
+  return { scale, setScale, onPointerDown };
+}
+
 // ─── Player bar ──────────────────────────────────────────────────────────────
 
 /** App-wide player at the bottom of the window. Hidden until something is queued. */
-export default function NowPlayingBar({ player, songsByFile }: { player: Player; songsByFile: Map<string, Song> }) {
+export default function NowPlayingBar({ player, songsByFile, onTrackContextMenu }: {
+  player: Player;
+  songsByFile: Map<string, Song>;
+  /** Right-click on the player while a track is loaded — opens the same menu as a track row. */
+  onTrackContextMenu?: (e: React.MouseEvent, song: Song) => void;
+}) {
   const [queueOpen, setQueueOpen] = useState(false);
+  const { scale, setScale, onPointerDown } = usePlayerScale();
   const s = player.currentSong;
   if (!s && player.queue.items.length === 0) return null;
   const cc = s ? camelotColor(s.camelot) : "#64748b";
   const dur = player.duration || s?.duration || 0;
+  const art = Math.round(40 * scale);
 
   return (
-    <div className="relative flex-shrink-0 border-t border-[#2c2c42] bg-[#12121a] px-3 py-2 flex items-center gap-3" role="region" aria-label="Player">
+    <div className="relative flex-shrink-0 border-t border-[#2c2c42] bg-[#12121a] px-3 flex items-center gap-3" role="region" aria-label="Player"
+      style={{ paddingTop: 8 * scale, paddingBottom: 8 * scale }}
+      onContextMenu={s && onTrackContextMenu ? e => onTrackContextMenu(e, s) : undefined}>
+      {/* Resize handle — drag up to enlarge, double-click to reset */}
+      <div role="separator" aria-orientation="horizontal" aria-label="Resize player" tabIndex={0}
+        aria-valuemin={MIN_SCALE} aria-valuemax={MAX_SCALE} aria-valuenow={scale}
+        title="Drag to resize · double-click to reset"
+        onPointerDown={onPointerDown}
+        onDoubleClick={() => setScale(1)}
+        onKeyDown={e => { if (e.key === "ArrowUp") setScale(scale + 0.25); if (e.key === "ArrowDown") setScale(scale - 0.25); }}
+        className="group absolute -top-1 left-0 right-0 h-2 cursor-ns-resize z-10 flex justify-center">
+        <span className="mt-0.5 h-1 w-10 rounded-full bg-[#363650] opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+
       {/* Track */}
-      <div className="flex items-center gap-2.5 w-64 min-w-0 flex-shrink-0">
-        <AlbumArt filePath={s?.filePath} />
+      <div className="flex items-center gap-2.5 min-w-0 flex-shrink-0" style={{ width: 256 + (art - 40) * 1.5 }}>
+        <AlbumArt key={s?.filePath} filePath={s?.filePath} size={art} />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-[#e2e8f0] truncate">{s?.title ?? "—"}</p>
+          <p className="font-medium text-[#e2e8f0] truncate" style={{ fontSize: 14 * Math.min(scale, 1.8) }}>{s?.title ?? "—"}</p>
           <div className="flex items-center gap-1.5 text-[11px] text-[#8394a8] min-w-0">
             <span className="truncate">{s?.artist}</span>
             {s?.camelot && s.camelot !== "Unknown" && (
@@ -154,7 +212,7 @@ export default function NowPlayingBar({ player, songsByFile }: { player: Player;
             vocalTimeline={s.vocalTimeline}
             progress={dur > 0 ? player.time / dur : 0}
             duration={dur}
-            height={32}
+            height={Math.round(32 * scale)}
             onSeek={frac => player.seek(frac * dur)}
             className="flex-1"
           />

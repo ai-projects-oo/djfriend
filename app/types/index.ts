@@ -46,6 +46,8 @@ export interface Song {
   bpm: number;
   key: string; // e.g. "E♭ Major"
   camelot: string; // e.g. "5B"
+  keyConfidence?: number; // 0–1 margin between the best and second-best key template (local analysis)
+  keyVersion?: number;    // key-detection algorithm version that produced key/camelot
   energy: number; // 0.0 – 1.0
   genres: string[];
   genresFromSpotify?: boolean; // true = genres from Spotify API (not final), absent/false = from ID3 tags
@@ -188,6 +190,8 @@ export interface VinylTrackEntry {
   genre?:   string;
   comment?: string;
   aiFields?: Array<'bpm' | 'camelot' | 'genre'>;  // fields filled by the AI pass (cleared by "Clear AI estimations"; hand-entered values are kept)
+  detectedFields?: Array<'bpm' | 'camelot'>;       // fields measured from the record itself (live audio input analysis)
+  keyConfidence?: number;                           // 0–1, for a detected key
 }
 
 export interface VinylReleaseData {

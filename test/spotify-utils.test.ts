@@ -1,26 +1,26 @@
 import { describe, it, expect } from 'vitest'
-import { stripMixedInKeyPrefix, stripFeatured, normalizeStr, hasWordOverlap, pickConfidentMatch } from '../src/spotify-text'
+import { stripKeyPrefix, stripFeatured, normalizeStr, hasWordOverlap, pickConfidentMatch } from '../src/spotify-text'
 import type { SpotifyItem } from '../src/spotify-text'
 
-describe('stripMixedInKeyPrefix', () => {
+describe('stripKeyPrefix', () => {
   it('strips valid MIK prefix "12A - 120 - "', () => {
-    expect(stripMixedInKeyPrefix('12A - 120 - Song Title')).toBe('Song Title')
+    expect(stripKeyPrefix('12A - 120 - Song Title')).toBe('Song Title')
   })
 
   it('strips single-digit key "1B - 128 - "', () => {
-    expect(stripMixedInKeyPrefix('1B - 128 - Track Name')).toBe('Track Name')
+    expect(stripKeyPrefix('1B - 128 - Track Name')).toBe('Track Name')
   })
 
   it('is case-insensitive for A/B', () => {
-    expect(stripMixedInKeyPrefix('8a - 130 - Groove')).toBe('Groove')
+    expect(stripKeyPrefix('8a - 130 - Groove')).toBe('Groove')
   })
 
   it('returns string unchanged when no MIK prefix', () => {
-    expect(stripMixedInKeyPrefix('Normal Song Title')).toBe('Normal Song Title')
+    expect(stripKeyPrefix('Normal Song Title')).toBe('Normal Song Title')
   })
 
   it('returns string unchanged for partial prefix', () => {
-    expect(stripMixedInKeyPrefix('12A - Song')).toBe('12A - Song')
+    expect(stripKeyPrefix('12A - Song')).toBe('12A - Song')
   })
 })
 

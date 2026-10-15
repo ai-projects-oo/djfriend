@@ -322,3 +322,26 @@ export function resolvePlaylist(playlist: Playlist, songsByFile: Map<string, Son
   }
   return { songs, missing };
 }
+
+/**
+ * The playlist tree restricted to matching playlists, for nested menus ("Add to Playlist").
+ * Folders with nothing matching anywhere inside are dropped.
+ */
+export function filterPlaylistTree(tree: PlaylistTree, include: (p: Playlist) => boolean): PlaylistTree {
+  const folders: FolderNode[] = [];
+  for (const f of tree.folders) {
+    const inner = filterPlaylistTree(f, include);
+    if (inner.folders.length || inner.playlists.length) folders.push({ folder: f.folder, ...inner });
+  }
+  return { folders, playlists: tree.playlists.filter(include) };
+}
+
+/** Expands every folder leading to a playlist, so the sidebar can show it. Unchanged library if nothing is collapsed. */
+export function expandToPlaylist(lib: PlaylistLibrary, playlistId: string): PlaylistLibrary {
+  const byId = new Map(lib.folders.map(f => [f.id, f]));
+  const open = new Set<string>();
+  let fid = lib.playlists.find(p => p.id === playlistId)?.folderId;
+  while (fid && byId.has(fid) && !open.has(fid)) { open.add(fid); fid = byId.get(fid)!.parentId; }
+  if (![...open].some(id => byId.get(id)!.collapsed)) return lib;
+  return { ...lib, folders: lib.folders.map(f => (open.has(f.id) && f.collapsed ? { ...f, collapsed: false } : f)) };
+}

@@ -2,8 +2,9 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { DiscogsCollectionEntry, DiscogsRelease, Song, VinylTrackEntry, VinylReleaseData, ManualData, VinylStore } from '../types';
 import { SpotifyIcon, DiscogsIcon, BeatportIcon, TraxsourceIcon } from './Icons';
 import { saveManualData, saveRejected } from '../services/discogsManualData';
-import { nextPosition, mergeAiTracks, clearAiFields } from '../lib/vinylTracks';
+import { nextPosition, mergeAiTracks, clearAiFields, applyVinylDetection } from '../lib/vinylTracks';
 import { CAMELOT_TO_KEY } from '../lib/camelot';
+import VinylKeyDetect from './VinylKeyDetect';
 import { theme } from '../lib/theme';
 import { chatComplete } from '../services/openAiApi';
 import { getAccessToken } from '../services/openAiAuth';
@@ -327,9 +328,14 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
                       placeholder="Title…"
                       className={`flex-1 ${inputCls}`}
                     />
+                    <VinylKeyDetect
+                      trackLabel={`${track.position}${track.title ? ` ${track.title}` : ''}`}
+                      onDetected={r => onChange({ ...data, tracks: tracks.map(t => t.id === track.id ? applyVinylDetection(t, r) : t) })}
+                    />
                     <button
                       type="button"
                       onClick={() => removeTrack(track.id)}
+                      aria-label={`Remove ${track.position}`}
                       className="text-[#6b7a94] hover:text-[#ef4444] transition-colors cursor-pointer flex-shrink-0"
                     >
                       <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -342,14 +348,15 @@ function VinylTrackEditor({ releaseId, data, onChange, discogsGenre }: {
                     <input
                       type="number"
                       value={track.bpm ?? ''}
-                      onChange={e => updateTrack(track.id, { bpm: e.target.value ? Number(e.target.value) : undefined })}
+                      onChange={e => updateTrack(track.id, { bpm: e.target.value ? Number(e.target.value) : undefined, detectedFields: track.detectedFields?.filter(f => f !== 'bpm') })}
                       placeholder="BPM"
                       className={`tabular-nums ${inputCls}`}
                     />
                     <select
                       value={track.camelot ?? ''}
-                      onChange={e => updateTrack(track.id, { camelot: e.target.value || undefined })}
-                      className={`${inputCls} cursor-pointer`}
+                      onChange={e => updateTrack(track.id, { camelot: e.target.value || undefined, keyConfidence: undefined, detectedFields: track.detectedFields?.filter(f => f !== 'camelot') })}
+                      title={track.detectedFields?.includes('camelot') ? `Detected from the record${track.keyConfidence != null ? ` · confidence ${Math.round(track.keyConfidence * 100)}%` : ''}` : undefined}
+                      className={`${inputCls} cursor-pointer ${track.detectedFields?.includes('camelot') ? '!border-[#22c55e]/50' : ''}`}
                     >
                       <option value="">Key</option>
                       {CAMELOT_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}

@@ -101,7 +101,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
   const [saving, setSaving] = useState(false)
 
   const [analysisMode, setAnalysisMode] = useState<'performance' | 'normal' | 'power-saving'>('normal')
-  const [shareTelemetry, setShareTelemetry] = useState(true)
+  const [shareTelemetry, setShareTelemetry] = useState(false)
   const [showTips, setShowTips] = useState(true)
   const [hasSpotifySecret, setHasSpotifySecret] = useState(false)
   const [savingSpotify, setSavingSpotify] = useState(false)
@@ -149,7 +149,7 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
         setRekordboxFolderStatus('idle')
         if (d.analysisMode === 'performance' || d.analysisMode === 'power-saving') setAnalysisMode(d.analysisMode)
         else setAnalysisMode('normal')
-        setShareTelemetry(d.shareTelemetry !== false)
+        setShareTelemetry(d.shareTelemetry === true)
         if (d.tipConfig) setShowTips(d.tipConfig.help !== false || d.tipConfig.info !== false || d.tipConfig.ai !== false)
         setHasSpotifySecret(d.hasSecret ?? false)
         setSpotifyConnected(!!getStoredToken())

@@ -149,6 +149,7 @@ export function usePlaylists() {
       text: `Deleted folder “${b.folders.find(f => f.id === id)?.name ?? "folder"}” — its playlists were kept`, changed: true,
     }) }), [update]),
     toggleFolder: useCallback((id: string) => update(l => P.toggleFolder(l, id)), [update]),
+    expandToPlaylist: useCallback((id: string) => update(l => P.expandToPlaylist(l, id)), [update]),
     moveFolder: useCallback((id: string, parentId: string | undefined) => update(l => P.moveFolder(l, id, parentId), { undoable: true }), [update]),
     applyAppleMusicResult: useCallback((result: AppleMusicExportResult) => {
       // Keep the new Music.app links in undo snapshots too — undoing an earlier edit must not

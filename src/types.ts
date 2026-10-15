@@ -25,6 +25,8 @@ export interface AnalyzedTrack {
   bpm: number | null;
   key: string | null;
   camelot: string | null;
+  keyConfidence?: number;
+  keyVersion?: number;
   energy: number | null;
   genres: string[];
 }

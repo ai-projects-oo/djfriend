@@ -298,12 +298,13 @@ async function searchTrack(artist: string, title: string, token: string): Promis
 // Every playlist DJFriend creates on Spotify is private. Spotify doesn't always honour
 // `public: false` on create, so the visibility is set again right after.
 async function createPlaylist(
-  userId: string,
+  _userId: string,
   name: string,
   token: string,
 ): Promise<{ id: string; external_urls: { spotify: string } }> {
+  // Feb 2026 Web API migration: POST /users/{id}/playlists → POST /me/playlists
   const playlist = await spotifyFetch<{ id: string; public?: boolean | null; external_urls: { spotify: string } }>(
-    `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists`,
+    'https://api.spotify.com/v1/me/playlists',
     token,
     {
       method: 'POST',
@@ -314,7 +315,8 @@ async function createPlaylist(
     await makePlaylistPrivate(playlist.id, token);
   } catch (err) {
     // Don't leave a public (or duplicate, on retry) playlist behind — remove it from the account
-    await spotifyRateLimited(`https://api.spotify.com/v1/playlists/${encodeURIComponent(playlist.id)}/followers`, {
+    // Feb 2026 migration: DELETE /playlists/{id}/followers → DELETE /me/library (takes Spotify URIs)
+    await spotifyRateLimited(`https://api.spotify.com/v1/me/library?uris=${encodeURIComponent(`spotify:playlist:${playlist.id}`)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => {});
@@ -348,7 +350,7 @@ async function addTracksToPlaylist(playlistId: string, uris: string[], token: st
   // Spotify allows max 100 tracks per request; pass explicit position so order is guaranteed
   for (let i = 0; i < uris.length; i += 100) {
     await spotifyFetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+      `https://api.spotify.com/v1/playlists/${playlistId}/items`,   // Feb 2026 migration: /tracks → /items
       token,
       { method: 'POST', body: JSON.stringify({ uris: uris.slice(i, i + 100), position: i }) },
     );

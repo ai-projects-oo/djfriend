@@ -11,14 +11,14 @@ function mockSpotify(opts: { createReturnsPublic?: boolean; privateFails?: boole
     const method = init?.method ?? 'GET'
     calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined })
     if (url.endsWith('/v1/me')) return Response.json({ id: 'dj' })
-    if (url.includes('/v1/users/dj/playlists')) {
+    if (url.endsWith('/v1/me/playlists')) {
       return Response.json({ id: 'pl1', public: opts.createReturnsPublic ?? false, external_urls: { spotify: 'https://open.spotify.com/playlist/pl1' } })
     }
     if (method === 'PUT' && url.endsWith('/v1/playlists/pl1')) {
       return opts.privateFails ? Response.json({ error: { message: 'Forbidden' } }, { status: 403 }) : new Response(null, { status: 200 })
     }
     if (url.endsWith('/v1/playlists/pl1?fields=public')) return Response.json({ public: !!opts.staysPublic })
-    if (url.endsWith('/v1/playlists/pl1/tracks')) return Response.json({ snapshot_id: 's' })
+    if (url.endsWith('/v1/playlists/pl1/items')) return Response.json({ snapshot_id: 's' })
     return new Response(null, { status: 404 })
   }) as typeof fetch
   return calls
@@ -31,12 +31,12 @@ describe('Spotify playlists created by DJFriend are private', () => {
     const calls = mockSpotify({ createReturnsPublic: true })
     const result = await createPlaylistFromSpotifyIds(['a', 'b'], "Don't have from Mix", 'tok')
 
-    const create = calls.find(c => c.url.includes('/v1/users/dj/playlists'))
+    const create = calls.find(c => c.url.endsWith('/v1/me/playlists'))
     expect(create?.method).toBe('POST')
     expect(create?.body).toMatchObject({ name: "Don't have from Mix", public: false })
 
     const priv = calls.findIndex(c => c.method === 'PUT' && c.url.endsWith('/v1/playlists/pl1'))
-    const addTracks = calls.findIndex(c => c.url.endsWith('/v1/playlists/pl1/tracks'))
+    const addTracks = calls.findIndex(c => c.url.endsWith('/v1/playlists/pl1/items'))
     expect(priv).toBeGreaterThan(-1)
     expect(calls[priv].body).toEqual({ public: false })
     expect(priv).toBeLessThan(addTracks)
@@ -53,8 +53,8 @@ describe('Spotify playlists created by DJFriend are private', () => {
   it('checks the playlist really is private before adding tracks, and removes it if not', async () => {
     const calls = mockSpotify({ staysPublic: true })
     await expect(createPlaylistFromSpotifyIds(['a'], 'X', 'tok')).rejects.toThrow(/kept it public/)
-    expect(calls.some(c => c.url.endsWith('/v1/playlists/pl1/tracks'))).toBe(false)
-    expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith('/v1/playlists/pl1/followers'))).toBe(true)
+    expect(calls.some(c => c.url.endsWith('/v1/playlists/pl1/items'))).toBe(false)
+    expect(calls.some(c => c.method === 'DELETE' && c.url.includes('/v1/me/library?uris=spotify%3Aplaylist%3Apl1'))).toBe(true)
   })
 
   it('spaces Spotify calls at least 200ms apart', async () => {

@@ -3472,17 +3472,11 @@ function AppInner() {
                                         <button
                                           onClick={() => {
                                             if (track.inLibrary) {
-                                              void apiFetch("/api/play-in-music", {
-                                                method: "POST",
-                                                headers: {
-                                                  "Content-Type":
-                                                    "application/json",
-                                                },
-                                                body: JSON.stringify({
-                                                  artist: track.artist,
-                                                  title: track.title,
-                                                }),
-                                              });
+                                              // Play in DJFriend's own player, continuing with the playlist's other owned tracks
+                                              const owned = findSongsForImport(entry.tracks, library);
+                                              const [song] = findSongsForImport([track], library);
+                                              const at = song ? owned.findIndex(s => s.file === song.file) : -1;
+                                              if (at >= 0) player.playTracks(owned.map(s => s.file), at);
                                             } else {
                                               window.open(
                                                 `spotify:track:${track.spotifyId}`,
@@ -3492,7 +3486,7 @@ function AppInner() {
                                           className="hidden group-hover:flex items-center justify-center text-[#7c3aed] hover:text-white cursor-pointer transition-colors"
                                           title={
                                             track.inLibrary
-                                              ? "Play in Apple Music"
+                                              ? "Play"
                                               : "Play in Spotify"
                                           }
                                         >
@@ -3992,6 +3986,7 @@ function AppInner() {
             handleRateEntry={handleRateEntry}
             handleNoteEntry={handleNoteEntry}
             onLoadEntry={handleLoadHistoryEntry}
+            onPlay={player.playTracks}
           />
         </main>
       )}

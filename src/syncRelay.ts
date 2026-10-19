@@ -1,7 +1,7 @@
 // Device-sync relay (Phase 9). Stores only what paired devices upload: encrypted envelopes under a
 // random sync id. It cannot read them — no keys, track names, emails or device identifiers ever reach it.
 //
-//   PUT    /api/sync/:id/snapshot   { env }  → { seq }          replace the full encrypted snapshot
+//   PUT    /api/sync/:id/snapshot   { env, seq? } → { seq }     replace the full encrypted snapshot (seq = last batch it includes)
 //   GET    /api/sync/:id/snapshot            → { seq, env }
 //   POST   /api/sync/:id/changes    { env }  → { seq }          append an encrypted change batch
 //   GET    /api/sync/:id/changes?since=N     → { batches: [{ seq, env }], latest, oldest }
@@ -108,12 +108,15 @@ export function createRelay(storage: RelayStorage, now: () => number = Date.now)
     }
     if (part === 'snapshot' && method === 'PUT') {
       if (rawBody.length > RELAY_LIMITS.snapshotBytes) return { status: 413, body: { error: 'Snapshot too large' } }
-      let env: unknown; try { env = (JSON.parse(rawBody) as { env?: unknown }).env } catch { return { status: 400, body: { error: 'Invalid JSON' } } }
+      let body: { env?: unknown; seq?: unknown }; try { body = JSON.parse(rawBody) as typeof body } catch { return { status: 400, body: { error: 'Invalid JSON' } } }
+      const env = body?.env
       if (!isEnvelope(env)) return { status: 400, body: { error: 'Expected an encrypted envelope' } }
       const meta = await loadMeta(id)
-      await storage.set(snapKey(id), JSON.stringify({ seq: meta.seq, env }))
+      // `seq` = last batch the uploader had merged; batches after it are replayed on top of the snapshot
+      const seq = typeof body.seq === 'number' && Number.isInteger(body.seq) && body.seq >= 0 && body.seq <= meta.seq ? body.seq : meta.seq
+      await storage.set(snapKey(id), JSON.stringify({ seq, env }))
       await saveMeta(id, meta)
-      return { status: 200, body: { seq: meta.seq } }
+      return { status: 200, body: { seq } }
     }
     if (part === 'changes' && method === 'POST') {
       if (rawBody.length > RELAY_LIMITS.batchBytes) return { status: 413, body: { error: 'Batch too large' } }

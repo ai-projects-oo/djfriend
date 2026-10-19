@@ -1,8 +1,9 @@
 // Desktop side of device sync (Phase 9): pairing storage and push/pull with the encrypted relay.
 // Everything sent is encrypted with the pairing key first; the relay only sees the sync id.
-import type { PairingPayload, SyncEnvelope, SyncRecord, SyncRecordType } from '../types';
-import { decryptJson, encryptJson, newPairing, toBase64Url } from '../lib/sync/crypto';
-import { emptySyncState, liveData, mergeRemote, recordLocalChanges, type LocalItem, type SyncState } from '../lib/sync/merge';
+import type { PairingPayload, SyncRecord, SyncRecordType } from '../types';
+import { newPairing, toBase64Url } from '../lib/sync/crypto';
+import { emptySyncState, liveData, recordLocalChanges, type LocalItem, type SyncState } from '../lib/sync/merge';
+import { httpTransport, pullChanges, pushChanges, pushSnapshot } from './syncProtocol';
 
 export const DEFAULT_RELAY = 'https://djfriend.onrender.com';
 const PAIRING_KEY = 'djfriend-sync-pairing';
@@ -13,7 +14,6 @@ const SNAPSHOT_EVERY_MS = 24 * 3600_000;
 const SYNCED_TYPES: SyncRecordType[] = ['track', 'playlist', 'folder', 'set', 'vinylTrack'];
 /** Types the phone may change on the desktop. Analysed track fields stay desktop-owned. */
 const ACCEPTED_FROM_REMOTE = new Set<SyncRecordType>(['playlist', 'folder', 'set', 'vinylTrack']);
-const BATCH_PLAINTEXT_BYTES = 150_000;   // stays under the relay's 256 KB batch limit after encryption
 
 const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
@@ -53,12 +53,6 @@ function saveState(s: SyncState): void {
   write(STATE_KEY, { ...s, records });
 }
 
-async function relayFetch<T>(p: PairingPayload, path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${p.relay}/api/sync/${p.syncId}${path}`, { ...init, headers: { 'Content-Type': 'application/json' } });
-  if (!res.ok) throw new Error(`Sync relay: ${res.status}`);
-  return res.json() as Promise<T>;
-}
-
 export interface SyncResult { pulled: number; pushed: number; applied: SyncRecord[] }
 
 /**
@@ -68,63 +62,27 @@ export interface SyncResult { pulled: number; pushed: number; applied: SyncRecor
 export async function syncNow(items: LocalItem[]): Promise<SyncResult> {
   const p = getPairing();
   if (!p) throw new Error('Not paired');
-  let state = loadState();
-  let cursor = read<number>(CURSOR_KEY) ?? 0;
+  const t = httpTransport(p);
   const now = Date.now();
 
   // ── Pull ──
-  const applied: SyncRecord[] = [];
-  let pulled = 0;
-  for (let guard = 0; guard < 50; guard++) {
-    const page = await relayFetch<{ batches: { seq: number; env: SyncEnvelope }[]; latest: number; oldest: number }>(p, `/changes?since=${cursor}`);
-    if (cursor < page.oldest - 1) {
-      // Fell behind the kept history — start from the snapshot
-      const snap = await relayFetch<{ seq: number; env: SyncEnvelope }>(p, '/snapshot').catch(() => null);
-      if (snap) {
-        const recs = decryptJson<SyncRecord[]>(p, snap.env).filter(r => ACCEPTED_FROM_REMOTE.has(r.type));
-        const m = mergeRemote(state, recs, now); state = m.state; applied.push(...m.applied); pulled += recs.length;
-        cursor = snap.seq;
-      } else cursor = page.oldest - 1;
-      continue;
-    }
-    for (const b of page.batches) {
-      const recs = decryptJson<SyncRecord[]>(p, b.env).filter(r => ACCEPTED_FROM_REMOTE.has(r.type));
-      const m = mergeRemote(state, recs, now); state = m.state; applied.push(...m.applied); pulled += recs.length;
-      cursor = b.seq;
-    }
-    if (cursor >= page.latest || page.batches.length === 0) break;
-  }
+  const pull = await pullChanges(t, p, loadState(), read<number>(CURSOR_KEY) ?? 0, ACCEPTED_FROM_REMOTE, now);
+  let cursor = pull.cursor;
 
   // ── Push ──
-  const firstPush = !read<number>(SNAPSHOT_KEY);
-  const { state: next, outgoing } = recordLocalChanges(state, items, SYNCED_TYPES, now);
-  state = next;
-  if (!firstPush) {
-    let chunk: SyncRecord[] = [], size = 0;
-    const flush = async () => {
-      if (!chunk.length) return;
-      const r = await relayFetch<{ seq: number }>(p, '/changes', { method: 'POST', body: JSON.stringify({ env: encryptJson(p, chunk, random) }) });
-      if (r.seq === cursor + 1) cursor = r.seq;   // nothing else arrived in between — skip re-reading our own batch
-      chunk = []; size = 0;
-    };
-    for (const r of outgoing) {
-      const n = JSON.stringify(r).length;
-      if (size + n > BATCH_PLAINTEXT_BYTES) await flush();
-      chunk.push(r); size += n;
-    }
-    await flush();
-  }
+  const last = pull.reset ? null : read<number>(SNAPSHOT_KEY);
+  const { state, outgoing } = recordLocalChanges(pull.state, items, SYNCED_TYPES, now);
+  if (last) cursor = await pushChanges(t, p, outgoing, cursor, random);
   // Full snapshot on the first push, then refreshed daily so a newly paired phone starts from current data
-  const last = read<number>(SNAPSHOT_KEY);
-  if (firstPush || typeof last !== 'number' || now - last > SNAPSHOT_EVERY_MS) {
+  if (typeof last !== 'number' || now - last > SNAPSHOT_EVERY_MS) {
     const dataByKey = new Map(items.map(i => [`${i.type}:${i.id}`, i.data]));
     const all = Object.values(state.records).map(r => (r.deleted ? r : { ...r, data: dataByKey.get(`${r.type}:${r.id}`) ?? r.data }));
-    await relayFetch(p, '/snapshot', { method: 'PUT', body: JSON.stringify({ env: encryptJson(p, all, random) }) });
+    await pushSnapshot(t, p, all, cursor, random);
     write(SNAPSHOT_KEY, now);
   }
   saveState(state);
   write(CURSOR_KEY, cursor);
-  return { pulled, pushed: outgoing.length, applied };
+  return { pulled: pull.pulled, pushed: outgoing.length, applied: pull.applied };
 }
 
 export { liveData };

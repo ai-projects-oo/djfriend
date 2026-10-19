@@ -2,6 +2,7 @@
 // Pure: randomness is passed in, so this runs unchanged in Electron, the browser and React Native.
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import type { PairingPayload, SyncEnvelope } from '../../types';
+import { utf8Decode } from './utf8';
 
 export type RandomBytes = (n: number) => Uint8Array;
 
@@ -50,7 +51,8 @@ export function parsePairing(text: string): PairingPayload | null {
 }
 
 const enc = new TextEncoder();
-const dec = new TextDecoder();
+const dec = typeof TextDecoder !== 'undefined' ? new TextDecoder() : null;
+const decodeUtf8 = (b: Uint8Array) => (dec ? dec.decode(b) : utf8Decode(b));
 
 /**
  * Encrypts a JSON value. The sync id is bound as associated data, so ciphertext copied into
@@ -65,5 +67,5 @@ export function encryptJson(pairing: Pick<PairingPayload, 'key' | 'syncId'>, val
 /** Decrypts and parses; throws if the key is wrong or the data was tampered with. */
 export function decryptJson<T>(pairing: Pick<PairingPayload, 'key' | 'syncId'>, env: SyncEnvelope): T {
   const cipher = xchacha20poly1305(fromBase64Url(pairing.key), fromBase64Url(env.n), enc.encode(pairing.syncId));
-  return JSON.parse(dec.decode(cipher.decrypt(fromBase64Url(env.c)))) as T;
+  return JSON.parse(decodeUtf8(cipher.decrypt(fromBase64Url(env.c)))) as T;
 }

@@ -10,6 +10,8 @@ Map data © OpenStreetMap contributors, available under the Open Database Licens
 
 Key detection is implemented from scratch in `src/keyDetection.ts` from published methods: the Brown & Puckette (1992) constant-Q transform, chroma template matching (tonic-triad template; Krumhansl & Kessler (1982) profiles optional). No third-party key-detection code is used.
 
+**Phone app (`mobile/`):** built with Expo and React Native (MIT) plus `@noble/ciphers` (MIT); its dependencies are permissive (MIT, ISC, Apache-2.0, BSD, 0BSD, BlueOak, MPL-2.0 build tooling) — no GPL/AGPL. A full in-app notices screen is added before store release.
+
 ## (MIT AND Zlib)
 
 - pako@1.0.11

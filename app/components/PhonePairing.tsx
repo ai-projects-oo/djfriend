@@ -24,6 +24,7 @@ export default function PhonePairing({ pairing, status, onPair, onUnpair, onSync
   const [relay, setRelay] = useState(DEFAULT_RELAY);
   const [advanced, setAdvanced] = useState(false);
   const [confirmUnpair, setConfirmUnpair] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!pairing || !showQr) return;
@@ -72,7 +73,7 @@ export default function PhonePairing({ pairing, status, onPair, onUnpair, onSync
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setShowQr(s => !s)} className={`${btn} border border-[#363650] text-[#ccd6e2] hover:text-[#e2e8f0]`}>
+            <button type="button" onClick={() => { setShowQr(s => !s); setCopied(false); }} className={`${btn} border border-[#363650] text-[#ccd6e2] hover:text-[#e2e8f0]`}>
               {showQr ? "Hide QR code" : "Show QR code"}
             </button>
             <button type="button" onClick={onSyncNow} disabled={status.syncing} className={`${btn} border border-[#363650] text-[#ccd6e2] hover:text-[#e2e8f0] disabled:opacity-40`}>
@@ -96,7 +97,12 @@ export default function PhonePairing({ pairing, status, onPair, onUnpair, onSync
                 ? <img src={qr} alt="Pairing QR code — scan with the DJFriend phone app" width={180} height={180} className="rounded-lg bg-white p-1" />
                 : <div className="w-[180px] h-[180px] rounded-lg bg-[#1c1c2e]" aria-hidden />}
               <p className="text-[11px] text-[#9aa8ba] leading-snug max-w-[220px]">
-                Open DJFriend on your phone → <span className="text-[#ccd6e2]">Pair with desktop</span> → scan this code.
+                Open DJFriend on your phone and scan this code.
+                <br />
+                <button type="button" onClick={() => { void navigator.clipboard.writeText(JSON.stringify(pairing)); setCopied(true); }}
+                  className="mt-1 text-[#a78bfa] hover:text-[#c4b5fd] cursor-pointer" aria-label="Copy pairing code">
+                  {copied ? "Copied — paste it in the phone app" : "Copy code instead"}
+                </button>
                 <br /><br />
                 <span className="text-[#f59e0b]">Treat this code like a password</span> — anyone who scans it can read your synced data.
               </p>

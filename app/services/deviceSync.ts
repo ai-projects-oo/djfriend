@@ -11,8 +11,8 @@ const STATE_KEY = 'djfriend-sync-state';
 const CURSOR_KEY = 'djfriend-sync-cursor';
 const SNAPSHOT_KEY = 'djfriend-sync-snapshot-at';
 const SNAPSHOT_EVERY_MS = 24 * 3600_000;
-const SYNCED_TYPES: SyncRecordType[] = ['track', 'playlist', 'folder', 'set', 'vinylTrack'];
-/** Types the phone may change on the desktop. Analysed track fields stay desktop-owned. */
+const SYNCED_TYPES: SyncRecordType[] = ['track', 'playlist', 'folder', 'set', 'vinylTrack', 'release'];
+/** Types the phone may change on the desktop. Analysed track fields and Discogs releases stay desktop-owned. */
 const ACCEPTED_FROM_REMOTE = new Set<SyncRecordType>(['playlist', 'folder', 'set', 'vinylTrack']);
 
 const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));

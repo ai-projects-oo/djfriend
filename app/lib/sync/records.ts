@@ -1,7 +1,7 @@
 // App state ↔ sync records. Pure.
 // The desktop is authoritative for analysed track fields; playlists, folders, vinyl data and set
 // metadata can be edited on either device.
-import type { HistoryEntry, SetTrack, Playlist, PlaylistFolder, PlaylistLibrary, Song, SyncRecord, VinylReleaseData, VinylStore } from '../../types';
+import type { DiscogsCollectionEntry, HistoryEntry, SetTrack, Playlist, PlaylistFolder, PlaylistLibrary, Song, SyncRecord, VinylReleaseData, VinylStore } from '../../types';
 import type { LocalItem } from './merge';
 
 /** What the phone needs about a track (no waveforms, no file paths). */
@@ -14,6 +14,11 @@ export interface SyncTrack {
 export interface SyncSet {
   name: string; timestamp: number; rating?: HistoryEntry['rating']; notes?: string;
   tracks: { file: string; artist: string; title: string; bpm: number; camelot: string; energy: number }[];
+}
+
+/** A Discogs collection entry as the phone sees it (desktop-owned; no images, no Discogs ids beyond the key). */
+export interface SyncRelease {
+  artist: string; title: string; year?: number; formats: string[]; genres: string[]; styles: string[];
 }
 
 export function trackItems(library: Song[]): LocalItem[] {
@@ -40,6 +45,15 @@ export function setItems(history: HistoryEntry[]): LocalItem[] {
       name: h.name, timestamp: h.timestamp, ...(h.rating ? { rating: h.rating } : {}), ...(h.notes ? { notes: h.notes } : {}),
       tracks: h.tracks.map(t => ({ file: t.file, artist: t.artist, title: t.title, bpm: t.bpm, camelot: t.camelot, energy: t.energy })),
     } satisfies SyncSet,
+  }));
+}
+
+export function releaseItems(collection: DiscogsCollectionEntry | null | undefined): LocalItem[] {
+  return (collection?.releases ?? []).map(r => ({
+    type: 'release' as const, id: String(r.releaseId),
+    data: {
+      artist: r.artist, title: r.title, ...(r.year ? { year: r.year } : {}), formats: r.formats, genres: r.genres, styles: r.styles,
+    } satisfies SyncRelease,
   }));
 }
 

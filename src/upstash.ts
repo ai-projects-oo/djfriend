@@ -6,7 +6,7 @@ const token = process.env.UPSTASH_REDIS_REST_TOKEN
 
 export const upstashEnabled = !!(url && token)
 
-async function command(args: (string | number)[]): Promise<unknown> {
+export async function redisCommand(args: (string | number)[]): Promise<unknown> {
   if (!url || !token) return null
   const res = await fetch(url, {
     method: 'POST',
@@ -19,10 +19,10 @@ async function command(args: (string | number)[]): Promise<unknown> {
 }
 
 export async function redisGet(key: string): Promise<string | null> {
-  const result = await command(['GET', key])
+  const result = await redisCommand(['GET', key])
   return typeof result === 'string' ? result : null
 }
 
 export async function redisSet(key: string, value: string): Promise<void> {
-  await command(['SET', key, value])
+  await redisCommand(['SET', key, value])
 }

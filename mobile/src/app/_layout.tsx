@@ -20,6 +20,7 @@ function Routes() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
       <Stack.Protected guard={!!pairing}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="gig/[id]" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!pairing}>
         <Stack.Screen name="pair" />

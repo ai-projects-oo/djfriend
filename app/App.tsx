@@ -706,7 +706,7 @@ function AppInner() {
   // ── Phone sync (Phase 9) — end-to-end encrypted via the relay ─────────────
   const { applyRemote: applyRemotePlaylists } = playlistsApi;
   const deviceSync = useDeviceSync(
-    { library, playlistLib, history, vinylStore, ready: !isInitializing && library.length > 0 },
+    { library, playlistLib, history, vinylStore, discogsCollection, ready: !isInitializing && library.length > 0 },
     useCallback((applied: SyncRecord[]) => {
       applyRemotePlaylists(l => applyPlaylistRecords(l, applied));
       setVinylStore(v => applyVinylRecords(v, applied));

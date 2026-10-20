@@ -6,14 +6,14 @@ import { useSync } from '../../../sync/SyncProvider';
 import { C } from '../../../theme';
 
 export default function SettingsScreen() {
-  const { pairing, status, lastSync, tracks, playlists, sets, syncNow, unpair } = useSync();
+  const { pairing, status, lastSync, tracks, playlists, sets, releases, pending, syncNow, unpair } = useSync();
   // Re-render every 30 s so "Synced N min ago" stays current
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
 
   const confirmUnpair = () => Alert.alert(
     'Unpair this phone?',
-    'Your synced library is removed from this phone. Your computer keeps everything. To pair again, scan the QR code in DJFriend on your computer.',
+    `Your synced library is removed from this phone. Your computer keeps everything${pending ? ` except ${pending} change${pending === 1 ? '' : 's'} made here and not sent yet` : ''}. To pair again, scan the QR code in DJFriend on your computer.`,
     [{ text: 'Cancel', style: 'cancel' }, { text: 'Unpair', style: 'destructive', onPress: () => void unpair() }],
   );
 
@@ -32,7 +32,11 @@ export default function SettingsScreen() {
         </View>
         <Text style={st.counts}>
           {tracks.length.toLocaleString()} tracks · {playlists.length} playlists · {sets.length} sets
+          {releases.length ? ` · ${releases.length.toLocaleString()} records` : ''}
         </Text>
+        {pending > 0 && (
+          <Text style={st.pending}>{pending} change{pending === 1 ? '' : 's'} made here waiting to be sent — they go out when you’re online.</Text>
+        )}
         <Button label={status.syncing ? 'Syncing…' : 'Sync now'} onPress={() => void syncNow()} disabled={status.syncing} kind="secondary" />
       </View>
 
@@ -56,5 +60,6 @@ const st = StyleSheet.create({
   dot: { width: 9, height: 9, borderRadius: 5 },
   statusText: { color: C.text, fontSize: 15, flex: 1 },
   counts: { color: C.textMuted, fontSize: 13 },
+  pending: { color: C.warn, fontSize: 13 },
   text: { color: C.textDim, fontSize: 14, lineHeight: 20 },
 });

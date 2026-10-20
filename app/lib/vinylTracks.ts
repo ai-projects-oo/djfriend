@@ -107,3 +107,19 @@ export function applyVinylDetection(track: VinylTrackEntry, r: { camelot: string
   next.detectedFields = [...detected];
   return next;
 }
+
+/**
+ * A hand edit of a vinyl track (phone or desktop): the edited BPM / key no longer count as
+ * AI-estimated or detected from the record.
+ */
+export function editVinylTrack(track: VinylTrackEntry, patch: Partial<Pick<VinylTrackEntry, 'position' | 'title' | 'bpm' | 'camelot' | 'genre' | 'comment'>>): VinylTrackEntry {
+  const next: VinylTrackEntry = { ...track, ...patch };
+  const touched = (['bpm', 'camelot'] as const).filter(f => f in patch);
+  if (!touched.length) return next;
+  const ai = (track.aiFields ?? []).filter(f => !touched.includes(f as 'bpm' | 'camelot'));
+  const detected = (track.detectedFields ?? []).filter(f => !touched.includes(f));
+  next.aiFields = ai.length ? ai : undefined;
+  next.detectedFields = detected.length ? detected : undefined;
+  if (touched.includes('camelot')) next.keyConfidence = undefined;
+  return next;
+}

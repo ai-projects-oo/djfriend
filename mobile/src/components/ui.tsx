@@ -28,16 +28,21 @@ export interface TrackRowProps {
   onPress?: () => void;
   /** Shown when the track is no longer in the library (e.g. a set made from since-removed tracks). */
   missing?: boolean;
+  /** A small extra line under the artist (e.g. a mixing tip). */
+  note?: string;
+  /** Dimmed (e.g. already played). */
+  done?: boolean;
 }
 
-export const TrackRow = memo(function TrackRow({ track, index, onPress, missing }: TrackRowProps) {
+export const TrackRow = memo(function TrackRow({ track, index, onPress, missing, note, done }: TrackRowProps) {
   return (
-    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [s.row, pressed && s.rowPressed]}
+    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [s.row, pressed && s.rowPressed, done && { opacity: 0.45 }]}
       accessibilityLabel={`${track.title} by ${track.artist}, ${Math.round(track.bpm)} BPM, key ${track.camelot}`}>
       {index != null && <Text style={s.index}>{index + 1}</Text>}
       <View style={s.rowMain}>
         <Text style={[s.title, missing && s.missing]} numberOfLines={1}>{track.title}</Text>
         <Text style={s.artist} numberOfLines={1}>{track.artist}</Text>
+        {note ? <Text style={s.note} numberOfLines={1}>{note}</Text> : null}
       </View>
       <View style={s.rowMeta}>
         <View style={s.metaTop}>
@@ -105,6 +110,7 @@ export const s = StyleSheet.create({
   title: { color: C.text, fontSize: 15, fontWeight: '500' },
   missing: { color: C.textMuted, fontStyle: 'italic' },
   artist: { color: C.textMuted, fontSize: 13, marginTop: 2 },
+  note: { color: C.textMuted, fontSize: 11, marginTop: 3 },
   rowMeta: { alignItems: 'flex-end', gap: 5 },
   metaTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   metaBottom: { flexDirection: 'row', alignItems: 'center', gap: 8 },

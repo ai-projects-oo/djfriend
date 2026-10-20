@@ -477,7 +477,8 @@ export interface PairingPayload {
 /** Hybrid logical clock: wall time (ms), logical counter, and the writing device — totally ordered. */
 export interface Hlc { t: number; c: number; d: string }
 
-export type SyncRecordType = 'track' | 'playlist' | 'folder' | 'set' | 'vinylTrack' | 'gigLead';
+/** `release` = a Discogs collection entry (artist/title, desktop-owned) so the phone can name vinyl records. */
+export type SyncRecordType = 'track' | 'playlist' | 'folder' | 'set' | 'vinylTrack' | 'gigLead' | 'release';
 
 /** One synced record. `deleted` marks a tombstone (data omitted). */
 export interface SyncRecord {

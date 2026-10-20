@@ -17,6 +17,10 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Sets</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="clock.arrow.circlepath" md="history" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="vinyl">
+        <NativeTabs.Trigger.Label>Vinyl</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="opticaldisc" md="album" />
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
         <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="gear" md="settings" />

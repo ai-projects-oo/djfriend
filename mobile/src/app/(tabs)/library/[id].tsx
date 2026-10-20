@@ -36,7 +36,8 @@ export default function TrackScreen() {
       </View>
       {t.comment ? <Text style={st.comment}>{t.comment}</Text> : null}
 
-      <Button label="Tracks that mix with this" onPress={() => router.navigate({ pathname: '/library', params: { mix: t.camelot, bpm: String(t.bpm) } })} disabled={!t.camelot} />
+      <Button label="What can I play next?" onPress={() => router.push({ pathname: '/library/next/[id]', params: { id: t.id } })} />
+      <Button kind="secondary" label="All matching tracks" onPress={() => router.navigate({ pathname: '/library', params: { mix: t.camelot, bpm: String(t.bpm) } })} disabled={!t.camelot} />
 
       {inPlaylists.length > 0 && (
         <View style={{ gap: 8 }}>

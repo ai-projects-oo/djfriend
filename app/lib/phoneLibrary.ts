@@ -1,11 +1,13 @@
 // What the DJFriend phone app shows, derived from its synced record store. Pure.
-import type { Playlist, PlaylistFolder } from '../types';
+import type { Playlist, PlaylistFolder, VinylReleaseData } from '../types';
 import { liveData, type SyncState } from './sync/merge';
-import type { SyncSet, SyncTrack } from './sync/records';
+import type { SyncRelease, SyncSet, SyncTrack } from './sync/records';
 import { getCamelotCompatibility } from './camelot';
 
 export interface PhoneTrack extends SyncTrack { id: string }
 export interface PhoneSet extends SyncSet { id: string }
+/** `keyed` / `tracks` = vinyl tracks with a Camelot key / entered at all for this release. */
+export interface PhoneRelease extends SyncRelease { id: string; tracks: number; keyed: number }
 
 const byText = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' });
 
@@ -84,6 +86,26 @@ export function playlistsOf(state: SyncState): { folders: PlaylistFolder[]; play
 /** Track ids → tracks, in order; ids not in the library are skipped. */
 export function resolveTracks(ids: string[], byId: Map<string, PhoneTrack>): PhoneTrack[] {
   return ids.flatMap(id => byId.get(id) ?? []);
+}
+
+/** Discogs releases A–Z by artist, with how many of their tracks have keys; and the vinyl track data by release id. */
+export function releasesOf(state: SyncState): { releases: PhoneRelease[]; vinylById: Map<string, VinylReleaseData> } {
+  const vinylById = new Map(liveData<VinylReleaseData>(state, 'vinylTrack').map(({ id, data }) => [id, data]));
+  const releases = liveData<SyncRelease>(state, 'release').map(({ id, data }) => {
+    const tracks = vinylById.get(id)?.tracks ?? [];
+    return { ...data, id, tracks: tracks.length, keyed: tracks.filter(t => !!t.camelot).length };
+  }).sort((a, b) => byText(a.artist, b.artist) || byText(a.title, b.title));
+  return { releases, vinylById };
+}
+
+/** Releases matching every word of the query (artist, title, genres, styles, year). */
+export function filterReleases(releases: PhoneRelease[], query: string): PhoneRelease[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return releases;
+  return releases.filter(r => {
+    const text = `${r.artist} ${r.title} ${r.genres.join(' ')} ${r.styles.join(' ')} ${r.year ?? ''}`.toLowerCase();
+    return words.every(w => text.includes(w));
+  });
 }
 
 export function savedSets(state: SyncState): PhoneSet[] {

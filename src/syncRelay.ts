@@ -14,6 +14,8 @@ export interface RelayStorage {
   set(key: string, value: string): Promise<void>
   del(key: string): Promise<void>
   keys(prefix: string): Promise<string[]>
+  /** True when the storage expires idle keys itself (Upstash TTL) — the inactivity sweep is then skipped. */
+  readonly expires?: boolean
 }
 
 export const RELAY_LIMITS = {
@@ -70,6 +72,8 @@ export function createRelay(storage: RelayStorage, now: () => number = Date.now)
     return raw ? JSON.parse(raw) as Meta : { seq: 0, oldest: 1, lastActive: now() }
   }
   const saveMeta = (id: string, m: Meta) => storage.set(metaKey(id), JSON.stringify({ ...m, lastActive: now() }))
+  // Reads only refresh `lastActive` hourly, so polling phones don't cost a write each time
+  const touchMeta = async (id: string, m: Meta) => { if (now() - m.lastActive > 3_600_000) await saveMeta(id, m) }
 
   const wipe = async (id: string) => { for (const k of await storage.keys(`sync_${id}_`)) await storage.del(k) }
 
@@ -81,6 +85,7 @@ export function createRelay(storage: RelayStorage, now: () => number = Date.now)
 
   /** Removes sync spaces with no activity for `inactiveDays`. */
   async function sweep(): Promise<number> {
+    if (storage.expires) return 0
     let removed = 0
     for (const k of await storage.keys('sync_')) {
       if (!k.endsWith('_meta')) continue
@@ -103,7 +108,7 @@ export function createRelay(storage: RelayStorage, now: () => number = Date.now)
     if (part === 'snapshot' && method === 'GET') {
       const raw = await storage.get(snapKey(id))
       if (!raw) return { status: 404, body: { error: 'No snapshot' } }
-      const meta = await loadMeta(id); await saveMeta(id, meta)
+      const meta = await loadMeta(id); await touchMeta(id, meta)
       return { status: 200, body: JSON.parse(raw) }
     }
     if (part === 'snapshot' && method === 'PUT') {
@@ -135,11 +140,17 @@ export function createRelay(storage: RelayStorage, now: () => number = Date.now)
       const meta = await loadMeta(id)
       const from = Math.max(since + 1, meta.oldest)
       const batches: { seq: number; env: Envelope }[] = []
+      let oldest = meta.oldest
       for (let s = from; s <= meta.seq && batches.length < 200; s++) {
-        const raw = await storage.get(batchKey(id, s)); if (raw) batches.push({ seq: s, env: JSON.parse(raw) as Envelope })
+        const raw = await storage.get(batchKey(id, s))
+        if (raw) batches.push({ seq: s, env: JSON.parse(raw) as Envelope })
+        // Batches expire oldest-first (storage TTL): a missing one means everything up to it is gone —
+        // report it so readers fall back to the snapshot
+        else if (!batches.length) oldest = s + 1
       }
-      await saveMeta(id, meta)
-      return { status: 200, body: { batches, latest: meta.seq, oldest: meta.oldest } }
+      if (oldest !== meta.oldest) await saveMeta(id, { ...meta, oldest })
+      else await touchMeta(id, meta)
+      return { status: 200, body: { batches, latest: meta.seq, oldest } }
     }
     return { status: 405, body: { error: 'Method not allowed' } }
   }

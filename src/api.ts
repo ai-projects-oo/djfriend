@@ -15,8 +15,9 @@ import { readSettings, writeSettings, getSettingsDir } from './settings.js'
 import { deriveSemanticTags, genreVocalType } from './ai.js'
 import { trainOnVectors, isValidModelWeights } from './mlTrain.js'
 import type { ModelWeights } from './mlTrain.js'
-import { upstashEnabled, redisGet, redisSet } from './upstash.js'
+import { upstashEnabled, redisGet, redisSet, redisCommand } from './upstash.js'
 import { createRelay, fileStorage, RELAY_LIMITS } from './syncRelay.js'
+import { upstashStorage } from './relayUpstash.js'
 import type { SemanticTags } from './ai.js'
 import { normalizeBpm } from './normalize-bpm.js'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -693,7 +694,12 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
 
   // Device-sync relay (Phase 9) — before the auth guard: paired phones have no app password; access is
   // protected by the unguessable sync id, and the relay only ever holds end-to-end-encrypted data.
-  const relay = createRelay(fileStorage(process.env.SYNC_DIR || path.join(os.homedir(), '.djfriend', 'sync-relay')))
+  // Storage: Upstash on the hosted relay (Render's free-plan disk is wiped on every restart), files otherwise.
+  const relayOnUpstash = upstashEnabled && !process.env.SYNC_DIR && (!!process.env.RENDER || process.env.SYNC_STORAGE === 'upstash')
+  const relay = createRelay(relayOnUpstash
+    ? upstashStorage(redisCommand, RELAY_LIMITS.inactiveDays * 86_400)
+    : fileStorage(process.env.SYNC_DIR || path.join(os.homedir(), '.djfriend', 'sync-relay')))
+  if (process.env.RENDER) console.log(`[sync-relay] storage: ${relayOnUpstash ? 'upstash' : 'file (ephemeral on Render free plan — set UPSTASH_REDIS_REST_URL/TOKEN)'}`)
   void relay.sweep().catch(() => {})
   middlewares.use('/api/sync', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')

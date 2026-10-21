@@ -1,8 +1,9 @@
 import { useDeferredValue, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Empty, SearchBar, s as ui } from '../../../components/ui';
 import { filterReleases } from '../../../../../app/lib/phoneLibrary';
+import { DISCOGS_NOTICE, DISCOGS_URL } from '../../../../../app/lib/discogsCollection';
 import { useSync } from '../../../sync/SyncProvider';
 import { C } from '../../../theme';
 
@@ -25,6 +26,11 @@ export default function VinylScreen() {
       keyboardShouldPersistTaps="handled"
       ListHeaderComponent={<View style={st.search}><SearchBar value={query} onChange={setQuery} placeholder={`Search ${releases.length} records`} /></View>}
       refreshControl={<RefreshControl refreshing={status.syncing} onRefresh={() => void syncNow()} tintColor={C.accent} />}
+      ListFooterComponent={
+        <Text style={st.notice} onPress={() => void Linking.openURL(DISCOGS_URL)} accessibilityRole="link">
+          Data from <Text style={{ textDecorationLine: 'underline' }}>Discogs</Text>. {DISCOGS_NOTICE}
+        </Text>
+      }
       renderItem={({ item }) => (
         <Pressable onPress={() => router.push({ pathname: '/vinyl/[id]', params: { id: item.id } })}
           style={({ pressed }) => [st.row, pressed && { backgroundColor: C.surface }]} accessibilityLabel={`${item.title} by ${item.artist}`}>
@@ -46,4 +52,5 @@ const st = StyleSheet.create({
   title: { color: C.text, fontSize: 15, fontWeight: '500' },
   meta: { color: C.textMuted, fontSize: 13, marginTop: 2 },
   keys: { color: C.textMuted, fontSize: 12, fontVariant: ['tabular-nums'] },
+  notice: { color: C.textMuted, fontSize: 11, lineHeight: 15, padding: 16 },
 });

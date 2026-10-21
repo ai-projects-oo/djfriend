@@ -4,6 +4,7 @@ import { SpotifyIcon, DiscogsIcon, BeatportIcon, TraxsourceIcon } from './Icons'
 import { saveManualData, saveRejected } from '../services/discogsManualData';
 import { nextPosition, mergeAiTracks, clearAiFields, applyVinylDetection } from '../lib/vinylTracks';
 import { CAMELOT_TO_KEY } from '../lib/camelot';
+import { DISCOGS_NOTICE, DISCOGS_URL } from '../lib/discogsCollection';
 import VinylKeyDetect from './VinylKeyDetect';
 import { theme } from '../lib/theme';
 import { chatComplete } from '../services/openAiApi';
@@ -1310,7 +1311,8 @@ export default function CratesTab({
       </div>
 
       {/* ── Footer ── */}
-      <div className="flex-shrink-0 border-t border-[#2c2c42] px-4 py-2 flex items-center justify-between">
+      <div className="flex-shrink-0 border-t border-[#2c2c42] px-4 py-2">
+      <div className="flex items-center justify-between">
         <span className="text-[10px] text-[#a3b0c2]">
           {collection.username} · {(() => {
             const d = Math.floor((+new Date() - collection.syncedAt) / 86400000);
@@ -1321,6 +1323,10 @@ export default function CratesTab({
           className="text-[11px] text-[#b6c2d0] hover:text-[#ccd6e2] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
           {syncPhase === 'syncing' ? 'Syncing…' : '↺ Re-sync'}
         </button>
+      </div>
+        <p className="mt-1 text-[9px] leading-snug text-[#8d9aab]">
+          Data from <a href={DISCOGS_URL} target="_blank" rel="noreferrer" className="underline hover:text-[#ccd6e2]">Discogs</a>. {DISCOGS_NOTICE}
+        </p>
       </div>
 
       {/* Floating print stickers bar */}

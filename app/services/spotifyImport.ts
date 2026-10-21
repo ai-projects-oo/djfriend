@@ -1,5 +1,5 @@
 import { spotifyRateLimited } from './spotifyRateLimit';
-import type { SpotifyUserPlaylist, SpotifyImportTrack, SpotifyAudioFeatures } from '../lib/spotifyImport';
+import type { SpotifyUserPlaylist, SpotifyImportTrack } from '../lib/spotifyImport';
 
 const PENDING_IMPORT_KEY = 'djfriend-spotify-pending-import';
 
@@ -96,23 +96,4 @@ export async function fetchPlaylistTracks(
   }
 
   return { playlistName, tracks };
-}
-
-export async function fetchAudioFeatures(
-  spotifyIds: string[],
-  token: string,
-): Promise<Map<string, SpotifyAudioFeatures>> {
-  const result = new Map<string, SpotifyAudioFeatures>();
-  const BATCH = 100;
-  for (let i = 0; i < spotifyIds.length; i += BATCH) {
-    const ids = spotifyIds.slice(i, i + BATCH).join(',');
-    const data = await spotifyGet<{ audio_features: (SpotifyAudioFeatures | null)[] }>(
-      `https://api.spotify.com/v1/audio-features?ids=${encodeURIComponent(ids)}`,
-      token,
-    );
-    for (const f of data.audio_features) {
-      if (f) result.set(f.id, f);
-    }
-  }
-  return result;
 }

@@ -1,6 +1,10 @@
 import type { Song } from '../types';
 import type { DiscogsRelease, DiscogsCollectionEntry, DiscogsMode } from '../types';
 
+/** Required by the Discogs API Terms of Use wherever Discogs data is shown. */
+export const DISCOGS_NOTICE = "This application uses Discogs' API but is not affiliated with, sponsored or endorsed by Discogs. 'Discogs' is a trademark of Zink Media, LLC.";
+export const DISCOGS_URL = 'https://www.discogs.com';
+
 function norm(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
 }

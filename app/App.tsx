@@ -24,11 +24,9 @@ import {
   getPendingImport,
   clearPendingImport,
   fetchUserPlaylists,
-  fetchAudioFeatures,
 } from "./services/spotifyImport";
 import {
   findSongsForImport,
-  spotifyTrackToSong,
   findPartialMatchSong,
 } from "./lib/spotifyImport";
 import { downloadM3U, downloadRekordboxXml } from "./services/downloads";
@@ -1029,18 +1027,8 @@ function AppInner() {
       if (!token) return;
       setSpotifyGeneratingId(entry.id);
       try {
-        const localSongs = findSongsForImport(entry.tracks, library);
-        const localIds = new Set(localSongs.map(s => s.spotifyId).filter(Boolean));
-        const unmatched = entry.tracks.filter(
-          t => !t.inLibrary && !t.unavailable && t.spotifyId && !localIds.has(t.spotifyId),
-        );
-        const featureMap = unmatched.length > 0
-          ? await fetchAudioFeatures(unmatched.map(t => t.spotifyId), token).catch(() => new Map())
-          : new Map();
-        const spotifySongs = unmatched
-          .filter(t => featureMap.has(t.spotifyId))
-          .map(t => spotifyTrackToSong(t, featureMap.get(t.spotifyId)!));
-        const pool = [...localSongs, ...spotifySongs];
+        // Only tracks in the library: Spotify no longer provides audio features (tempo/key) to apps
+        const pool = findSongsForImport(entry.tracks, library);
         if (pool.length === 0) return;
         const set = generateSet(pool, prefs, curve);
         setGeneratedSet(set);

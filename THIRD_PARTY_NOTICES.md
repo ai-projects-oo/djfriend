@@ -4,7 +4,9 @@ DJFriend includes the following open-source packages (production dependencies). 
 
 Where a package is dual-licensed (e.g. `(MIT OR GPL-3.0-or-later)`), DJFriend uses it under the permissive (MIT) option.
 
-**LGPL component:** `codec-parser` (LGPL-3.0-or-later, used by `audio-decode` for FLAC/Ogg decoding) is shipped unmodified as a separate module in `node_modules` — it is never bundled into DJFriend's own code, so it can be replaced by the user as the LGPL requires. Its source is available at https://github.com/eshaz/codec-parser.
+**LGPL component:** `codec-parser` (LGPL-3.0-or-later, used by `audio-decode` for FLAC/Ogg decoding) is shipped unmodified as a separate module in `node_modules` — it is never bundled into DJFriend's own code, and the desktop build keeps it outside the app archive (`app.asar.unpacked/node_modules/codec-parser`), so the user can replace it as the LGPL requires. Its source is available at https://github.com/eshaz/codec-parser.
+
+Record data from Discogs (https://www.discogs.com). This application uses Discogs' API but is not affiliated with, sponsored or endorsed by Discogs. 'Discogs' is a trademark of Zink Media, LLC.
 
 Map data © OpenStreetMap contributors, available under the Open Database License (ODbL) — https://www.openstreetmap.org/copyright
 

@@ -10,7 +10,7 @@ import NodeID3 from 'node-id3'
 import { scanFolder } from './scanner.js'
 import { analyzeAudio, analyzePcm } from './analyzer.js'
 import { toCamelot } from './camelot.js'
-import { authenticate, getArtistGenres, searchTrack, getAudioFeatures } from './spotify.js'
+import { authenticate, getArtistGenres, searchTrack } from './spotify.js'
 import { readSettings, writeSettings, getSettingsDir } from './settings.js'
 import { deriveSemanticTags, genreVocalType } from './ai.js'
 import { trainOnVectors, isValidModelWeights } from './mlTrain.js'
@@ -519,15 +519,7 @@ async function runAudioPipeline(opts: PipelineOptions, writeEvent: (e: Record<st
       ])
       const genres = localGenres.length > 0 ? localGenres : spotifyGenres
 
-      let features = localFeatures
-      if (!features && match?.spotifyId && token) {
-        try {
-          const sf = await getAudioFeatures(match.spotifyId, token)
-          if (sf) features = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
-        } catch (err) {
-          console.warn(`[analyzer] Spotify audio-features fallback failed for "${trackLabel}":`, err instanceof Error ? err.message : err)
-        }
-      }
+      const features = localFeatures
       if (!features) {
         failures.decode++
         console.warn(`[analyzer] skipped "${trackLabel}" — no usable audio features`)
@@ -1700,11 +1692,7 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
             analyzeAudio(filePath),
             localGenres.length === 0 && match?.artistId && token ? getArtistGenres(match.artistId, token) : Promise.resolve([])
           ])
-          let finalFeatures = features
-          if (!finalFeatures && match?.spotifyId && token) {
-            const sf = await getAudioFeatures(match.spotifyId, token)
-            if (sf) finalFeatures = { bpm: sf.bpm, tagBpm: null, pitchClass: sf.key, mode: sf.mode, energy: sf.energy }
-          }
+          const finalFeatures = features
           if (!finalFeatures) continue
           const keyInfo = toCamelot(finalFeatures.pitchClass, finalFeatures.mode)
           if (!keyInfo) continue
@@ -1954,33 +1942,6 @@ export function setupMiddlewares(middlewares: MiddlewareApp, songsFolder?: strin
     } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to update tags' })) }
   })
 
-
-  middlewares.use('/api/lookup-bpm', async (req, res, next) => {
-    if (req.method !== 'POST') { next(); return }
-    res.setHeader('Content-Type', 'application/json')
-    try {
-      const { spotifyClientId, spotifyClientSecret } = readSettings()
-      if (!spotifyClientId || !spotifyClientSecret) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Spotify is not connected. Connect Spotify in Settings.' })); return }
-      const body = await readJsonBody(req) as Record<string, unknown>
-      const spotifyId = typeof body.spotifyId === 'string' ? body.spotifyId.trim() : null
-      const artist   = typeof body.artist   === 'string' ? body.artist.trim()   : ''
-      const title    = typeof body.title    === 'string' ? body.title.trim()    : ''
-
-      const token = await authenticate(spotifyClientId, spotifyClientSecret)
-
-      let resolvedSpotifyId = spotifyId
-      if (!resolvedSpotifyId && (artist || title)) {
-        const match = await searchTrack(artist, title, token)
-        resolvedSpotifyId = match?.spotifyId ?? null
-        if (!resolvedSpotifyId) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Track not found on Spotify search' })); return }
-      }
-      if (!resolvedSpotifyId) { res.statusCode = 400; res.end(JSON.stringify({ error: 'No spotifyId or search terms provided' })); return }
-      const features = await getAudioFeatures(resolvedSpotifyId, token)
-      if (!features) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Spotify audio features API unavailable for this track (may be deprecated for your app)' })); return }
-
-      res.end(JSON.stringify({ ok: true, bpm: features.bpm }))
-    } catch (err) { res.statusCode = 500; res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'BPM lookup failed' })) }
-  })
 
   // Key/BPM from live-captured audio (e.g. a vinyl record played into the audio input).
   // Body: raw mono Float32 PCM (little-endian); ?sampleRate=. Analysed in memory, never stored.

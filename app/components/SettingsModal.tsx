@@ -6,6 +6,7 @@ import { saveApiKey, clearSession as clearOpenAiKey } from '../services/openAiAu
 import { validateApiKey } from '../services/openAiApi'
 import type { OpenAiSession } from '../services/openAiAuth'
 import { SpotifyIcon, RekordboxIcon } from './Icons'
+import { DISCOGS_NOTICE, DISCOGS_URL } from '../lib/discogsCollection'
 
 type PathStatus = 'idle' | 'checking' | 'ok' | 'missing'
 
@@ -518,6 +519,9 @@ export default function SettingsModal({ open, onClose, onSaved, onDatabaseCleare
                 </button>
               )}
             </div>
+            <p className="text-[10px] leading-snug text-[#8d9aab]">
+              Data from <a href={DISCOGS_URL} target="_blank" rel="noreferrer" className="underline hover:text-[#ccd6e2]">Discogs</a>. {DISCOGS_NOTICE}
+            </p>
           </div>
         </div>
 

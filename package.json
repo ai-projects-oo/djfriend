@@ -90,6 +90,9 @@
       "repo": "djfriend"
     },
     "asar": true,
+    "asarUnpack": [
+      "node_modules/codec-parser/**"
+    ],
     "extraMetadata": {
       "main": "electron-compiled/main.js"
     }
